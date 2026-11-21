@@ -15,7 +15,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public enum EDefaultRole {
     COMPANY_ADMIN("Company administrator",
-            union(union(union(IamPermissions.ALL, com.terp.erp.iam.saas.SaasPermissions.ALL), MediaPermissions.ALL),
+            union(union(union(union(IamPermissions.ALL, com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
+                    com.terp.erp.iam.saas.SaasPermissions.ALL), MediaPermissions.ALL),
                     union(union(NotificationPermissions.ALL, EmployeePermissions.ALL),
                             union(union(AttendancePermissions.ALL, RecruitmentPermissions.ALL),
                                     union(LifecyclePermissions.ALL, union(PerformancePermissions.ALL,
