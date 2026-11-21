@@ -19,10 +19,12 @@ public final class UserDtos {
     }
 
     public record UserDto(String id, String companyId, String username, String email, String fullName,
+                          @Schema(description = "Mobile number, null when not given", example = "+84 90 000 0000")
+                          String mobile,
                           EUserStatus status, List<String> roles, Instant createdDate, Instant updatedDate) {
         public static UserDto of(UserAccount u) {
             return new UserDto(u.getId().toString(), u.getCompanyId().toString(), u.getUsername(), u.getEmail(),
-                    u.getFullName(), u.getStatus(),
+                    u.getFullName(), u.getMobile(), u.getStatus(),
                     u.getRoles().stream().filter(r -> !r.isDeleted()).map(Role::getCode).sorted().toList(),
                     u.getCreatedDate(), u.getUpdatedDate());
         }
