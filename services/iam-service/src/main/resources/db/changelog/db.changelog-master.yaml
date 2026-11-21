@@ -99,3 +99,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121320000_helpdesk_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261121320100_helpdesk_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121330000_plan_module_changelog.mysql.sql

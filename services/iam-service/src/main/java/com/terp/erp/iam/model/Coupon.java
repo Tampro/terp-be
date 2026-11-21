@@ -24,6 +24,10 @@ public class Coupon extends BaseAuditableEntity {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
+    /** Optional note shown on the coupon card. */
+    @Column(name = "description", length = 500)
+    private String description;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 20)
     private ECouponType type;

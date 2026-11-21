@@ -27,12 +27,23 @@ public final class SaasDtos {
     public record PlanDto(String id, String code, String name, String description, BigDecimal monthlyPrice,
                           BigDecimal yearlyPrice, Integer maxUsers, Integer maxEmployees, BigDecimal storageLimitGb,
                           int trialDays, boolean aiIntegration, boolean defaultPlan, boolean enabled,
-                          boolean recommended) {
+                          boolean recommended,
+                          @Schema(description = "Modules included; empty = every module (no restriction)")
+                          java.util.List<EPlanModule> modules) {
         public static PlanDto of(Plan p) {
             return p == null ? null : new PlanDto(SaasDtos.str(p.getId()), p.getCode(), p.getName(), p.getDescription(),
                     p.getMonthlyPrice(), p.getYearlyPrice(), p.getMaxUsers(), p.getMaxEmployees(),
                     p.getStorageLimitGb(), p.getTrialDays(), p.isAiIntegration(), p.isDefaultPlan(), p.isEnabled(),
-                    p.isRecommended());
+                    p.isRecommended(), p.getModules().stream().sorted().toList());
+        }
+    }
+
+    /** One entry of the module catalogue (plan form checkboxes, comparison table). */
+    public record PlanModuleDto(EPlanModule code, String name,
+                                @Schema(description = "false = no service yet: including or leaving it out changes nothing today")
+                                boolean available) {
+        public static PlanModuleDto of(EPlanModule m) {
+            return new PlanModuleDto(m, m.getDisplayName(), m.available());
         }
     }
 
@@ -60,7 +71,10 @@ public final class SaasDtos {
                     example = "false") boolean defaultPlan,
             @Schema(description = "Offered to companies", example = "true") boolean enabled,
             @Schema(description = "Shows the Recommended badge on the plan card", example = "false")
-            boolean recommended) {
+            boolean recommended,
+            @Schema(description = "Modules included (full replacement); null or empty = every module. A company on the "
+                    + "plan loses the permissions of the modules left out.", example = "[\"HRM\", \"RECRUITMENT\"]")
+            java.util.Set<@NotNull EPlanModule> modules) {
     }
 
     public record PlanStatusForm(

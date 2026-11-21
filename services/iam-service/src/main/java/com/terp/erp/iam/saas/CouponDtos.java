@@ -25,11 +25,11 @@ public final class CouponDtos {
     public record CouponDto(String id, String code, ECouponCodeType codeGeneration, String name, ECouponType type,
                             BigDecimal discountValue, BigDecimal minimumSpend, BigDecimal maximumSpend,
                             Integer useLimitTotal, Integer useLimitPerCompany, LocalDate expiryDate, boolean enabled,
-                            long timesUsed, Instant createdDate) {
+                            long timesUsed, Instant createdDate, String description) {
         static CouponDto of(Coupon c, long timesUsed) {
             return new CouponDto(SaasDtos.str(c.getId()), c.getCode(), c.getCodeType(), c.getName(), c.getType(),
                     c.getDiscountValue(), c.getMinimumSpend(), c.getMaximumSpend(), c.getUseLimitTotal(),
-                    c.getUseLimitPerCompany(), c.getExpiryDate(), c.isEnabled(), timesUsed, c.getCreatedDate());
+                    c.getUseLimitPerCompany(), c.getExpiryDate(), c.isEnabled(), timesUsed, c.getCreatedDate(), c.getDescription());
         }
     }
 
@@ -51,7 +51,9 @@ public final class CouponDtos {
             @Schema(description = "Total uses; omit = unlimited", example = "100") @Min(1) Integer useLimitTotal,
             @Schema(description = "Uses per company; omit = unlimited", example = "1") @Min(1) Integer useLimitPerCompany,
             @Schema(description = "Last valid day (UTC); omit = no expiry", example = "2026-12-31") LocalDate expiryDate,
-            @Schema(description = "Active; omitted = true", example = "true") Boolean enabled) {
+            @Schema(description = "Active; omitted = true", example = "true") Boolean enabled,
+            @Schema(description = "Optional note shown on the coupon card", example = "Summer campaign for new companies")
+            @Size(max = 500) String description) {
     }
 
     public record CouponStatusForm(

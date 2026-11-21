@@ -37,6 +37,7 @@ public class LocalAuthorityResolver implements AuthorityResolver {
     private final RevokedSessionStore revokedSessions;
     private final SubscriptionService subscriptions;
     private final com.terp.erp.iam.impersonation.ImpersonationService impersonation;
+    private final com.terp.erp.iam.saas.PlanModuleFilter planModules;
 
     private final Cache<String, Optional<ErpPrincipal>> cache =
             Caffeine.newBuilder().expireAfterWrite(Duration.ofSeconds(30)).maximumSize(10_000).build();
@@ -91,8 +92,9 @@ public class LocalAuthorityResolver implements AuthorityResolver {
         }
         Set<Role> roles = u.getRoles().stream().filter(r -> !r.isDeleted()).collect(Collectors.toSet());
         Set<String> roleCodes = roles.stream().map(Role::getCode).collect(Collectors.toUnmodifiableSet());
-        Set<String> permissions = roles.stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getCode)
-                .collect(Collectors.toUnmodifiableSet());
+        // Only the modules of the company's plan: a module left out of the plan answers 403 in every service.
+        Set<String> permissions = planModules.allowed(company.get(),
+                roles.stream().flatMap(r -> r.getPermissions().stream()).collect(Collectors.toSet()));
         if (subscriptions.effective(company.get()).blocked()) {
             // Expired subscription: only someone who can renew gets in, and only with the renewal permissions.
             if (!SubscriptionService.mayRenew(roleCodes)) {

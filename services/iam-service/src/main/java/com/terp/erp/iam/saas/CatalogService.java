@@ -105,5 +105,14 @@ public class CatalogService {
         p.setRecommended(f.recommended());
         p.setDefaultPlan(f.defaultPlan());
         p.setEnabled(f.enabled() || f.defaultPlan());
+        p.getModules().clear();
+        if (f.modules() != null) {
+            p.getModules().addAll(f.modules());
+        }
+    }
+
+    /** Every module a plan can include, in a stable order, for the plan form and the comparison table. */
+    public List<SaasDtos.PlanModuleDto> moduleCatalogue() {
+        return java.util.Arrays.stream(EPlanModule.values()).map(SaasDtos.PlanModuleDto::of).toList();
     }
 }

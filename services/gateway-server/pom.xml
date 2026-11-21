@@ -32,6 +32,12 @@
             <artifactId>caffeine</artifactId>
         </dependency>
         <dependency>
+            <!-- Swagger UI that aggregates every service's /v3/api-docs (off with ERP_SWAGGER_ENABLED=false). -->
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>

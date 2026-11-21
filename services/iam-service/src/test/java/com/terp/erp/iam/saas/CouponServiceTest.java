@@ -39,7 +39,7 @@ class CouponServiceTest {
 
     private static CouponForm form(ECouponCodeType gen, String code, String min, String max) {
         return new CouponForm("Summer", ECouponType.PERCENTAGE, new BigDecimal("20"), gen, code,
-                min == null ? null : new BigDecimal(min), max == null ? null : new BigDecimal(max), 100, 1, null, null);
+                min == null ? null : new BigDecimal(min), max == null ? null : new BigDecimal(max), 100, 1, null, null, null);
     }
 
     @Test

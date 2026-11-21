@@ -45,6 +45,15 @@ public class SubscriptionController {
     private final OrderService orderService;
     private final PlanRequestService planRequests;
 
+    @Operation(summary = "Modules a plan can include",
+            description = "For the plan form and the comparison table. available = false: no service yet, so "
+                    + "including or leaving the module out changes nothing today.")
+    @PreAuthorize("@PermissionChecker.has('SAAS_SUBSCRIPTION_VIEW')")
+    @GetMapping("/plan-modules")
+    public ApiMessageDto<List<SaasDtos.PlanModuleDto>> planModules() {
+        return ApiMessageDto.ok(catalog.moduleCatalogue());
+    }
+
     @Operation(summary = "Plans offered to companies")
     @PreAuthorize("@PermissionChecker.has('SAAS_SUBSCRIPTION_VIEW')")
     @GetMapping("/plans")
