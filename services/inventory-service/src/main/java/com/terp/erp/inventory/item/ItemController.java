@@ -1,5 +1,7 @@
 package com.terp.erp.inventory.item;
 
+import com.terp.erp.inventory.item.ItemImageService.ImagesDto;
+import com.terp.erp.inventory.item.ItemImageService.ImagesForm;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.common.ResponseListDto;
 import com.terp.erp.inventory.item.Item.EItemType;
@@ -42,6 +44,7 @@ public class ItemController {
             + "(INV_012, INV_013, INV_014)";
 
     private final ItemService service;
+    private final ItemImageService imageService;
 
     @Operation(summary = "Items of the company", description = "keyword = name or SKU; filters type, categoryId. "
             + "quantity = stock summed over warehouses (0 for SERVICE).")
@@ -97,5 +100,27 @@ public class ItemController {
     public ApiMessageDto<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiMessageDto.ok(null);
+    }
+
+    @Operation(summary = "Main and additional images of an item", description = "media-service file ids; the "
+            + "FE gets a signed link for each from media-service.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','QUOTATION_VIEW')")
+    @GetMapping("/{id}/images")
+    public ApiMessageDto<ImagesDto> images(@PathVariable Long id) {
+        return ApiMessageDto.ok(imageService.get(id));
+    }
+
+    @Operation(summary = "Set the images of an item", description = "Full replacement: mainImageId null removes the "
+            + "main image, an empty list removes the additional ones (at most 10). Each id must be an image file of "
+            + "the item's company in media-service; nothing is written if one is not.")
+    @ApiResponses({@ApiResponse(responseCode = "400", description = "Not an image of your company (INV_024), "
+            + "validation (COMMON_001)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND),
+            @ApiResponse(responseCode = "503", description = "Media service unavailable (INV_025)")})
+    @PreAuthorize("@PermissionChecker.has('INVENTORY_MANAGE')")
+    @PutMapping("/{id}/images")
+    public ApiMessageDto<ImagesDto> replaceImages(@PathVariable Long id, @Valid @RequestBody ImagesForm form) {
+        return ApiMessageDto.ok(imageService.replace(id, form));
     }
 }

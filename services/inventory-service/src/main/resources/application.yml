@@ -31,6 +31,7 @@ spring:
 erp:
   inventory:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
 
 management:
   endpoints:

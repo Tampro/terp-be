@@ -30,7 +30,9 @@ public enum EInventoryError implements ErrorCode {
     INV_020("The chosen item does not exist in the company."),
     INV_021("A SKU could not be generated. Please try again."),
     INV_022("The source and destination warehouses must be different."),
-    INV_023("The stock transfer does not exist.");
+    INV_023("The stock transfer does not exist."),
+    INV_024("File {0} is not an image in your company media library."),
+    INV_025("The media service is unavailable. Please try again later.");
 
     private final String message;
 }
