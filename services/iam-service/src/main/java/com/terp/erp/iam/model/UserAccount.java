@@ -39,6 +39,10 @@ public class UserAccount extends BaseAuditableEntity {
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
+    /** Optional, as typed (with country code); kept here only, not in Keycloak. */
+    @Column(name = "mobile", length = 30)
+    private String mobile;
+
     /** Profile picture: a file of the company's media library. */
     @Column(name = "avatar_media_id")
     private Long avatarMediaId;

@@ -31,7 +31,12 @@ public class ProfileService {
     private final KeycloakClient keycloak;
     private final AvatarMediaClient media;
 
+    /** Digits, + ( ) - . and spaces, 3 to 30 characters — the same rule as the company mobile number. */
+    static final String MOBILE_PATTERN = "^$|[0-9+()\\-. ]{3,30}";
+
     public record ProfileDto(String username, String fullName, String email,
+                             @Schema(description = "Mobile number; null when not given (always null for the super admin)",
+                                     example = "+84 90 000 0000") String mobile,
                              @Schema(description = "Media file id of the avatar") String avatarFileId,
                              @Schema(description = "Signed link, valid a few minutes") String avatarUrl,
                              boolean superAdmin) {
@@ -42,6 +47,10 @@ public class ProfileService {
             @NotBlank @Size(max = 255) String fullName,
             @Schema(example = "a.nguyen@example.com", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotBlank @Email @Size(max = 255) String email,
+            @Schema(description = "Mobile number with country code; null or blank = none. Not for the super admin.",
+                    example = "+84 90 000 0000")
+            @Size(max = 30) @jakarta.validation.constraints.Pattern(regexp = MOBILE_PATTERN,
+                    message = "mobile may contain only digits, + ( ) - . and spaces (3 to 30 characters)") String mobile,
             @Schema(description = "Media file id (JPG, PNG or GIF of your company, max 2 MB); null = no avatar. "
                     + "Not for the super admin.")
             Long avatarFileId) {
@@ -62,24 +71,29 @@ public class ProfileService {
     public ProfileDto get() {
         ErpPrincipal p = CurrentUser.get();
         if (p.superAdmin()) {
-            return new ProfileDto(p.username(), claim("name"), claim("email"), null, null, true);
+            return new ProfileDto(p.username(), claim("name"), claim("email"), null, null, null, true);
         }
         UserAccount u = mine(p);
         return dto(u, media.viewUrl(u.getAvatarMediaId()));
     }
 
-    /** Full replacement of name, email and avatar. The username (login name) never changes. */
+    /** Full replacement of name, email, mobile and avatar. The username (login name) never changes. */
     @Transactional
     public ProfileDto update(ProfileForm f) {
         ErpPrincipal p = CurrentUser.get();
         String fullName = f.fullName().trim();
         String email = f.email().trim();
+        String mobile = f.mobile() == null || f.mobile().isBlank() ? null : f.mobile().trim();
         if (p.superAdmin()) {
             if (f.avatarFileId() != null) {
                 throw ApiException.badRequest(EIamError.IAM_024);
             }
+            // The super admin lives only in Keycloak; refusing beats silently dropping the number.
+            if (mobile != null) {
+                throw ApiException.badRequest(EIamError.IAM_031);
+            }
             keycloak.updateProfile(p.keycloakId(), email, fullName);
-            return new ProfileDto(p.username(), fullName, email, null, null, true);
+            return new ProfileDto(p.username(), fullName, email, null, null, null, true);
         }
         UserAccount u = mine(p);
         String avatarUrl = f.avatarFileId() == null ? null
@@ -87,6 +101,7 @@ public class ProfileService {
         keycloak.updateProfile(u.getKeycloakId(), email, fullName);
         u.setFullName(fullName);
         u.setEmail(email);
+        u.setMobile(mobile);
         u.setAvatarMediaId(f.avatarFileId());
         return dto(u, avatarUrl);
     }
@@ -119,7 +134,7 @@ public class ProfileService {
     }
 
     private static ProfileDto dto(UserAccount u, String avatarUrl) {
-        return new ProfileDto(u.getUsername(), u.getFullName(), u.getEmail(),
+        return new ProfileDto(u.getUsername(), u.getFullName(), u.getEmail(), u.getMobile(),
                 u.getAvatarMediaId() == null ? null : u.getAvatarMediaId().toString(), avatarUrl, false);
     }
 

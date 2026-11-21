@@ -54,7 +54,8 @@ public enum EIamError implements ErrorCode {
     IAM_027("The language {0} does not exist."),
     IAM_028("A system language (vi, en, ko) cannot be deleted."),
     IAM_029("The default language cannot be disabled or deleted. Choose another default language first."),
-    IAM_030("Invalid label: {0}. Keys use letters, digits, dot, dash or underscore (max 200); texts at most 2000 characters; an import has 1 to 10000 keys; new keys come in through import.");
+    IAM_030("Invalid label: {0}. Keys use letters, digits, dot, dash or underscore (max 200); texts at most 2000 characters; an import has 1 to 10000 keys; new keys come in through import."),
+    IAM_031("The super admin profile has no mobile number.");
 
     private final String message;
 }
