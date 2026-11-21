@@ -41,11 +41,11 @@ public enum EPlanModule {
 
     /**
      * Permission modules every company keeps whatever its plan: accounts, subscription, files, platform helpdesk, and
-     * the commercial core (items and warehouses, proposals, invoices, returns, customers).
+     * the commercial core (items and warehouses, proposals, invoices, returns, customers, purchase, vendors).
      */
     // TODO(assumption): the commercial core is always on, like the reference product (items, sales) — confirm with PO.
     public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION",
-            "INVENTORY", "SALES", "CUSTOMER");
+            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR");
 
     private final String displayName;
     private final Set<String> permissionModules;

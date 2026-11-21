@@ -75,7 +75,7 @@ spring:
             - id: commerce-service
               uri: ${COMMERCE_SERVICE_URL:http://localhost:8092}
               predicates:
-                - Path=/api/v1/sales/**
+                - Path=/api/v1/sales/**,/api/v1/purchase/**
             - id: accounting-service
               uri: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
               predicates:

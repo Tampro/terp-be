@@ -4,7 +4,7 @@ import java.util.Set;
 
 /**
  * Commercial permissions checked by inventory-, commerce- and accounting-service; must match the Liquibase seed
- * (ERP manual 6, 7, 8, 9, 12.1).
+ * (ERP manual 6, 7, 8, 9, 12.1); purchase and vendors are ERP manual 8.
  */
 public final class SalesPermissions {
     /** inventory-service: items, categories, taxes, units, warehouses, stock. */
@@ -21,6 +21,11 @@ public final class SalesPermissions {
     /** crm-service: customer contracts (not the HR employment contracts of document-service, module CONTRACT). */
     public static final Set<String> CRM_CONTRACT = Set.of("CRM_CONTRACT_VIEW", "CRM_CONTRACT_MANAGE");
 
+    /** commerce-service: purchase invoices and returns; PURCHASE_POST posts invoices, approves / completes returns. */
+    public static final Set<String> PURCHASE = Set.of("PURCHASE_VIEW", "PURCHASE_MANAGE", "PURCHASE_POST");
+    /** accounting-service: vendors. */
+    public static final Set<String> VENDOR = Set.of("VENDOR_VIEW", "VENDOR_MANAGE");
+
     public static final Set<String> ALL;
 
     static {
@@ -30,6 +35,8 @@ public final class SalesPermissions {
         all.addAll(QUOTATION);
         all.addAll(CRM);
         all.addAll(CRM_CONTRACT);
+        all.addAll(PURCHASE);
+        all.addAll(VENDOR);
         ALL = Set.copyOf(all);
     }
 
