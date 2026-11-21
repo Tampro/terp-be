@@ -35,6 +35,20 @@ class AttendanceDashboardTest {
         assertThat(d.last7Days().get(4)).isEqualTo(new AttendanceDashboardService.DayPoint(TODAY.minusDays(2), 4, 0, 1));
         // attended = Mon 2: 4 + Wed 4: 3 + 0.5 = 7.5 of 5 employees × 2 working days
         assertThat(d.attendanceRateThisMonth()).isEqualTo(75.0);
+        assertThat(d.absentToday()).isZero();
+        assertThat(d.onLeaveToday()).isEqualTo(1);
+        assertThat(d.notMarkedToday()).isZero();
+    }
+
+    @Test
+    void employeesWithoutARecordTodayAreNotMarked() {
+        List<Object[]> rows = List.of(new Object[]{TODAY, ERecordStatus.PRESENT, 2L},
+                new Object[]{TODAY, ERecordStatus.ABSENT, 1L});
+        var d = AttendanceDashboardService.build(TODAY, rows, 10L, Set.of(), List.of());
+
+        assertThat(d.absentToday()).isEqualTo(1);
+        assertThat(d.notMarkedToday()).isEqualTo(7);
+        assertThat(AttendanceDashboardService.build(TODAY, rows, null, Set.of(), List.of()).notMarkedToday()).isNull();
     }
 
     @Test
