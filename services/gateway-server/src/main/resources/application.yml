@@ -80,6 +80,10 @@ spring:
               uri: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
               predicates:
                 - Path=/api/v1/accounting/**
+            - id: crm-service
+              uri: ${CRM_SERVICE_URL:http://localhost:8094}
+              predicates:
+                - Path=/api/v1/crm/**
 
 springdoc:
   api-docs:
