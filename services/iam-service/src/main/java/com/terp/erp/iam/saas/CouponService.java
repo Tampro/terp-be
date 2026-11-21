@@ -164,6 +164,7 @@ public class CouponService {
             throw ApiException.badRequest(ESaasError.SAAS_020);
         }
         c.setName(f.name());
+        c.setDescription(f.description() == null || f.description().isBlank() ? null : f.description().trim());
         c.setType(f.type());
         c.setDiscountValue(f.discountValue());
         c.setMinimumSpend(f.minimumSpend());

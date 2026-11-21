@@ -64,4 +64,15 @@ public class Plan extends BaseAuditableEntity {
 
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
+
+    /**
+     * Modules included in the plan (ERP plan feature list). Empty = every module, which is what plans meant before
+     * they had a module list. Enforced by PlanModuleFilter when IAM resolves permissions.
+     */
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "plan_module",
+            joinColumns = @jakarta.persistence.JoinColumn(name = "plan_id"))
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "module", nullable = false, length = 40)
+    private java.util.Set<com.terp.erp.iam.saas.EPlanModule> modules = new java.util.HashSet<>();
 }

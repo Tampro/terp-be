@@ -34,7 +34,7 @@ class ImpersonationServiceTest {
     private final CompanyRepository companies = mock(CompanyRepository.class);
     private final RoleRepository roles = mock(RoleRepository.class);
     private final ImpersonationService service = new ImpersonationService(sessions, companies, roles,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), com.terp.erp.iam.saas.PlanModuleFilterTest.noPlan());
 
     @AfterEach
     void tearDown() {

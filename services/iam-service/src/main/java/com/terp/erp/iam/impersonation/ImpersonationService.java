@@ -41,12 +41,15 @@ public class ImpersonationService {
     private final CompanyRepository companies;
     private final RoleRepository roles;
     private final Clock clock;
+    private final com.terp.erp.iam.saas.PlanModuleFilter planModules;
     // The principal is resolved on every request of the session: a short cache, cleared when a session ends.
     private final Cache<String, Optional<ErpPrincipal>> resolved = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofSeconds(15)).maximumSize(1_000).build();
 
     public ImpersonationService(ImpersonationSessionRepository sessions, CompanyRepository companies,
-                                RoleRepository roles, Clock clock) {
+                                RoleRepository roles, Clock clock,
+                                com.terp.erp.iam.saas.PlanModuleFilter planModules) {
+        this.planModules = planModules;
         this.sessions = sessions;
         this.companies = companies;
         this.roles = roles;
@@ -117,8 +120,11 @@ public class ImpersonationService {
                 .filter(s -> s.getSuperAdminSub().equals(superAdminSub) && s.activeAt(now))
                 .flatMap(s -> roles.findByCompanyIdAndCodeAndDeletedFalse(s.getCompanyId(),
                         EDefaultRole.COMPANY_ADMIN.name()).map(role -> {
-                    Set<String> perms = role.getPermissions().stream().map(x -> x.getCode())
-                            .collect(Collectors.toUnmodifiableSet());
+                    // Same plan limits as the company's own admin: the super admin sees what the company sees.
+                    Company company = companies.findByIdAndDeletedFalse(s.getCompanyId()).orElse(null);
+                    Set<String> perms = company == null
+                            ? role.getPermissions().stream().map(x -> x.getCode()).collect(Collectors.toUnmodifiableSet())
+                            : planModules.allowed(company, role.getPermissions());
                     return new ErpPrincipal(null, superAdminSub, username, s.getCompanyId(), false,
                             Set.of(EDefaultRole.COMPANY_ADMIN.name()), perms);
                 }));

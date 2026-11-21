@@ -1,5 +1,6 @@
 package com.terp.erp.gateway;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,8 +24,12 @@ import java.nio.charset.StandardCharsets;
 @EnableWebFluxSecurity
 public class GatewaySecurityConfig {
 
+    private static final String[] SWAGGER_PATHS = {"/swagger-ui.html", "/swagger-ui/**", "/webjars/**",
+            "/v3/api-docs/**", "/docs/*/v3/api-docs"};
+
     @Bean
-    SecurityWebFilterChain gatewayFilterChain(ServerHttpSecurity http) {
+    SecurityWebFilterChain gatewayFilterChain(ServerHttpSecurity http,
+                                               @Value("${erp.swagger.enabled:false}") boolean swaggerEnabled) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
@@ -50,6 +55,8 @@ public class GatewaySecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/v1/public/career/**").permitAll()
                         .pathMatchers(HttpMethod.POST, CareerRateLimitFilter.APPLY).permitAll()
                         .pathMatchers("/actuator/health/**").permitAll()
+                        // API docs only (no data); the endpoints they describe still need a token.
+                        .pathMatchers(HttpMethod.GET, swaggerEnabled ? SWAGGER_PATHS : new String[0]).permitAll()
                         .pathMatchers("/api/**").authenticated()
                         .anyExchange().denyAll())
                 .oauth2ResourceServer(o -> o

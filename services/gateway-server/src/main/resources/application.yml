@@ -69,6 +69,24 @@ spring:
               predicates:
                 - Path=/api/v1/reports/**
 
+springdoc:
+  api-docs:
+    enabled: ${ERP_SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${ERP_SWAGGER_ENABLED:true}
+    # Each entry is proxied by SwaggerDocsRoutes to that service's /v3/api-docs.
+    urls:
+      - { name: iam-service, url: /docs/iam/v3/api-docs }
+      - { name: media-service, url: /docs/media/v3/api-docs }
+      - { name: employee-service, url: /docs/employee/v3/api-docs }
+      - { name: attendance-service, url: /docs/attendance/v3/api-docs }
+      - { name: recruitment-service, url: /docs/recruitment/v3/api-docs }
+      - { name: payroll-service, url: /docs/payroll/v3/api-docs }
+      - { name: asset-service, url: /docs/asset/v3/api-docs }
+      - { name: meeting-service, url: /docs/meeting/v3/api-docs }
+      - { name: document-service, url: /docs/document/v3/api-docs }
+      - { name: report-service, url: /docs/report/v3/api-docs }
+
 management:
   endpoints:
     web:
@@ -76,6 +94,9 @@ management:
         include: health,info,prometheus
 
 erp:
+  swagger:
+    # Public API docs through the gateway; set false in production.
+    enabled: ${ERP_SWAGGER_ENABLED:true}
   gateway:
     # The biometric device endpoint is the only one reachable without a token: limit it per client IP.
     device-rate-limit:
