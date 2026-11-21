@@ -1,15 +1,30 @@
 # ERP backend
 
-Microservices on Spring Boot 3.5 / Java 17. Keycloak proves who the caller is; the IAM service decides which
-company they belong to and what they may do.
+Multi-company ERP SaaS as microservices on Spring Boot 3.5 / Java 17 (package `com.terp.erp`). Keycloak proves who
+the caller is; the IAM service decides which company they belong to and what they may do. The services below cover
+the HR side of the ERP; inventory, sales/purchase, accounting, CRM, projects, support and notifications are planned
+(ports 8091–8097).
 
-| Module | Port | What it does |
+Ports are the container ports. `docker-compose.yml` (project `erp`) publishes them on the host **+10000**, so the
+gateway is `http://localhost:18080` and Keycloak `http://localhost:18180` — this keeps it apart from other local
+stacks that use the plain ports.
+
+| Module | Port (host) | What it does |
 |---|---|---|
-| `gateway-server` | 8080 | One entry point for the FE (`/api/v1/**`). Rejects requests without a valid Keycloak token, sets `X-Trace-Id`, routes to services. Makes no permission decision. |
-| `iam-service` | 8081 | Companies (tenants), user accounts, roles, permissions. Login facade over Keycloak. Database `erp_iam`. |
-| `media-service` | 8082 | Media library: folders, uploads (type checked from the bytes, svg/html refused), stats, time-limited signed view/download links. Files on volume `media-data`, rows in `erp_media`. Super admin sees every company; a company only its own. |
-| `erp-common` | — | Library shared by the servlet services: API envelope, error handling + i18n, trace id, resource-server setup, `PermissionChecker`, `TenantGuard`. |
-| Keycloak 26 | 8180 | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Config in `deploy/keycloak/erp-realm.json`. |
+| `gateway-server` | 8080 (18080) | One entry point for the FE (`/api/v1/**`). Rejects requests without a valid Keycloak token, sets `X-Trace-Id`, rate-limits the public career and device endpoints, routes to services. Makes no permission decision. |
+| `iam-service` | 8081 (18081) | Companies (tenants), user accounts, roles, permissions, login facade over Keycloak; SaaS plans, subscriptions, orders, coupons, currencies, payments, referrals; impersonation, IP rules, languages, email templates, settings, public site. Database `erp_iam`. |
+| `media-service` | 8082 (18082) | Media library: folders, uploads (type checked from the bytes, svg/html refused), stats, time-limited signed view/download links. Files on volume `media-data`, rows in `erp_media`. Super admin sees every company; a company only its own. |
+| `employee-service` | 8083 (18083) | Employees and organisation (branch > department > designation), announcements, awards, certificates/letters, holidays, lifecycle (promotion, transfer, warning, complaint, trip, resignation, termination), performance, training, Excel import/export. Bank number and tax id encrypted (AES-GCM). Database `erp_employee`. |
+| `attendance-service` | 8084 (18084) | Shifts, attendance policies, records, regularizations, biometric device push, timesheets, leave, payroll summary. Database `erp_attendance`. |
+| `recruitment-service` | 8085 (18085) | Job postings, public career page, candidates, interview rounds and interviews, assessments, offers and offer templates, onboarding. Files on volume `recruitment-data`, database `erp_recruitment`. |
+| `payroll-service` | 8086 (18086) | Salary components, employee salaries, payroll runs, payslips, dashboard; reads employee and attendance data with the caller's token. Database `erp_payroll`. |
+| `asset-service` | 8087 (18087) | Asset types, assets, assignments, maintenance, depreciation. Database `erp_asset`. |
+| `meeting-service` | 8088 (18088) | Meeting types and rooms, meetings, action items, company events, Zoom meetings (client secrets encrypted). Database `erp_meeting`. |
+| `document-service` | 8089 (18089) | Document categories, employee contracts, HR documents, templates. Database `erp_document`. |
+| `report-service` | 8090 (18090) | Dashboards and the unified calendar, read from the other services (no database of its own). |
+| `erp-common` | — | Library shared by the servlet services: API envelope, error handling + i18n, trace id, resource-server setup, `ErpPrincipal`, `PermissionChecker`, `TenantGuard`. |
+| Keycloak 26 | 8080 (18180) | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Clients `erp-web` (FE), `erp-iam-admin`, `erp-employee-service`. Config in `deploy/keycloak/erp-realm.json`. |
+| MySQL 8.4 | 3306 (13316) | One database per service (`erp_*`) plus `keycloak`, created by `deploy/mysql/init`. |
 
 ## How a request is authorized
 
@@ -17,7 +32,7 @@ company they belong to and what they may do.
 sequenceDiagram
   participant FE
   participant GW as gateway-server
-  participant SVC as a service (iam, later attendance…)
+  participant SVC as a service (iam, employee, attendance…)
   participant IAM as iam-service
   participant KC as Keycloak
   FE->>GW: Authorization: Bearer <access token>
@@ -47,7 +62,13 @@ Rules enforced in IAM: a caller can only grant permissions — directly in a rol
 they hold themselves (`IAM_015`); `COMPANY_ADMIN` keeps every IAM permission (`IAM_012`); system roles keep their code
 and cannot be deleted; nobody changes their own roles or status (`IAM_013`).
 
-## API (through the gateway, `http://localhost:8080`)
+## API (through the gateway, `http://localhost:18080`)
+
+IAM endpoints below; the other services follow the same rules under their own prefixes — media `/api/v1/media/**`;
+employee `/api/v1/employees`, `/org/**`, `/lifecycle/**`, `/performance/**`, `/training/**`; attendance
+`/api/v1/attendance/**`; recruitment `/api/v1/recruitment/**` + public `/api/v1/public/career/**`; payroll
+`/api/v1/payroll/**`; asset `/api/v1/asset/**`; meeting `/api/v1/meeting/**`; document `/api/v1/document/**`;
+report `/api/v1/reports/**` (each service has its own Swagger UI on its port).
 
 | Method | Path | Who |
 |---|---|---|
@@ -75,7 +96,7 @@ storage are stored for later services. Companies without a plan (e.g. the bootst
 Bank account shown with pending orders: `SAAS_BANK_NAME`, `SAAS_BANK_ACCOUNT_NUMBER`, `SAAS_BANK_ACCOUNT_NAME`.
 
 Envelope `{ result, code, data, message, traceId }`; errors carry a stable `code` (`AUTH_00x`, `IAM_0xx`,
-`COMMON_00x`) and a message in `Accept-Language` (vi default, en, ko). Swagger UI: `http://localhost:8081/swagger-ui.html`
+`COMMON_00x`) and a message in `Accept-Language` (vi default, en, ko). Swagger UI: `http://localhost:18081/swagger-ui.html`
 (IAM directly; the gateway does not expose it).
 
 ## Run locally
@@ -100,8 +121,14 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   EMPLOYEE_SERVICE_CLIENT_SECRET        (secret of client erp-employee-service; realm import and employee-service)
 #   ERP_SETTINGS_ENC_KEY                  (optional; base64 of 32 random bytes — needed to save the SMTP password
 #                                          or reCAPTCHA secret in Settings: openssl rand -base64 32)
-docker compose up -d --build
+# optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,
+#   SAAS_BANK_ACCOUNT_NUMBER, SAAS_BANK_ACCOUNT_NAME, *_DB_USERNAME (default erp_<service>)
+# ERP_SUPERADMIN_INITIAL_PASSWORD / ERP_SETTINGS_ENC_KEY fall back to the former HRM_* names when unset.
+docker compose up -d --build       # compose project "erp": containers erp-*, volumes erp_*, host ports +10000
 ```
+
+FE settings for this stack: API `http://localhost:18080/api/v1`, Keycloak realm `erp`, client `erp-web`,
+issuer `http://localhost:18180/realms/erp`.
 
 First steps: `POST /api/v1/auth/initial-password` for `superadmin` → `POST /api/v1/iam/companies` (creates the
 company, its default roles and the first `COMPANY_ADMIN`, whose temporary password is returned once) → that admin
@@ -112,9 +139,13 @@ The realm is imported only when it does not exist yet; after editing `erp-realm.
 
 ## Tests
 
-`mvn package` runs the unit tests (tenant guard, permission checker, role escalation rules, login gating, temporary
-password policy). The end-to-end flow above was run once against the docker stack on 2026-11-18 (26 checks: tokens,
-first-login password, cross-company 404, escalation 403, lock/suspend revocation, refresh rotation, logout).
+`mvn package` runs the unit tests of all 12 modules (628 on 2026-11-21: tenant guard, permission checker, role
+escalation rules, login gating, temporary password policy, and the business rules of each service).
+
+End-to-end, against the running stack through the gateway (2026-11-21, 26/26 checks): no-token 401, temporary
+password → `AUTH_004`, first-login password, company creation with its `COMPANY_ADMIN`, cross-company read → 404,
+changing your own status → `IAM_013`, missing permission → 403, locked user and suspended company tokens rejected,
+refresh-token rotation (old token refused), logout. The checks create test companies `E2EA_/E2EB_<random>`.
 
 ## Adding a service
 
