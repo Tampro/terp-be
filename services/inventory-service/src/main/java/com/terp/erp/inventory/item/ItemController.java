@@ -49,7 +49,7 @@ public class ItemController {
     @Operation(summary = "Items of the company", description = "keyword = name or SKU; filters type, categoryId. "
             + "quantity = stock summed over warehouses (0 for SERVICE).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
-    @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_SELL')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<ItemDto>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -63,7 +63,7 @@ public class ItemController {
 
     @Operation(summary = "Item details", description = "Also read by commerce-service (sales, quotations).")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','QUOTATION_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','QUOTATION_VIEW','POS_SELL')")
     @GetMapping("/{id}")
     public ApiMessageDto<ItemDto> get(@PathVariable Long id) {
         return ApiMessageDto.ok(service.get(id));
@@ -105,7 +105,7 @@ public class ItemController {
     @Operation(summary = "Main and additional images of an item", description = "media-service file ids; the "
             + "FE gets a signed link for each from media-service.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','QUOTATION_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','QUOTATION_VIEW','POS_SELL')")
     @GetMapping("/{id}/images")
     public ApiMessageDto<ImagesDto> images(@PathVariable Long id) {
         return ApiMessageDto.ok(imageService.get(id));

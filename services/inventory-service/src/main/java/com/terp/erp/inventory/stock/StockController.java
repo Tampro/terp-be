@@ -38,7 +38,7 @@ public class StockController {
 
     @Operation(summary = "Stock per item and warehouse", description = "Both filters optional.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
-    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','SALES_VIEW','POS_SELL')")
     @GetMapping
     public ApiMessageDto<List<StockDto>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -63,7 +63,7 @@ public class StockController {
                     + "of that source already exist nothing changes and applied = false.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = LINE_ERRORS + "; nothing applied. Super admin "
             + "without companyId (INV_001)"))
-    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_MANAGE','SALES_POST')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_MANAGE','SALES_POST','POS_SELL')")
     @PostMapping("/moves")
     public ApiMessageDto<MovesResult> moves(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,

@@ -28,6 +28,10 @@ public class InventoryClient {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Warehouse(String id, String name, boolean active) {
+    }
+
     public record MoveLine(Long itemId, Long warehouseId, BigDecimal quantity) {
     }
 
@@ -43,6 +47,12 @@ public class InventoryClient {
     public Item item(Long id) {
         JsonNode data = http.call(c -> c.get().uri("/api/v1/inventory/items/{id}", id)).path("data");
         return mapper.convertValue(data, Item.class);
+    }
+
+    /** The warehouse of the caller's company; inventory-service answers its own 404 otherwise (relayed). */
+    public Warehouse warehouse(Long id) {
+        JsonNode data = http.call(c -> c.get().uri("/api/v1/inventory/warehouses/{id}", id)).path("data");
+        return mapper.convertValue(data, Warehouse.class);
     }
 
     /**

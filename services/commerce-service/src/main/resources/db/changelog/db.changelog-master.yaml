@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121420000_sales_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261121620000_purchase_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122210000_pos_changelog.mysql.sql

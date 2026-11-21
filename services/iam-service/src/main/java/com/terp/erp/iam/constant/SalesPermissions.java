@@ -26,6 +26,12 @@ public final class SalesPermissions {
     /** accounting-service: vendors. */
     public static final Set<String> VENDOR = Set.of("VENDOR_VIEW", "VENDOR_MANAGE");
 
+    /** commerce-service POS: POS_SELL also lets a cashier read items, stock, warehouses, customers and bank accounts. */
+    public static final Set<String> POS = Set.of("POS_VIEW", "POS_SELL", "POS_REPORT");
+
+    /** accounting-service: bank accounts and their transactions. */
+    public static final Set<String> BANK = Set.of("BANK_VIEW", "BANK_MANAGE");
+
     public static final Set<String> ALL;
 
     static {
@@ -37,6 +43,8 @@ public final class SalesPermissions {
         all.addAll(CRM_CONTRACT);
         all.addAll(PURCHASE);
         all.addAll(VENDOR);
+        all.addAll(POS);
+        all.addAll(BANK);
         ALL = Set.copyOf(all);
     }
 
