@@ -1,0 +1,34 @@
+package com.terp.erp.inventory.common;
+
+import com.terp.erp.exception.ErrorCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+/** Never renumber or reuse a code: the FE and commerce-service key on it. */
+@Getter
+@RequiredArgsConstructor
+public enum EInventoryError implements ErrorCode {
+    INV_001("Choose the company to act on."),
+    INV_002("The category does not exist."),
+    INV_003("The tax does not exist."),
+    INV_004("The unit does not exist."),
+    INV_005("This name already exists."),
+    INV_006("It is still used by an item and cannot be deleted."),
+    INV_007("The warehouse does not exist."),
+    INV_008("The warehouse still holds stock and cannot be deleted."),
+    INV_009("The item does not exist."),
+    INV_010("This SKU already exists."),
+    INV_011("The SKU is required unless it is generated."),
+    INV_012("The chosen category does not exist in the company."),
+    INV_013("The chosen unit does not exist in the company."),
+    INV_014("The chosen tax does not exist in the company."),
+    INV_015("The chosen warehouse does not exist in the company or is inactive."),
+    INV_016("A service has no stock."),
+    INV_017("Not enough stock of {0}: {1} available."),
+    INV_018("An opening quantity needs a warehouse, and a warehouse needs a positive quantity."),
+    INV_019("An item that holds stock cannot become a service."),
+    INV_020("The chosen item does not exist in the company."),
+    INV_021("A SKU could not be generated. Please try again.");
+
+    private final String message;
+}
