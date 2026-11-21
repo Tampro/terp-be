@@ -98,11 +98,12 @@ public class ItemService {
             @Schema(example = "Long description") String description) {
     }
 
-    /** quantity = stock summed over warehouses (0 for SERVICE). */
+    /** quantity = stock summed over warehouses (0 for SERVICE); mainImageId = media-service file id. */
     public record ItemDto(String id, EItemType type, String name, String sku, String taxId, String taxName,
                           BigDecimal taxRate, String categoryId, String categoryName, String unitId, String unitName,
                           BigDecimal salePrice, BigDecimal purchasePrice, String shortDescription,
-                          String description, BigDecimal quantity, Instant createdDate, Instant updatedDate) {
+                          String description, BigDecimal quantity, String mainImageId, Instant createdDate,
+                          Instant updatedDate) {
     }
 
     @Transactional(readOnly = true)
@@ -252,6 +253,6 @@ public class ItemService {
                 t == null ? null : t.getName(), t == null ? null : t.getRate(), Texts.id(i.getCategoryId()),
                 c == null ? null : c.getName(), Texts.id(i.getUnitId()), u == null ? null : u.getName(),
                 i.getSalePrice(), i.getPurchasePrice(), i.getShortDescription(), i.getDescription(),
-                i.getType().stocked() ? qty : BigDecimal.ZERO, i.getCreatedDate(), i.getUpdatedDate());
+                i.getType().stocked() ? qty : BigDecimal.ZERO, Texts.id(i.getMainImageId()), i.getCreatedDate(), i.getUpdatedDate());
     }
 }

@@ -60,6 +60,10 @@ public class Item extends BaseAuditableEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /** media-service file id of the main image (manual §9 step 3); additional images are ItemImage rows. */
+    @Column(name = "main_image_id")
+    private Long mainImageId;
+
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
 }
