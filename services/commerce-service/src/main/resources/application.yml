@@ -1,0 +1,49 @@
+# Every secret comes from the environment with no default; non-secret values have local defaults.
+server:
+  port: ${COMMERCE_PORT:8092}
+
+spring:
+  application:
+    name: commerce-service
+  datasource:
+    url: ${COMMERCE_DB_URL:jdbc:mysql://localhost:3306/erp_commerce?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${COMMERCE_DB_USERNAME}
+    password: ${COMMERCE_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+erp:
+  commerce:
+    iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    accounting-service-url: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
