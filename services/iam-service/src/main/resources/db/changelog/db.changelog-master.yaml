@@ -95,3 +95,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261121300000_client_vendor_role_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261121310000_user_mobile_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121320000_helpdesk_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121320100_helpdesk_permission_init_data.mysql.sql
