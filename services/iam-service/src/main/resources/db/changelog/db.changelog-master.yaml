@@ -91,3 +91,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121280000_impersonation_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261121290000_stripe_order_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121300000_client_vendor_role_init_data.mysql.sql

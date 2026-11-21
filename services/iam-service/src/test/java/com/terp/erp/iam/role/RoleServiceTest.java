@@ -125,6 +125,44 @@ class RoleServiceTest {
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EIamError.IAM_006);
     }
 
+    @Test
+    void newCompanyGetsEveryDefaultRoleIncludingClientAndVendorAsSystemRoles() {
+        when(permissions.findByCodeIn(anyCollection())).thenAnswer(inv -> {
+            Collection<String> codes = inv.getArgument(0);
+            return codes.stream().map(RoleServiceTest::perm).toList();
+        });
+        var saved = org.mockito.ArgumentCaptor.forClass(Role.class);
+
+        service.createDefaultRoles(10L);
+
+        org.mockito.Mockito.verify(roles, org.mockito.Mockito.times(EDefaultRole.values().length)).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(Role::getCode)
+                .contains("CLIENT", "VENDOR", "COMPANY_ADMIN", "HR", "EMPLOYEE");
+        assertThat(saved.getAllValues()).allSatisfy(r -> {
+            assertThat(r.isSystemRole()).isTrue();
+            assertThat(r.getCompanyId()).isEqualTo(10L);
+        });
+        Role client = saved.getAllValues().stream().filter(r -> "CLIENT".equals(r.getCode())).findFirst().orElseThrow();
+        assertThat(client.getName()).isEqualTo("Client");
+        assertThat(client.getPermissions()).isEmpty();
+    }
+
+    @Test
+    void portalRolesCanBeGivenPermissionsButNotDeletedOrRenamed() {
+        login(1L, 10L, IamPermissions.ALL.toArray(String[]::new));
+        Role vendor = role(9L, 10L, "VENDOR", true, Set.of());
+        when(roles.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(vendor));
+
+        var dto = service.update(9L, new RoleForm("VENDOR", "Supplier", null, Set.of(IamPermissions.USER_VIEW)));
+
+        assertThat(dto.name()).isEqualTo("Supplier");
+        assertThat(vendor.getPermissions()).extracting(Permission::getCode).containsExactly(IamPermissions.USER_VIEW);
+        assertThatThrownBy(() -> service.update(9L, new RoleForm("SUPPLIER", "Supplier", null, Set.of())))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EIamError.IAM_006);
+        assertThatThrownBy(() -> service.delete(9L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EIamError.IAM_006);
+    }
+
     private static Permission perm(String code) {
         Permission p = new Permission();
         p.setCode(code);

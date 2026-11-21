@@ -6,9 +6,10 @@ import lombok.RequiredArgsConstructor;
 import java.util.Set;
 
 /**
- * Roles every new company starts with (docs/analysis/04 §3.3: WorkDo's company/hr/manager/employee plus TERP's
- * executive and accountant). Permission sets cover only the IAM module for now; each business module adds its
- * codes here when it is built.
+ * Roles every company starts with: company admin, HR, manager, employee (staff), executive board, accountant, and the
+ * portal roles CLIENT (a customer) and VENDOR (a supplier) of the ERP roles list (docs/erp/analysis/08 §1).
+ * They are system roles: permissions can be edited, the code cannot change and the role cannot be deleted.
+ * Each business module adds its codes here when it is built.
  */
 @Getter
 @RequiredArgsConstructor
@@ -38,7 +39,12 @@ public enum EDefaultRole {
     MANAGER("Manager", Set.of()),
     EMPLOYEE("Employee", Set.of()),
     EXECUTIVE("Executive board", Set.of()),
-    ACCOUNTANT("Accountant", Set.of());
+    ACCOUNTANT("Accountant", Set.of()),
+    // TODO(assumption): a client sees only its own invoices, payments, credit notes, deals and tickets, and a vendor
+    // its own purchase invoices, payments and debit notes (docs/erp/analysis/07 §1). Those permissions come with the
+    // accounting/commerce services; until then both roles grant nothing.
+    CLIENT("Client", Set.of()),
+    VENDOR("Vendor", Set.of());
 
     private static Set<String> union(Set<String> a, Set<String> b) {
         java.util.Set<String> all = new java.util.HashSet<>(a);
