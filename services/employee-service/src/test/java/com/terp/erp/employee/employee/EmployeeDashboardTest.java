@@ -29,7 +29,14 @@ class EmployeeDashboardTest {
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
     private final BranchRepository branches = mock(BranchRepository.class);
     private final OrgService orgs = mock(OrgService.class);
-    private final EmployeeDashboardService service = new EmployeeDashboardService(employees, branches, orgs,
+    private final com.terp.erp.employee.org.DepartmentRepository departments =
+            mock(com.terp.erp.employee.org.DepartmentRepository.class);
+    private final com.terp.erp.employee.lifecycle.EmployeePromotionRepository promotions =
+            mock(com.terp.erp.employee.lifecycle.EmployeePromotionRepository.class);
+    private final com.terp.erp.employee.lifecycle.EmployeeTerminationRepository terminations =
+            mock(com.terp.erp.employee.lifecycle.EmployeeTerminationRepository.class);
+    private final EmployeeDashboardService service = new EmployeeDashboardService(employees, branches,
+            departments, promotions, terminations, orgs,
             mock(MediaClient.class), Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
 
     @AfterEach
@@ -62,6 +69,40 @@ class EmployeeDashboardTest {
         assertThat(d.birthdaysToday()).extracting(x -> x.fullName()).containsExactly("An");
         assertThat(d.birthdaysToday().get(0).designation()).isEqualTo("Developer");
         assertThat(service.dashboard(null, 2025).hiringTrend().get(1)).isEqualTo(1L);
+    }
+
+    @Test
+    void departmentsPromotionsAndTerminations() {
+        TestLogin.as(10L, "EMPLOYEE_VIEW");
+        Employee a = emp(1L, "An", EEmployeeStatus.ACTIVE, LocalDate.of(2026, 1, 3), LocalDate.of(1990, 1, 1));
+        Employee b = emp(2L, "Binh", EEmployeeStatus.ACTIVE, LocalDate.of(2026, 1, 3), LocalDate.of(1990, 1, 1));
+        Employee c = emp(3L, "Cuong", EEmployeeStatus.ACTIVE, LocalDate.of(2026, 1, 3), LocalDate.of(1990, 1, 1));
+        Employee d0 = emp(4L, "Dung", EEmployeeStatus.TERMINATED, LocalDate.of(2026, 1, 3), LocalDate.of(1990, 1, 1));
+        a.setDepartmentId(5L);
+        b.setDepartmentId(5L);
+        d0.setDepartmentId(6L);
+        when(employees.findByCompanyIdAndDeletedFalse(10L)).thenReturn(List.of(a, b, c, d0));
+        when(departments.findByCompanyIdAndDeletedFalseOrderByNameAsc(10L))
+                .thenReturn(List.of(new com.terp.erp.employee.org.Department(), new com.terp.erp.employee.org.Department()));
+        when(orgs.names(eq(10L), anyCollection(), anyCollection(), anyCollection()))
+                .thenReturn(new OrgService.Names(Map.of(), Map.of(5L, "Sales"), Map.of()));
+        LocalDate from = LocalDate.of(2026, 1, 1), to = LocalDate.of(2026, 12, 31);
+        when(promotions.countByStatus(10L, null, from, to, "")).thenReturn(List.<Object[]>of(
+                new Object[]{com.terp.erp.employee.lifecycle.EDecision.APPROVED, 2L},
+                new Object[]{com.terp.erp.employee.lifecycle.EDecision.PENDING, 4L}));
+        when(terminations.countByStatus(10L, null, from, to, "")).thenReturn(List.<Object[]>of(
+                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.PLANNED, 1L},
+                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.COMPLETED, 2L}));
+
+        var d = service.dashboard(null, 2026);
+
+        assertThat(d.departments()).isEqualTo(2);
+        // terminated Dung is left out; Cuong has no department
+        assertThat(d.byDepartment()).containsExactly(
+                new EmployeeDashboardService.DepartmentCount("5", "Sales", 2),
+                new EmployeeDashboardService.DepartmentCount(null, null, 1));
+        assertThat(d.promotions()).isEqualTo(2);
+        assertThat(d.terminations()).isEqualTo(3);
     }
 
     @Test

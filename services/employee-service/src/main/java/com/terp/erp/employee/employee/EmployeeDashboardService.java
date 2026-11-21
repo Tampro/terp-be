@@ -31,6 +31,9 @@ public class EmployeeDashboardService {
 
     private final EmployeeRepository employees;
     private final BranchRepository branches;
+    private final com.terp.erp.employee.org.DepartmentRepository departments;
+    private final com.terp.erp.employee.lifecycle.EmployeePromotionRepository promotions;
+    private final com.terp.erp.employee.lifecycle.EmployeeTerminationRepository terminations;
     private final OrgService orgs;
     private final MediaClient media;
     private final Clock clock;
@@ -41,7 +44,19 @@ public class EmployeeDashboardService {
 
     public record EmployeeDashboard(long totalEmployees, long activeEmployees, long newThisMonth, long newLastMonth,
                                     long branches, List<BirthdayDto> birthdaysToday, int year,
-                                    List<Long> hiringTrend) {
+                                    List<Long> hiringTrend,
+                                    @io.swagger.v3.oas.annotations.media.Schema(description = "Departments of the company")
+                                    long departments,
+                                    @io.swagger.v3.oas.annotations.media.Schema(description = "Employees (not terminated) per "
+                                            + "department, largest first; departmentId null = no department")
+                                    List<DepartmentCount> byDepartment,
+                                    @io.swagger.v3.oas.annotations.media.Schema(description = "Approved promotions dated in the year")
+                                    long promotions,
+                                    @io.swagger.v3.oas.annotations.media.Schema(description = "Terminations dated in the year, any status")
+                                    long terminations) {
+    }
+
+    public record DepartmentCount(String departmentId, String name, long employees) {
     }
 
     @Transactional(readOnly = true)
@@ -61,7 +76,45 @@ public class EmployeeDashboardService {
         return new EmployeeDashboard(all.size(),
                 all.stream().filter(e -> e.getStatus() == EEmployeeStatus.ACTIVE).count(), newThis, newLast,
                 branches.findByCompanyIdAndDeletedFalseOrderByNameAsc(companyId).size(),
-                birthdays(companyId, all, today, today, true), y, trend);
+                birthdays(companyId, all, today, today, true), y, trend,
+                departments.findByCompanyIdAndDeletedFalseOrderByNameAsc(companyId).size(),
+                byDepartment(companyId, all), approvedPromotions(companyId, y), terminationsIn(companyId, y));
+    }
+
+    private List<DepartmentCount> byDepartment(Long companyId, List<Employee> all) {
+        Map<Long, Long> counts = new java.util.HashMap<>();
+        long none = 0;
+        for (Employee e : all) {
+            if (e.getStatus() == EEmployeeStatus.TERMINATED) {
+                continue;
+            }
+            if (e.getDepartmentId() == null) {
+                none++;
+            } else {
+                counts.merge(e.getDepartmentId(), 1L, Long::sum);
+            }
+        }
+        Map<Long, String> names = counts.isEmpty() ? Map.of()
+                : orgs.names(companyId, List.of(), counts.keySet(), List.of()).departments();
+        List<DepartmentCount> out = new ArrayList<>();
+        counts.forEach((id, n) -> out.add(new DepartmentCount(id.toString(), names.get(id), n)));
+        if (none > 0) {
+            out.add(new DepartmentCount(null, null, none));
+        }
+        out.sort(Comparator.comparingLong(DepartmentCount::employees).reversed()
+                .thenComparing(d -> d.name() == null ? "" : d.name()));
+        return out;
+    }
+
+    private long approvedPromotions(Long companyId, int year) {
+        return promotions.countByStatus(companyId, null, LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), "")
+                .stream().filter(r -> r[0] == com.terp.erp.employee.lifecycle.EDecision.APPROVED)
+                .mapToLong(r -> ((Number) r[1]).longValue()).sum();
+    }
+
+    private long terminationsIn(Long companyId, int year) {
+        return terminations.countByStatus(companyId, null, LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), "")
+                .stream().mapToLong(r -> ((Number) r[1]).longValue()).sum();
     }
 
     /** Birthdays in [from, to] (at most 62 days), by date then name; without photos. */

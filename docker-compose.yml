@@ -5,6 +5,7 @@ name: erp
 services:
   mysql:
     image: mysql:8.4.3
+    mem_limit: 1g
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set in .env}
       IAM_DB_USERNAME: ${IAM_DB_USERNAME:?set in .env}
@@ -40,6 +41,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.7
+    mem_limit: 1536m
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:?set in .env}
@@ -72,6 +74,7 @@ services:
 
   iam-service:
     build: ./services/iam-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       IAM_DB_URL: jdbc:mysql://mysql:3306/erp_iam?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       IAM_DB_USERNAME: ${IAM_DB_USERNAME}
@@ -100,6 +103,7 @@ services:
 
   media-service:
     build: ./services/media-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       MEDIA_DB_URL: jdbc:mysql://mysql:3306/erp_media?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       MEDIA_DB_USERNAME: ${MEDIA_DB_USERNAME:-erp_media}
@@ -123,6 +127,7 @@ services:
 
   employee-service:
     build: ./services/employee-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       EMPLOYEE_DB_URL: jdbc:mysql://mysql:3306/erp_employee?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       EMPLOYEE_DB_USERNAME: ${EMPLOYEE_DB_USERNAME:-erp_employee}
@@ -145,6 +150,7 @@ services:
 
   attendance-service:
     build: ./services/attendance-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       ATTENDANCE_DB_URL: jdbc:mysql://mysql:3306/erp_attendance?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       ATTENDANCE_DB_USERNAME: ${ATTENDANCE_DB_USERNAME:-erp_attendance}
@@ -166,6 +172,7 @@ services:
 
   recruitment-service:
     build: ./services/recruitment-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       RECRUITMENT_DB_URL: jdbc:mysql://mysql:3306/erp_recruitment?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       RECRUITMENT_DB_USERNAME: ${RECRUITMENT_DB_USERNAME:-erp_recruitment}
@@ -187,6 +194,7 @@ services:
 
   payroll-service:
     build: ./services/payroll-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       PAYROLL_DB_URL: jdbc:mysql://mysql:3306/erp_payroll?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       PAYROLL_DB_USERNAME: ${PAYROLL_DB_USERNAME:-erp_payroll}
@@ -206,6 +214,7 @@ services:
 
   asset-service:
     build: ./services/asset-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       ASSET_DB_URL: jdbc:mysql://mysql:3306/erp_asset?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       ASSET_DB_USERNAME: ${ASSET_DB_USERNAME:-erp_asset}
@@ -225,6 +234,7 @@ services:
 
   meeting-service:
     build: ./services/meeting-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       MEETING_DB_URL: jdbc:mysql://mysql:3306/erp_meeting?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       MEETING_DB_USERNAME: ${MEETING_DB_USERNAME:-erp_meeting}
@@ -246,6 +256,7 @@ services:
 
   document-service:
     build: ./services/document-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       DOCUMENT_DB_URL: jdbc:mysql://mysql:3306/erp_document?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DOCUMENT_DB_USERNAME: ${DOCUMENT_DB_USERNAME:-erp_document}
@@ -266,6 +277,7 @@ services:
   # Dashboard and calendar: no database, no secret; reads the other services with the caller's token.
   report-service:
     build: ./services/report-service
+    mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
@@ -284,6 +296,7 @@ services:
 
   gateway-server:
     build: ./services/gateway-server
+    mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp

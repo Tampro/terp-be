@@ -28,12 +28,31 @@ public class RecruitmentDashboardService {
     private final JobPostingRepository postings;
     private final CandidateRepository candidates;
     private final CareerSettingsRepository careers;
+    private final com.terp.erp.recruitment.interview.InterviewRepository interviews;
+    private final com.terp.erp.recruitment.onboarding.CandidateOnboardingRepository onboardings;
     private final Clock clock;
 
     /** careerSlug: null = no career page or it is switched off. pipeline: every candidate status, zero included. */
     public record RecruitmentDashboard(long activeJobs, long openPositions, String careerSlug,
-                                       Map<String, Long> pipeline) {
+                                       Map<String, Long> pipeline,
+                                       @io.swagger.v3.oas.annotations.media.Schema(description = "Every candidate")
+                                       long totalCandidates,
+                                       @io.swagger.v3.oas.annotations.media.Schema(description = "SCHEDULED interviews from today on")
+                                       long scheduledInterviews,
+                                       @io.swagger.v3.oas.annotations.media.Schema(description = "COMPLETED onboardings")
+                                       long completedOnboardings,
+                                       @io.swagger.v3.oas.annotations.media.Schema(description = "Hiring funnel NEW → HIRED: "
+                                               + "candidates that reached each stage and the share of all candidates")
+                                       List<FunnelStage> funnel) {
     }
+
+    /** reached = candidates now at this stage or a later one (rejected candidates count only in the total). */
+    public record FunnelStage(String stage, long reached, Double percentOfTotal) {
+    }
+
+    // TODO(assumption): a REJECTED candidate does not record the stage it left from, so it counts only in the total.
+    static final List<Candidate.EStatus> FUNNEL = List.of(Candidate.EStatus.NEW, Candidate.EStatus.SCREENING,
+            Candidate.EStatus.INTERVIEW, Candidate.EStatus.OFFER, Candidate.EStatus.HIRED);
 
     @Transactional(readOnly = true)
     public RecruitmentDashboard dashboard(Long requestedCompanyId) {
@@ -49,7 +68,28 @@ public class RecruitmentDashboardService {
         }
         String slug = careers.findByCompanyId(companyId).filter(CareerSettings::isEnabled).map(CareerSettings::getSlug)
                 .orElse(null);
-        return new RecruitmentDashboard(num(row[0]), num(row[1]), slug, pipeline);
+        long scheduled = interviews.countByStatus(companyId, null, LocalDate.now(clock), null, "").stream()
+                .filter(r -> r[0] == com.terp.erp.recruitment.interview.Interview.EStatus.SCHEDULED)
+                .mapToLong(r -> num(r[1])).sum();
+        long completed = onboardings.countByStatus(companyId, null, "").stream()
+                .filter(r -> r[0] == com.terp.erp.recruitment.onboarding.CandidateOnboarding.EStatus.COMPLETED)
+                .mapToLong(r -> num(r[1])).sum();
+        long total = pipeline.values().stream().mapToLong(Long::longValue).sum();
+        return new RecruitmentDashboard(num(row[0]), num(row[1]), slug, pipeline, total, scheduled, completed,
+                funnel(pipeline, total));
+    }
+
+    static List<FunnelStage> funnel(Map<String, Long> pipeline, long total) {
+        List<FunnelStage> out = new java.util.ArrayList<>();
+        for (int i = 0; i < FUNNEL.size(); i++) {
+            long reached = 0;
+            for (int j = i; j < FUNNEL.size(); j++) {
+                reached += pipeline.getOrDefault(FUNNEL.get(j).name(), 0L);
+            }
+            out.add(new FunnelStage(FUNNEL.get(i).name(), reached,
+                    total == 0 ? null : Math.round(reached * 1000.0 / total) / 10.0));
+        }
+        return out;
     }
 
     private static long num(Object o) {

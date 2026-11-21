@@ -37,7 +37,14 @@ public class AttendanceDashboardService {
      * @param attendanceRateThisMonth % of expected working day-records so far this month; null without data
      */
     public record AttendanceDashboard(LocalDate today, long presentToday, Long activeEmployees,
-                                      Double attendanceRateThisMonth, List<DayPoint> last7Days) {
+                                      Double attendanceRateThisMonth, List<DayPoint> last7Days,
+                                      @io.swagger.v3.oas.annotations.media.Schema(description = "Records marked ABSENT today")
+                                      long absentToday,
+                                      @io.swagger.v3.oas.annotations.media.Schema(description = "Records marked ON_LEAVE today")
+                                      long onLeaveToday,
+                                      @io.swagger.v3.oas.annotations.media.Schema(description = "Employees with no attendance "
+                                              + "record today (missing attendance); null when the headcount is unknown")
+                                      Long notMarkedToday) {
     }
 
     @Transactional(readOnly = true)
@@ -91,7 +98,12 @@ public class AttendanceDashboardService {
         }
         Double rate = headcount == null || headcount == 0 || workingDays == 0 ? null
                 : Math.round(attended * 1000.0 / (headcount * workingDays)) / 10.0;
-        return new AttendanceDashboard(today, present(byDay.getOrDefault(today, Map.of())), headcount, rate, last7);
+        Map<ERecordStatus, Long> t = byDay.getOrDefault(today, Map.of());
+        long marked = t.values().stream().mapToLong(Long::longValue).sum();
+        // TODO(assumption): "missing attendance" = headcount minus every record of the day (any status), floored at 0.
+        Long notMarked = headcount == null ? null : Math.max(0, headcount - marked);
+        return new AttendanceDashboard(today, present(t), headcount, rate, last7,
+                t.getOrDefault(ERecordStatus.ABSENT, 0L), t.getOrDefault(ERecordStatus.ON_LEAVE, 0L), notMarked);
     }
 
     /** Half days are at work too, so "present" in the chart counts both. */
