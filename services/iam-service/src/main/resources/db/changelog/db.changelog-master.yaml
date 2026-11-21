@@ -103,3 +103,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121330000_plan_module_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261121340000_sales_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121350000_crm_permission_init_data.mysql.sql
