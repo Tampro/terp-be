@@ -1,0 +1,59 @@
+# Every secret comes from the environment with no default; non-secret values have local defaults.
+server:
+  port: ${MEDIA_PORT:8082}
+
+spring:
+  application:
+    name: media-service
+  datasource:
+    url: ${MEDIA_DB_URL:jdbc:mysql://localhost:3306/erp_media?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MEDIA_DB_USERNAME}
+    password: ${MEDIA_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  servlet:
+    multipart:
+      # Per-file limit is enforced by the service (MEDIA_005, with a message); these only cap the request.
+      max-file-size: ${MEDIA_MAX_FILE_SIZE:10MB}
+      max-request-size: 60MB
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+erp:
+  media:
+    storage-dir: ${MEDIA_STORAGE_DIR:./media-data}
+    link-secret: ${MEDIA_LINK_SECRET}
+    link-ttl: ${MEDIA_LINK_TTL:PT10M}
+    max-file-size: ${MEDIA_MAX_FILE_SIZE:10MB}
+    public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
+    iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    # Service account allowed on /api/v1/internal/** (employee-service: announcement attachments).
+    internal-client-id: ${MEDIA_INTERNAL_CLIENT_ID:erp-employee-service}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

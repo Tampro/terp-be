@@ -1,0 +1,89 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: gateway-server
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              "[/**]":
+                allowed-origins: ${ERP_CORS_ORIGINS:http://localhost:5173}
+                allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+                allowed-headers: Authorization,Content-Type,Accept-Language,X-Act-As-Company
+                exposed-headers: X-Trace-Id,Content-Disposition
+          # Each service sets its own CORS headers too; keep only the gateway's.
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 15s
+          routes:
+            - id: iam-service
+              uri: ${IAM_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/me/**,/api/v1/me,/api/v1/iam/**,/api/v1/saas/**,/api/v1/settings/**,/api/v1/languages,/api/v1/languages/**,/api/v1/public/site/**,/api/v1/public/payments/**
+            - id: media-service
+              uri: ${MEDIA_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/media/**
+            - id: employee-service
+              uri: ${EMPLOYEE_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/employees/**,/api/v1/employees,/api/v1/org/**,/api/v1/lifecycle/**,/api/v1/performance/**,/api/v1/training/**
+            - id: attendance-service
+              uri: ${ATTENDANCE_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/attendance/**
+            - id: recruitment-service
+              uri: ${RECRUITMENT_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/recruitment/**,/api/v1/public/career/**
+            - id: payroll-service
+              uri: ${PAYROLL_SERVICE_URL:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/payroll/**
+            - id: asset-service
+              uri: ${ASSET_SERVICE_URL:http://localhost:8087}
+              predicates:
+                - Path=/api/v1/asset/**
+            - id: meeting-service
+              uri: ${MEETING_SERVICE_URL:http://localhost:8088}
+              predicates:
+                - Path=/api/v1/meeting/**
+            - id: document-service
+              uri: ${DOCUMENT_SERVICE_URL:http://localhost:8089}
+              predicates:
+                - Path=/api/v1/document/**
+            - id: report-service
+              uri: ${REPORT_SERVICE_URL:http://localhost:8090}
+              predicates:
+                - Path=/api/v1/reports/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+erp:
+  gateway:
+    # The biometric device endpoint is the only one reachable without a token: limit it per client IP.
+    device-rate-limit:
+      per-minute: ${GATEWAY_DEVICE_RATE_PER_MINUTE:60}
+      burst: ${GATEWAY_DEVICE_RATE_BURST:20}
+    # Public career page (no token): reads and applications limited per client IP, applications much tighter.
+    career-rate-limit:
+      read-per-minute: ${GATEWAY_CAREER_READ_PER_MINUTE:120}
+      read-burst: ${GATEWAY_CAREER_READ_BURST:40}
+      apply-per-minute: ${GATEWAY_CAREER_APPLY_PER_MINUTE:10}
+      apply-burst: ${GATEWAY_CAREER_APPLY_BURST:5}

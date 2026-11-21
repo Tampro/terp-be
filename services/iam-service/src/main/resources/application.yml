@@ -1,0 +1,81 @@
+# Every secret comes from the environment with no default (see .env.example); non-secret values have local defaults.
+server:
+  port: ${IAM_PORT:8081}
+
+spring:
+  application:
+    name: iam-service
+  datasource:
+    url: ${IAM_DB_URL:jdbc:mysql://localhost:3306/erp_iam?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${IAM_DB_USERNAME}
+    password: ${IAM_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    # common_* ships in erp-common, messages_* is this service's own codes.
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keys are fetched from the internal address; the issuer is the public one the FE logs in through.
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+erp:
+  # Profile avatars are media library files (docs/analysis/06 §3 Profile Settings).
+  media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
+  stripe:
+    # Stripe REST API; overridable so a stub can stand in during tests.
+    api-url: ${STRIPE_API_URL:https://api.stripe.com}
+  landing:
+    # Landing Page -> Advanced -> Custom JavaScript runs on the public site: published only when the operator
+    # turns it on (PO 2026-11-21).
+    custom-js: ${ERP_LANDING_CUSTOM_JS:false}
+  keycloak:
+    server-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}
+    realm: ${KEYCLOAK_REALM:erp}
+    client-id: ${KEYCLOAK_WEB_CLIENT_ID:erp-web}
+    admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:erp-iam-admin}
+    admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+  bootstrap:
+    # Both empty → no bootstrap. The password is the operator's (permanent), never logged.
+    admin-username: ${ADMIN_USER:}
+    admin-password: ${ADMIN_PASSWORD:}
+    admin-email: ${ADMIN_EMAIL:admin@specom.invalid}
+    admin-full-name: ${ADMIN_FULL_NAME:System Administrator}
+    company-code: ${BOOTSTRAP_COMPANY_CODE:TERP}
+    company-name: ${BOOTSTRAP_COMPANY_NAME:TERP}
+  saas:
+    # Account companies pay plan orders to (shown with each pending order). TODO(assumption): set by the PO.
+    bank:
+      bank-name: ${SAAS_BANK_NAME:}
+      account-number: ${SAAS_BANK_ACCOUNT_NUMBER:}
+      account-name: ${SAAS_BANK_ACCOUNT_NAME:}
+  settings:
+    # base64 of 32 random bytes; encrypts SMTP password / reCAPTCHA secret. Empty = secrets cannot be saved.
+    enc-key: ${ERP_SETTINGS_ENC_KEY:}
+  cors:
+    allowed-origins: ${ERP_CORS_ORIGINS:http://localhost:5173}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

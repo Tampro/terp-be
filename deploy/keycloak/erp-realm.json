@@ -1,0 +1,98 @@
+{
+  "realm": "erp",
+  "enabled": true,
+  "displayName": "ERP",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": true,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 86400,
+  "ssoSessionMaxLifespan": 604800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(10) and upperCase(1) and lowerCase(1) and digits(1) and notUsername(undefined) and passwordHistory(3)",
+  "roles": {
+    "realm": [
+      {
+        "name": "SUPER_ADMIN",
+        "description": "Operates the SaaS: creates and suspends companies. Not part of any company."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "erp-web",
+      "name": "ERP CMS and employee app",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${ERP_WEB_REDIRECT_URI:http://localhost:5173/*}"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    },
+    {
+      "clientId": "erp-iam-admin",
+      "name": "IAM service account (user provisioning)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true
+    },
+    {
+      "clientId": "erp-employee-service",
+      "name": "employee-service account (media links of announcement attachments)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${EMPLOYEE_SERVICE_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-erp-iam-admin",
+      "enabled": true,
+      "serviceAccountClientId": "erp-iam-admin",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users"]
+      }
+    },
+    {
+      "username": "superadmin",
+      "enabled": true,
+      "email": "superadmin@erp.invalid",
+      "firstName": "Super",
+      "lastName": "Admin",
+      "realmRoles": ["SUPER_ADMIN"],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${ERP_SUPERADMIN_INITIAL_PASSWORD}",
+          "temporary": true
+        }
+      ]
+    }
+  ]
+}

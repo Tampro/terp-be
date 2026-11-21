@@ -1,0 +1,11 @@
+# Schema of the document service only (own database erp_document).
+# Never edit a change file once it has run on a shared database — add a new one.
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/20261121120000_category_contract_type_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121130000_hr_document_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121140000_employee_contract_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261121150000_template_changelog.mysql.sql

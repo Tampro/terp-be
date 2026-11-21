@@ -1,0 +1,7 @@
+FROM eclipse-temurin:17.0.12_7-jre-alpine
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+COPY target/employee-service-*.jar app.jar
+USER app
+EXPOSE 8083
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

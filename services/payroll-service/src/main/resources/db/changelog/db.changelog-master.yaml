@@ -1,0 +1,11 @@
+# Schema of the payroll service only (own database erp_payroll).
+# Never edit a change file once it has run on a shared database — add a new one.
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/20261120460000_salary_component_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120470000_employee_salary_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120480000_payroll_run_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120490000_payslip_changelog.mysql.sql

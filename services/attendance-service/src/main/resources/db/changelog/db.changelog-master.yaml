@@ -1,0 +1,17 @@
+# Schema of the attendance service only (own database erp_attendance).
+# Never edit a change file once it has run on a shared database — add a new one.
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/20261120200000_shift_policy_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120210000_attendance_record_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120220000_regularization_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120230000_biometric_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120240000_time_entry_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120250000_leave_type_policy_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261120260000_leave_application_balance_changelog.mysql.sql

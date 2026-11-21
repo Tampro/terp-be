@@ -1,0 +1,41 @@
+package com.terp.erp.meeting.common;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import com.terp.erp.exception.ErrorCode;
+
+/** Never renumber or reuse a code: the FE keys on it. */
+@Getter
+@RequiredArgsConstructor
+public enum EMeetingError implements ErrorCode {
+    MTG_001("Choose the company to act on."),
+    MTG_002("The meeting type does not exist."),
+    MTG_003("This name already exists."),
+    MTG_004("It is still in use and cannot be deleted."),
+    MTG_005("The meeting room does not exist."),
+    MTG_006("The employee service is unavailable. Please try again."),
+    MTG_007("The end time must be after the start time."),
+    MTG_008("{0} is inactive and cannot be chosen."),
+    MTG_009("A recurring meeting needs a recurrence end date on or after the meeting date."),
+    MTG_010("A series can have at most {0} meetings."),
+    MTG_011("The room is already booked on {0} at that time."),
+    MTG_012("The room holds at most {0} people."),
+    MTG_013("An organizer or attendee is not an employee of the company."),
+    MTG_014("The meeting does not exist."),
+    MTG_015("The action item does not exist."),
+    MTG_016("The event type does not exist."),
+    MTG_017("The event does not exist."),
+    MTG_018("The event must end after it starts."),
+    MTG_019("Only a pending event can be approved or rejected."),
+    MTG_020("A department is not an active department of the company."),
+    MTG_021("The period must end on or after its start and last at most {0} days."),
+    MTG_022("Zoom is not set up for the company yet: save and test the Zoom settings first."),
+    MTG_023("Zoom rejected the credentials. Check the Account ID, Client ID and Client Secret."),
+    MTG_024("Zoom is unavailable. Please try again."),
+    MTG_025("Enter the client secret."),
+    MTG_026("The stored Zoom secret cannot be read; save the Zoom settings again."),
+    MTG_027("The Zoom meeting does not exist."),
+    MTG_028("An ended or cancelled Zoom meeting cannot be edited or started.");
+
+    private final String message;
+}

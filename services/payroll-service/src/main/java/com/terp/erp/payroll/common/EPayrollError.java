@@ -1,0 +1,39 @@
+package com.terp.erp.payroll.common;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import com.terp.erp.exception.ErrorCode;
+
+/** Never renumber or reuse a code: the FE keys on it. */
+@Getter
+@RequiredArgsConstructor
+public enum EPayrollError implements ErrorCode {
+    PAY_001("Choose the company to act on."),
+    PAY_002("The salary component does not exist."),
+    PAY_003("This name already exists."),
+    PAY_004("A percentage must be between 0 and 100."),
+    PAY_005("It is still in use and cannot be deleted."),
+    PAY_006("The employee service is unavailable. Please try again."),
+    PAY_007("The employee salary does not exist."),
+    PAY_008("The employee already has an active salary."),
+    PAY_009("The salary component {0} is inactive and cannot be chosen."),
+    PAY_010("A salary component is listed more than once."),
+    PAY_011("The attendance service is unavailable. Please try again."),
+    PAY_012("The payroll run does not exist."),
+    PAY_013("Only a draft payroll run can be edited, processed or deleted."),
+    PAY_014("Entries can only be removed from a completed payroll run."),
+    PAY_015("No employee has an active salary to process."),
+    PAY_016("The pay period must end on or after its start and last at most {0} days."),
+    PAY_017("The pay date cannot be before the start of the pay period."),
+    PAY_018("The payroll entry does not exist."),
+    PAY_019("The file is not a valid Excel workbook (.xlsx)."),
+    PAY_020("The file has more than {0} rows."),
+    PAY_021("Row {0}: {1} is required or invalid."),
+    PAY_022("The uploaded file is larger than {0}."),
+    PAY_023("The payroll run is already cancelled."),
+    PAY_024("Payslips can only be generated for a completed payroll run."),
+    PAY_025("Payslips have been generated for this payroll run, so it can no longer be changed."),
+    PAY_026("The payslip does not exist.");
+
+    private final String message;
+}
