@@ -312,6 +312,7 @@ services:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
+      MEDIA_SERVICE_URL: http://media-service:8082
     ports:
       - "18091:8091"
     depends_on:
