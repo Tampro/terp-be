@@ -10,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 public enum EAccountingError implements ErrorCode {
     ACC_001("Choose the company to act on."),
     ACC_002("The customer does not exist."),
-    ACC_003("This user account is already linked to another customer.");
+    ACC_003("This user account is already linked to another customer."),
+    ACC_004("The vendor does not exist."),
+    ACC_005("This user account is already linked to another vendor.");
 
     private final String message;
 }

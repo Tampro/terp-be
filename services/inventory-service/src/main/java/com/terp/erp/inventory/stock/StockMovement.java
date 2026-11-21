@@ -31,6 +31,9 @@ public class StockMovement {
     /** Source types written by inventory itself; commerce-service sends its own (SALES_INVOICE, SALES_RETURN …). */
     public static final String MANUAL = "MANUAL";
     public static final String OPENING = "OPENING";
+    /** source_id = stock_transfer.id; TRANSFER_DELETE lines undo a deleted transfer. */
+    public static final String TRANSFER = "TRANSFER";
+    public static final String TRANSFER_DELETE = "TRANSFER_DELETE";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
