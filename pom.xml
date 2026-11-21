@@ -29,6 +29,9 @@
         <module>services/meeting-service</module>
         <module>services/document-service</module>
         <module>services/report-service</module>
+        <module>services/inventory-service</module>
+        <module>services/commerce-service</module>
+        <module>services/accounting-service</module>
         <module>services/gateway-server</module>
     </modules>
 

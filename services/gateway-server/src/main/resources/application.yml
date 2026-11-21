@@ -68,6 +68,18 @@ spring:
               uri: ${REPORT_SERVICE_URL:http://localhost:8090}
               predicates:
                 - Path=/api/v1/reports/**
+            - id: inventory-service
+              uri: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+              predicates:
+                - Path=/api/v1/inventory/**
+            - id: commerce-service
+              uri: ${COMMERCE_SERVICE_URL:http://localhost:8092}
+              predicates:
+                - Path=/api/v1/sales/**
+            - id: accounting-service
+              uri: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
+              predicates:
+                - Path=/api/v1/accounting/**
 
 springdoc:
   api-docs:
