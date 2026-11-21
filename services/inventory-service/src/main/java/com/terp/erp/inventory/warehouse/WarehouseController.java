@@ -42,7 +42,7 @@ public class WarehouseController {
     @Operation(summary = "Warehouses of the company", description = "keyword = name or city (contains); city = exact city, case-insensitive; "
             + "active = status (true active, false inactive).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
-    @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_SELL')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<WarehouseDto>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -56,7 +56,7 @@ public class WarehouseController {
 
     @Operation(summary = "Warehouse details")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-    @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_SELL')")
     @GetMapping("/{id}")
     public ApiMessageDto<WarehouseDto> get(@PathVariable Long id) {
         return ApiMessageDto.ok(service.get(id));

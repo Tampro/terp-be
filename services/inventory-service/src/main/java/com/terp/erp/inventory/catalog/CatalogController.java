@@ -45,7 +45,7 @@ public class CatalogController {
 
     @Operation(summary = "Categories of the company", description = "All, by name (not paged).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = NO_COMPANY))
-    @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_SELL')")
     @GetMapping("/categories")
     public ApiMessageDto<List<CategoryDto>> categories(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
@@ -87,7 +87,7 @@ public class CatalogController {
 
     @Operation(summary = "Taxes of the company", description = "All, by name (not paged).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = NO_COMPANY))
-    @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_SELL')")
     @GetMapping("/taxes")
     public ApiMessageDto<List<TaxDto>> taxes(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {

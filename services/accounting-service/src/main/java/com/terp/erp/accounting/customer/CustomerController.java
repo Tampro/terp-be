@@ -36,7 +36,7 @@ public class CustomerController {
     private static final String COMPANY = "Super admin only: the company to act on. Ignored for company users.";
     private static final String NOT_FOUND = "No such customer in your company (ACC_002)";
     // Sales and quotation users read customers too: commerce-service calls these with their own token.
-    private static final String READ = "@PermissionChecker.hasAny('CUSTOMER_VIEW','SALES_VIEW','QUOTATION_VIEW')";
+    private static final String READ = "@PermissionChecker.hasAny('CUSTOMER_VIEW','SALES_VIEW','QUOTATION_VIEW','POS_SELL')";
 
     private final CustomerService service;
 

@@ -107,3 +107,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121350000_crm_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261121360000_purchase_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122220000_pos_bank_permission_init_data.mysql.sql
