@@ -123,7 +123,6 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #                                          or reCAPTCHA secret in Settings: openssl rand -base64 32)
 # optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,
 #   SAAS_BANK_ACCOUNT_NUMBER, SAAS_BANK_ACCOUNT_NAME, *_DB_USERNAME (default erp_<service>)
-# ERP_SUPERADMIN_INITIAL_PASSWORD / ERP_SETTINGS_ENC_KEY fall back to the former HRM_* names when unset.
 docker compose up -d --build       # compose project "erp": containers erp-*, volumes erp_*, host ports +10000
 ```
 

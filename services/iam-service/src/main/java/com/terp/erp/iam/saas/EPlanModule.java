@@ -25,7 +25,7 @@ public enum EPlanModule {
     BUDGET_PLANNER("Budget Planner", Set.of()),
     FINANCIAL_GOAL("Financial Goal", Set.of()),
     POS("POS", Set.of()),
-    QUOTATION("Quotation", Set.of()),
+    QUOTATION("Quotation", Set.of("QUOTATION")),
     CRM("CRM", Set.of()),
     CONTRACT("Contract", Set.of()),
     PROJECT("Project", Set.of()),
@@ -39,8 +39,13 @@ public enum EPlanModule {
     TWILIO("Twilio", Set.of()),
     WEBHOOK("Webhook", Set.of());
 
-    /** Permission modules every company keeps whatever its plan: accounts, subscription, files, platform helpdesk. */
-    public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION");
+    /**
+     * Permission modules every company keeps whatever its plan: accounts, subscription, files, platform helpdesk, and
+     * the commercial core (items and warehouses, proposals, invoices, returns, customers).
+     */
+    // TODO(assumption): the commercial core is always on, like the reference product (items, sales) — confirm with PO.
+    public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION",
+            "INVENTORY", "SALES", "CUSTOMER");
 
     private final String displayName;
     private final Set<String> permissionModules;
