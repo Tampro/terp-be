@@ -11,12 +11,18 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-/** inventory-service as the caller: item data for document lines, and stock moves when an invoice or return posts. */
+/** inventory-service as the caller: item data for document lines, and stock moves when a
+ * sales or purchase invoice or return posts. */
 @Component
 public class InventoryClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Item(String id, String type, String name, String sku, String taxName, BigDecimal taxRate,
-                       BigDecimal salePrice) {
+                       BigDecimal salePrice, BigDecimal purchasePrice) {
+        public Item(String id, String type, String name, String sku, String taxName, BigDecimal taxRate,
+                    BigDecimal salePrice) {
+            this(id, type, name, sku, taxName, taxRate, salePrice, null);
+        }
+
         public boolean stocked() {
             return !"SERVICE".equals(type);
         }

@@ -45,8 +45,10 @@ public class WarehouseService {
     }
 
     @Transactional(readOnly = true)
-    public Page<WarehouseDto> search(Long requestedCompanyId, String keyword, Boolean active, Pageable pageable) {
-        return warehouses.search(Texts.company(requestedCompanyId), Texts.kw(keyword), active, pageable)
+    public Page<WarehouseDto> search(Long requestedCompanyId, String keyword, String city, Boolean active,
+                                     Pageable pageable) {
+        String c = city == null ? "" : city.trim().toLowerCase(java.util.Locale.ROOT);
+        return warehouses.search(Texts.company(requestedCompanyId), Texts.kw(keyword), c, active, pageable)
                 .map(WarehouseService::dto);
     }
 

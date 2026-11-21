@@ -1,0 +1,36 @@
+package com.terp.erp.commerce.purchase;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+public interface PurchaseInvoiceRepository extends JpaRepository<PurchaseInvoice, Long> {
+    Optional<PurchaseInvoice> findByIdAndDeletedFalse(Long id);
+
+    String FILTERS = "from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
+            + "and (:vendorId is null or d.vendorId = :vendorId) "
+            + "and (:warehouseId is null or d.warehouseId = :warehouseId) "
+            + "and (:from is null or d.invoiceDate >= :from) and (:to is null or d.invoiceDate <= :to) "
+            + "and (:kw is null or lower(d.number) like :kw or lower(d.vendorName) like :kw)";
+
+    /** overdue = posted or partly paid past the due date. */
+    @Query("select d " + FILTERS + " and (:status is null or d.status = :status) "
+            + "and (:overdue = false or (d.status in (com.terp.erp.commerce.purchase.PurchaseInvoice.EStatus.POSTED, "
+            + "com.terp.erp.commerce.purchase.PurchaseInvoice.EStatus.PARTIAL) and d.dueDate < :today))")
+    Page<PurchaseInvoice> search(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
+                                 @Param("warehouseId") Long warehouseId, @Param("from") LocalDate from,
+                                 @Param("to") LocalDate to, @Param("kw") String keyword,
+                                 @Param("status") PurchaseInvoice.EStatus status, @Param("overdue") boolean overdue,
+                                 @Param("today") LocalDate today, Pageable pageable);
+
+    @Query("select d.status, count(d) " + FILTERS + " group by d.status")
+    List<Object[]> countByStatus(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
+                                 @Param("warehouseId") Long warehouseId, @Param("from") LocalDate from,
+                                 @Param("to") LocalDate to, @Param("kw") String keyword);
+}

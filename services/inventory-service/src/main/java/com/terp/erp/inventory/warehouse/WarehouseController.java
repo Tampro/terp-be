@@ -39,17 +39,19 @@ public class WarehouseController {
 
     private final WarehouseService service;
 
-    @Operation(summary = "Warehouses of the company", description = "keyword = name or city; active filters.")
+    @Operation(summary = "Warehouses of the company", description = "keyword = name or city (contains); city = exact city, case-insensitive; "
+            + "active = status (true active, false inactive).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
     @PreAuthorize("@PermissionChecker.has('INVENTORY_VIEW')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<WarehouseDto>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String city,
             @RequestParam(required = false) Boolean active,
             @ParameterObject @PageableDefault(size = 20, sort = "name", direction = Sort.Direction.ASC)
             Pageable pageable) {
-        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, keyword, active, pageable)));
+        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, keyword, city, active, pageable)));
     }
 
     @Operation(summary = "Warehouse details")

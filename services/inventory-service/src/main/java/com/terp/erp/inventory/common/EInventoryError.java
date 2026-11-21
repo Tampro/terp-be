@@ -28,7 +28,9 @@ public enum EInventoryError implements ErrorCode {
     INV_018("An opening quantity needs a warehouse, and a warehouse needs a positive quantity."),
     INV_019("An item that holds stock cannot become a service."),
     INV_020("The chosen item does not exist in the company."),
-    INV_021("A SKU could not be generated. Please try again.");
+    INV_021("A SKU could not be generated. Please try again."),
+    INV_022("The source and destination warehouses must be different."),
+    INV_023("The stock transfer does not exist.");
 
     private final String message;
 }
