@@ -184,7 +184,25 @@ public class OfferTemplateService {
                 t.getCreatedDate(), t.getUpdatedDate());
     }
 
-    private OfferTemplate require(Long id) {
+    /**
+     * The letter of an offer: declared variables filled from values (HTML-escaped); a declared variable without a
+     * value is left empty. TODO(assumption): an unknown variable prints empty rather than refusing the download.
+     */
+    @Transactional(readOnly = true)
+    public Generated letter(Long id, Long companyId, Map<String, String> values) {
+        OfferTemplate t = require(id);
+        if (!t.getCompanyId().equals(companyId)) {
+            throw ApiException.notFound(ERecruitmentError.REC_032);
+        }
+        Map<String, String> all = new java.util.HashMap<>();
+        for (String v : t.getVariables()) {
+            String given = values.get(v);
+            all.put(v, given == null ? "" : given);
+        }
+        return new Generated(t.getId().toString(), t.getName(), fill(t.getContent(), Set.copyOf(t.getVariables()), all));
+    }
+
+    public OfferTemplate require(Long id) {
         OfferTemplate t = templates.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> ApiException.notFound(ERecruitmentError.REC_032));
         TenantGuard.assertSameCompany(t.getCompanyId(), ERecruitmentError.REC_032);

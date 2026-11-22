@@ -83,8 +83,9 @@ public class OfferService {
     /** expired = past the expiration date while still Draft / Sent / Negotiating. */
     public record OfferDto(String id, CandidateRef candidate, JobRef job, Ref department, Ref jobType,
                            BigDecimal salary, LocalDate startDate, LocalDate expirationDate, boolean expired,
-                           Ref approvedBy, String benefits, Offer.EStatus status, LocalDate offerDate,
-                           Instant createdDate, Instant updatedDate) {
+                           Ref approvedBy, String benefits, Offer.EStatus status,
+                           Offer.EApprovalStatus approvalStatus, String approvalDecidedBy, Instant approvalDecidedAt,
+                           LocalDate offerDate, Instant createdDate, Instant updatedDate) {
     }
 
     public record StatusCounts(long all, Map<Offer.EStatus, Long> byStatus) {
@@ -108,6 +109,11 @@ public class OfferService {
     }
 
     public record StatusForm(@Schema(requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Offer.EStatus status) {
+    }
+
+    public record ApprovalForm(
+            @Schema(description = "APPROVED or REJECTED; PENDING withdraws the decision", example = "APPROVED",
+                    requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Offer.EApprovalStatus approvalStatus) {
     }
 
     // ------------------------------------------------------------------ reads
@@ -158,11 +164,15 @@ public class OfferService {
         return dto(o, lookups(List.of(o)));
     }
 
-    /** Full replacement of the form fields; status and offer date are kept. */
+    /**
+     * Full replacement of the form fields; status and offer date are kept; the approval goes back to PENDING.
+     * TODO(assumption): any edit needs a new approval (the approver approved other terms) — confirm with BA.
+     */
     @Transactional
     public OfferDto update(Long id, OfferForm form) {
         Offer o = require(id);
         apply(o, form);
+        decide(o, Offer.EApprovalStatus.PENDING);
         return dto(o, lookups(List.of(o)));
     }
 
@@ -170,11 +180,36 @@ public class OfferService {
     @Transactional
     public OfferDto changeStatus(Long id, Offer.EStatus status) {
         Offer o = require(id);
+        // TODO(assumption): an offer is approved before it is sent (REC_058); other moves are not gated — confirm with BA
+        if (status == Offer.EStatus.SENT && o.getStatus() != Offer.EStatus.SENT
+                && o.getApprovalStatus() != Offer.EApprovalStatus.APPROVED) {
+            throw ApiException.badRequest(ERecruitmentError.REC_058);
+        }
         o.setStatus(status);
         if (status == Offer.EStatus.ACCEPTED) {
             candidates.findById(o.getCandidateId()).ifPresent(c -> c.setStatus(Candidate.EStatus.HIRED));
         }
         return dto(o, lookups(List.of(o)));
+    }
+
+    /** Approve / reject (or back to PENDING); records who decided and when. */
+    @Transactional
+    public OfferDto approve(Long id, Offer.EApprovalStatus approval) {
+        Offer o = require(id);
+        decide(o, approval);
+        return dto(o, lookups(List.of(o)));
+    }
+
+    private void decide(Offer o, Offer.EApprovalStatus approval) {
+        if (approval == Offer.EApprovalStatus.PENDING) {
+            o.setApprovalDecidedBy(null);
+            o.setApprovalDecidedAt(null);
+        } else {
+            o.setApprovalDecidedBy(com.terp.erp.security.CurrentUser.find()
+                    .map(com.terp.erp.security.ErpPrincipal::keycloakId).orElse(null));
+            o.setApprovalDecidedAt(clock.instant());
+        }
+        o.setApprovalStatus(approval);
     }
 
     @Transactional
@@ -254,7 +289,8 @@ public class OfferService {
                 o.getSalary(), o.getStartDate(), o.getExpirationDate(), expired(o, l.today()),
                 o.getApprovedByEmployeeId() == null ? null
                         : new Ref(o.getApprovedByEmployeeId().toString(), o.getApprovedByName()),
-                o.getBenefits(), o.getStatus(), o.getOfferDate(), o.getCreatedDate(), o.getUpdatedDate());
+                o.getBenefits(), o.getStatus(), o.getApprovalStatus(), o.getApprovalDecidedBy(),
+                o.getApprovalDecidedAt(), o.getOfferDate(), o.getCreatedDate(), o.getUpdatedDate());
     }
 
     /** Nightly: open offers past their expiration date (Vietnam date) become EXPIRED. */
@@ -282,7 +318,7 @@ public class OfferService {
         return LocalDate.now(clock.withZone(ZONE));
     }
 
-    private Offer require(Long id) {
+    Offer require(Long id) {
         Offer o = offers.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> ApiException.notFound(ERecruitmentError.REC_035));
         com.terp.erp.security.TenantGuard.assertSameCompany(o.getCompanyId(), ERecruitmentError.REC_035);

@@ -141,6 +141,27 @@ class InterviewServiceTest {
     }
 
     @Test
+    void completingMovesAnInterviewCandidateToOfferOnly() {
+        Interview i = existing(100L, 7L, "10:00", 60, 50L);
+        when(interviews.findByIdAndDeletedFalse(100L)).thenReturn(Optional.of(i));
+        candidate.setStatus(Candidate.EStatus.INTERVIEW);
+        service.changeStatus(100L, Interview.EStatus.COMPLETED);
+        assertThat(candidate.getStatus()).isEqualTo(Candidate.EStatus.OFFER);
+        for (Candidate.EStatus s : List.of(Candidate.EStatus.NEW, Candidate.EStatus.SCREENING,
+                Candidate.EStatus.HIRED, Candidate.EStatus.REJECTED)) {
+            i.setStatus(Interview.EStatus.SCHEDULED);
+            candidate.setStatus(s);
+            service.changeStatus(100L, Interview.EStatus.COMPLETED);
+            assertThat(candidate.getStatus()).isEqualTo(s);
+        }
+        // cancelling does not move the candidate
+        i.setStatus(Interview.EStatus.SCHEDULED);
+        candidate.setStatus(Candidate.EStatus.INTERVIEW);
+        service.changeStatus(100L, Interview.EStatus.CANCELLED);
+        assertThat(candidate.getStatus()).isEqualTo(Candidate.EStatus.INTERVIEW);
+    }
+
+    @Test
     void feedbackRules() {
         Interview i = existing(100L, 7L, "10:00", 60, 50L);
         when(interviews.findByIdAndDeletedFalse(100L)).thenReturn(Optional.of(i));

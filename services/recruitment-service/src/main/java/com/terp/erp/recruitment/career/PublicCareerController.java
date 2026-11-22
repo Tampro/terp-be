@@ -26,6 +26,7 @@ import com.terp.erp.recruitment.career.PublicCareerService.Filters;
 import com.terp.erp.recruitment.career.PublicCareerService.JobCard;
 import com.terp.erp.recruitment.career.PublicCareerService.JobDetail;
 import com.terp.erp.recruitment.career.PublicCareerService.Site;
+import com.terp.erp.recruitment.career.PublicCareerService.Tracked;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -96,11 +97,15 @@ public class PublicCareerController {
 
     @Operation(summary = "Apply for the job",
             description = "multipart/form-data: part application (JSON), resume (PDF/DOC/DOCX ≤ 5 MB, required), "
-                    + "coverLetter (optional, same rules). One application per email and job.")
+                    + "coverLetter (optional, same rules). One application per email and job. The answer carries "
+                    + "trackingId (12 characters) for Track Application. Answers are checked against the question "
+                    + "type: NUMBER a number, DATE yyyy-MM-dd, SELECT / RADIO one option, CHECKBOX options as a "
+                    + "JSON array or separated by commas.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Resume missing (REC_050), terms not accepted (REC_049), "
+            @ApiResponse(responseCode = "400", description = "Job closed (REC_054), resume missing (REC_050), terms not accepted (REC_049), "
                     + "applications elsewhere (REC_052), already applied (REC_016), required question (REC_017), "
-                    + "other question (REC_018), file type (REC_019) or size (REC_020)"),
+                    + "other question (REC_018), answer not a number (REC_064), date (REC_065) or option (REC_066), "
+                    + "file type (REC_019) or size (REC_020)"),
             @ApiResponse(responseCode = "404", description = "No such page (REC_047), open job (REC_048) or source "
                     + "(REC_001)"),
             @ApiResponse(responseCode = "429", description = "Too many requests from this address (COMMON_006)")})
@@ -111,5 +116,18 @@ public class PublicCareerController {
                                         @RequestPart(value = "coverLetter", required = false)
                                         MultipartFile coverLetter) {
         return ApiMessageDto.ok(service.apply(slug, id, application, resume, coverLetter));
+    }
+
+    @Operation(summary = "Track Application",
+            description = "Both trackingId and email are required; the email must be the one applied with "
+                    + "(case-insensitive). Returns the job title, applied date and the candidate status only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "404", description = "No such page (REC_047); no application for this "
+                    + "tracking ID and email (REC_059, same answer whichever part is wrong)"),
+            @ApiResponse(responseCode = "429", description = "Too many requests from this address (COMMON_006)")})
+    @GetMapping("/track")
+    public ApiMessageDto<Tracked> track(@PathVariable String slug, @RequestParam String trackingId,
+                                        @RequestParam String email) {
+        return ApiMessageDto.ok(service.track(slug, trackingId, email));
     }
 }

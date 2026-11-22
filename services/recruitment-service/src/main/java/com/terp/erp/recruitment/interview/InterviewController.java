@@ -139,7 +139,8 @@ public class InterviewController {
     }
 
     @Operation(summary = "Update Status (Scheduled, Completed, Cancelled, No-show)",
-            description = "Back to Scheduled checks the time conflicts again.")
+            description = "Back to Scheduled checks the time conflicts again. Completed moves the candidate from "
+                    + "INTERVIEW to OFFER (any other candidate status is left as is).")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Interviewer busy (REC_026), candidate busy (REC_027)"),
             @ApiResponse(responseCode = "404", description = "No such interview in your company (REC_023)")})

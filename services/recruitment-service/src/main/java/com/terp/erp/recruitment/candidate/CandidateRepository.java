@@ -32,6 +32,10 @@ public interface CandidateRepository extends JpaRepository<Candidate, Long> {
 
     Optional<Candidate> findByIdAndDeletedFalse(Long id);
 
+    Optional<Candidate> findByTrackingIdAndDeletedFalse(String trackingId);
+
+    boolean existsByTrackingId(String trackingId);
+
     @Query("select count(c) > 0 from Candidate c where c.jobPostingId = :jobPostingId and c.deleted = false "
             + "and lower(c.email) = lower(:email)")
     boolean alreadyApplied(Long jobPostingId, String email);

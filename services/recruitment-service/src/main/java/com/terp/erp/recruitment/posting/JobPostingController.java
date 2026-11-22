@@ -45,7 +45,7 @@ public class JobPostingController {
     private final JobPostingService service;
 
     @Operation(summary = "Job postings of the company",
-            description = "keyword matches title or job code; status (DRAFT / PUBLISHED) and published filter. "
+            description = "keyword matches title or job code; status (DRAFT / PUBLISHED / CLOSED) and published filter. "
                     + "Sort by createdDate, title, applicationDeadline.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (REC_005)"))
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_VIEW')")
@@ -101,7 +101,8 @@ public class JobPostingController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Publish a job posting (status PUBLISHED)")
+    @Operation(summary = "Publish a job posting (status PUBLISHED)",
+            description = "From DRAFT, or re-opens a CLOSED posting.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = "No such posting in your company (REC_006)"))
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}/publish")
@@ -110,11 +111,24 @@ public class JobPostingController {
     }
 
     @Operation(summary = "Unpublish a job posting (back to DRAFT)")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such posting in your company (REC_006)"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "A closed posting cannot go back to draft (REC_055)"),
+            @ApiResponse(responseCode = "404", description = "No such posting in your company (REC_006)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}/unpublish")
     public ApiMessageDto<PostingDto> unpublish(@PathVariable Long id) {
         return ApiMessageDto.ok(service.setPublished(id, false));
+    }
+
+    @Operation(summary = "Close a published job posting (status CLOSED)",
+            description = "Hidden from the career page, applications refused (REC_054). Publish re-opens it.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Only a published posting can be closed (REC_056)"),
+            @ApiResponse(responseCode = "404", description = "No such posting in your company (REC_006)")})
+    @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
+    @PutMapping("/{id}/close")
+    public ApiMessageDto<PostingDto> close(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.close(id));
     }
 
     @Operation(summary = "Delete a job posting")

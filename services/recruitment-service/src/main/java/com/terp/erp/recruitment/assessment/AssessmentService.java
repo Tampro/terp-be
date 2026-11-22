@@ -18,6 +18,7 @@ import com.terp.erp.recruitment.candidate.CandidateService;
 import com.terp.erp.recruitment.catalog.CatalogService;
 import com.terp.erp.recruitment.client.EmployeeClient;
 import com.terp.erp.recruitment.common.ERecruitmentError;
+import com.terp.erp.recruitment.interview.InterviewFeedback;
 import com.terp.erp.recruitment.common.Texts;
 import com.terp.erp.security.TenantGuard;
 
@@ -41,6 +42,11 @@ public class AssessmentService {
     private final CandidateService candidateService;
     private final CandidateRepository candidates;
     private final EmployeeClient employees;
+    private final com.terp.erp.recruitment.interview.InterviewFeedbackRepository feedbacks;
+
+    /** Only these recommendations open the assessment step (user manual §17). */
+    static final java.util.Set<InterviewFeedback.ERecommendation> RECOMMENDED = java.util.EnumSet.of(
+            InterviewFeedback.ERecommendation.HIRE, InterviewFeedback.ERecommendation.STRONG_HIRE);
 
     public record Ref(String id, String name) {
     }
@@ -99,6 +105,11 @@ public class AssessmentService {
 
     @Transactional
     public AssessmentDto create(AssessmentForm form) {
+        // company check (404) first, then the gate, before calling employee-service
+        Long candidateId = candidateService.require(form.candidateId()).getId();
+        if (!feedbacks.candidateRecommended(candidateId, RECOMMENDED)) {
+            throw ApiException.badRequest(ERecruitmentError.REC_057);
+        }
         CandidateAssessment a = new CandidateAssessment();
         apply(a, form);
         return dto(assessments.save(a));

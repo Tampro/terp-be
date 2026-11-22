@@ -65,6 +65,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CandidateService {
     static final int KANBAN_CARDS = 50;
+    static final int TRACKING_LENGTH = 12;
+    /** No 0/O/1/I so an applicant can read it back. */
+    private static final char[] TRACKING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
     /** TODO(assumption): "today" (application date) is the Vietnam date until companies carry their own time zone. */
     static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -188,6 +192,7 @@ public class CandidateService {
         c.setTermsAccepted(f.termsAccepted());
         c.setApplicationDate(f.applicationDate() != null ? f.applicationDate() : LocalDate.now(clock.withZone(ZONE)));
         c.setAnswers(answers(p, f.answers()));
+        c.setTrackingId(newTrackingId());
         if (resume != null && !resume.isEmpty()) {
             attach(c, files.store(resume));
         }
@@ -249,10 +254,90 @@ public class CandidateService {
                 throw ApiException.badRequest(ERecruitmentError.REC_017, q.getQuestion());
             }
             if (answer != null) {
+                answer = checkAnswer(q, answer);
                 out.add(new Candidate.Answer(q.getId(), q.getQuestion(), answer));
             }
         }
         return out;
+    }
+
+    /**
+     * The answer against the question type: NUMBER parses as a decimal (REC_064), DATE as yyyy-MM-dd (REC_065),
+     * SELECT / RADIO is one option, CHECKBOX one or more options as a JSON array or comma separated (REC_066,
+     * case-insensitive, stored with the option's own spelling, comma separated). TEXT / TEXTAREA as given.
+     */
+    static String checkAnswer(CustomQuestion q, String answer) {
+        CustomQuestion.EType type = q.getType() == null ? CustomQuestion.EType.TEXT : q.getType();
+        switch (type) {
+            case NUMBER -> {
+                try {
+                    new java.math.BigDecimal(answer.trim());
+                } catch (NumberFormatException e) {
+                    throw ApiException.badRequest(ERecruitmentError.REC_064, q.getQuestion());
+                }
+                return answer.trim();
+            }
+            case DATE -> {
+                try {
+                    return LocalDate.parse(answer.trim()).toString();
+                } catch (java.time.format.DateTimeParseException e) {
+                    throw ApiException.badRequest(ERecruitmentError.REC_065, q.getQuestion());
+                }
+            }
+            case SELECT, RADIO -> {
+                return option(q, answer.trim());
+            }
+            case CHECKBOX -> {
+                List<String> picked = new ArrayList<>();
+                for (String part : splitChoices(answer)) {
+                    String o = option(q, part);
+                    if (!picked.contains(o)) {
+                        picked.add(o);
+                    }
+                }
+                if (picked.isEmpty()) {
+                    throw ApiException.badRequest(ERecruitmentError.REC_066, q.getQuestion());
+                }
+                return String.join(", ", picked);
+            }
+            default -> {
+                return answer;
+            }
+        }
+    }
+
+    private static String option(CustomQuestion q, String value) {
+        return q.getOptions().stream().filter(o -> o.equalsIgnoreCase(value)).findFirst()
+                .orElseThrow(() -> ApiException.badRequest(ERecruitmentError.REC_066, q.getQuestion()));
+    }
+
+    /** ["a","b"] or a, b. */
+    private static List<String> splitChoices(String answer) {
+        String s = answer.trim();
+        if (s.startsWith("[") && s.endsWith("]")) {
+            s = s.substring(1, s.length() - 1);
+            List<String> out = new ArrayList<>();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(s);
+            while (m.find()) {
+                out.add(m.group(1).replace("\\\"", "\"").trim());
+            }
+            return out.stream().filter(x -> !x.isEmpty()).toList();
+        }
+        return java.util.Arrays.stream(s.split(",")).map(String::trim).filter(x -> !x.isEmpty()).toList();
+    }
+
+    /** 32^12 values; a clash with an existing id (practically never) draws again. */
+    private String newTrackingId() {
+        while (true) {
+            char[] out = new char[TRACKING_LENGTH];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = TRACKING_ALPHABET[RANDOM.nextInt(TRACKING_ALPHABET.length)];
+            }
+            String id = new String(out);
+            if (!candidates.existsByTrackingId(id)) {
+                return id;
+            }
+        }
     }
 
     private static void attach(Candidate c, StoredFile f) {
@@ -326,6 +411,11 @@ public class CandidateService {
             by.put((EStatus) r[0], (Long) r[1]);
         }
         return by;
+    }
+
+    /** No tenant check: the public career page matches the company itself. */
+    public java.util.Optional<Candidate> findByTracking(String trackingId) {
+        return candidates.findByTrackingIdAndDeletedFalse(trackingId);
     }
 
     public Candidate require(Long id) {

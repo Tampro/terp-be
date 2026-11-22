@@ -32,6 +32,18 @@ public class EmployeeClient {
         this.mapper = mapper;
     }
 
+    /**
+     * POST /api/v1/employees as the caller (EMPLOYEE_CREATE, and IAM_USER_CREATE for the login, checked there).
+     * companyId is ignored by employee-service for company users and names the company for a super admin. Not retried.
+     */
+    public Employee create(Long companyId, Object form) {
+        JsonNode data = http.call(c -> c.post()
+                .uri(b -> b.path("/api/v1/employees").queryParam("companyId", companyId).build())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(form)).path("data");
+        return mapper.convertValue(data, Employee.class);
+    }
+
     public Employee employee(Long id) {
         JsonNode data = http.call(c -> c.get().uri("/api/v1/employees/{id}", id)).path("data");
         return mapper.convertValue(data, Employee.class);

@@ -35,6 +35,13 @@ public class ChecklistItem extends BaseAuditableEntity {
     @Column(name = "category", nullable = false, length = 20)
     private ECategory category;
 
+    /**
+     * Who does the task (HR, IT, Manager...). Free text like the reference TERP Core (assigned_to_role, max 100).
+     * TODO(assumption): free text rather than a fixed list or an IAM role id — confirm with BA.
+     */
+    @Column(name = "assigned_to_role", length = 100)
+    private String assignedToRole;
+
     @Column(name = "is_required", nullable = false)
     private boolean required;
 

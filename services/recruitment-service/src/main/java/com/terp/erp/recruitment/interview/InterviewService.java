@@ -143,6 +143,11 @@ public class InterviewService {
         if (status == Interview.EStatus.SCHEDULED && i.getStatus() != Interview.EStatus.SCHEDULED) {
             checkConflicts(i);
         }
+        if (status == Interview.EStatus.COMPLETED && i.getStatus() != Interview.EStatus.COMPLETED) {
+            // forward only: a candidate already at OFFER / HIRED / REJECTED (or not yet INTERVIEW) is left as is
+            candidates.findById(i.getCandidateId()).filter(c -> c.getStatus() == Candidate.EStatus.INTERVIEW)
+                    .ifPresent(c -> c.setStatus(Candidate.EStatus.OFFER));
+        }
         i.setStatus(status);
         return detail(i);
     }

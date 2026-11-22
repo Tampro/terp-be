@@ -77,6 +77,27 @@ class JobPostingRoundTest {
     }
 
     @Test
+    void closeTransitions() {
+        TestLogin.as(10L, "RECRUITMENT_MANAGE");
+        JobPosting p = new JobPosting();
+        p.setId(1L);
+        p.setCompanyId(10L);
+        p.setJobTypeId(2L);
+        p.setLocationId(3L);
+        when(postings.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(p));
+        assertCode(() -> service.close(1L), ERecruitmentError.REC_056);
+        service.setPublished(1L, true);
+        assertThat(service.close(1L).status()).isEqualTo(JobPosting.EStatus.CLOSED);
+        assertThat(p.isPublished()).isFalse();
+        assertCode(() -> service.setPublished(1L, false), ERecruitmentError.REC_055);
+        assertCode(() -> service.close(1L), ERecruitmentError.REC_056);
+        // re-open
+        assertThat(service.setPublished(1L, true).status()).isEqualTo(JobPosting.EStatus.PUBLISHED);
+        p.setCompanyId(11L);
+        assertCode(() -> service.close(1L), ERecruitmentError.REC_006);
+    }
+
+    @Test
     void rules() {
         TestLogin.as(10L, "RECRUITMENT_MANAGE");
         stubTypeAndLocation(EStatus.ACTIVE);
@@ -168,5 +189,10 @@ class JobPostingRoundTest {
     private static void assertError(Runnable call, ERecruitmentError code) {
         assertThatThrownBy(call::run).isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(code);
+    }
+
+    private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, ERecruitmentError code) {
+        assertThatThrownBy(call).isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
     }
 }

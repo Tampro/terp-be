@@ -35,7 +35,11 @@ public class JobPosting extends BaseAuditableEntity {
     /** EXISTING = through the career page of this system; CUSTOM = elsewhere, at applicationUrl. */
     public enum EApplicationType { EXISTING, CUSTOM }
 
-    public enum EStatus { DRAFT, PUBLISHED }
+    /**
+     * DRAFT ⇄ PUBLISHED → CLOSED; CLOSED → PUBLISHED (re-open) but never back to DRAFT; only PUBLISHED can close.
+     * TODO(assumption): a closed posting may be re-published — confirm with BA.
+     */
+    public enum EStatus { DRAFT, PUBLISHED, CLOSED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;

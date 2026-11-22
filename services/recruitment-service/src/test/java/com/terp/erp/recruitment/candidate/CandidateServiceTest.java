@@ -37,6 +37,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -97,9 +100,38 @@ class CandidateServiceTest {
             assertThat(a.answer()).isEqualTo("Yes");
         });
         assertThat(d.resumeUrl()).isNull();
+        ArgumentCaptor<Candidate> saved = ArgumentCaptor.forClass(Candidate.class);
+        Mockito.verify(candidates).save(saved.capture());
+        assertThat(saved.getValue().getTrackingId()).matches("[A-HJ-NP-Z2-9]{12}");
 
         when(candidates.alreadyApplied(1L, "test.candidate@example.invalid")).thenReturn(true);
         assertCode(() -> s.create(form(List.of(new AnswerForm(100L, "Yes")))), ERecruitmentError.REC_016);
+    }
+
+    @Test
+    void answersFollowTheQuestionType() {
+        CustomQuestion n = typed(CustomQuestion.EType.NUMBER);
+        assertThat(CandidateService.checkAnswer(n, " 3.5 ")).isEqualTo("3.5");
+        assertCode(() -> CandidateService.checkAnswer(n, "three"), ERecruitmentError.REC_064);
+        CustomQuestion d = typed(CustomQuestion.EType.DATE);
+        assertThat(CandidateService.checkAnswer(d, "2026-11-20")).isEqualTo("2026-11-20");
+        assertCode(() -> CandidateService.checkAnswer(d, "20/11/2026"), ERecruitmentError.REC_065);
+        CustomQuestion r = typed(CustomQuestion.EType.RADIO, "Yes", "No");
+        assertThat(CandidateService.checkAnswer(r, "yes")).isEqualTo("Yes");
+        assertCode(() -> CandidateService.checkAnswer(r, "Maybe"), ERecruitmentError.REC_066);
+        CustomQuestion c = typed(CustomQuestion.EType.CHECKBOX, "Java", "Go", "PHP");
+        assertThat(CandidateService.checkAnswer(c, "[\"java\", \"PHP\"]")).isEqualTo("Java, PHP");
+        assertThat(CandidateService.checkAnswer(c, "Go, Java, Go")).isEqualTo("Go, Java");
+        assertCode(() -> CandidateService.checkAnswer(c, "Go, Rust"), ERecruitmentError.REC_066);
+        CustomQuestion t = typed(CustomQuestion.EType.TEXTAREA);
+        assertThat(CandidateService.checkAnswer(t, "anything")).isEqualTo("anything");
+    }
+
+    private static CustomQuestion typed(CustomQuestion.EType type, String... options) {
+        CustomQuestion q = question(1L, "Q", false);
+        q.setType(type);
+        q.getOptions().addAll(List.of(options));
+        return q;
     }
 
     @Test

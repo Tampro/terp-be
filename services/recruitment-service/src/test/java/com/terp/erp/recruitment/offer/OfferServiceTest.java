@@ -116,6 +116,34 @@ class OfferServiceTest {
     }
 
     @Test
+    void approvalBeforeSendingAndWhoDecided() {
+        Offer o = offer(Offer.EStatus.DRAFT, null);
+        when(offers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(o));
+        assertThat(o.getApprovalStatus()).isEqualTo(Offer.EApprovalStatus.PENDING);
+        assertCode(() -> service.changeStatus(9L, Offer.EStatus.SENT), ERecruitmentError.REC_058);
+        service.approve(9L, Offer.EApprovalStatus.REJECTED);
+        assertCode(() -> service.changeStatus(9L, Offer.EStatus.SENT), ERecruitmentError.REC_058);
+        var d = service.approve(9L, Offer.EApprovalStatus.APPROVED);
+        assertThat(d.approvalStatus()).isEqualTo(Offer.EApprovalStatus.APPROVED);
+        assertThat(d.approvalDecidedBy()).isEqualTo("kc-5");
+        assertThat(d.approvalDecidedAt()).isEqualTo(Instant.parse("2026-11-19T17:30:00Z"));
+        assertThat(service.changeStatus(9L, Offer.EStatus.SENT).status()).isEqualTo(Offer.EStatus.SENT);
+        // editing the terms needs a new approval
+        service.update(9L, form(null, null, null, null));
+        assertThat(o.getApprovalStatus()).isEqualTo(Offer.EApprovalStatus.PENDING);
+        assertThat(o.getApprovalDecidedBy()).isNull();
+    }
+
+    @Test
+    void otherCompanyCannotApprove() {
+        Offer o = offer(Offer.EStatus.DRAFT, null);
+        o.setCompanyId(11L);
+        when(offers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(o));
+        assertCode(() -> service.approve(9L, Offer.EApprovalStatus.APPROVED), ERecruitmentError.REC_035);
+        assertThat(o.getApprovalStatus()).isEqualTo(Offer.EApprovalStatus.PENDING);
+    }
+
+    @Test
     void expiredFlagOnlyForOpenOffers() {
         LocalDate today = LocalDate.of(2026, 11, 20);
         assertThat(OfferService.expired(offer(Offer.EStatus.SENT, today.minusDays(1)), today)).isTrue();
