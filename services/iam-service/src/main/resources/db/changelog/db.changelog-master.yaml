@@ -117,3 +117,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122510000_ledger_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261122610000_goal_budget_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122750000_hrm_permission_init_data.mysql.sql

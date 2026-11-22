@@ -50,6 +50,12 @@ public final class SalesPermissions {
     public static final Set<String> GOAL_BUDGET = Set.of("GOAL_VIEW", "GOAL_MANAGE", "BUDGET_VIEW", "BUDGET_MANAGE",
             "BUDGET_APPROVE");
 
+    /**
+     * payroll-service Pay Salary (bank debit + journal in accounting). Kept out of PayrollPermissions so the default HR role
+     * does not move money; TODO(assumption): only COMPANY_ADMIN pays salaries by default — confirm with BA.
+     */
+    public static final Set<String> PAYROLL_PAYMENT = Set.of("PAYROLL_PAY");
+
     public static final Set<String> ALL;
 
     static {
@@ -68,6 +74,7 @@ public final class SalesPermissions {
         all.addAll(ACCOUNTING);
         all.addAll(LEDGER);
         all.addAll(GOAL_BUDGET);
+        all.addAll(PAYROLL_PAYMENT);
         ALL = Set.copyOf(all);
     }
 
