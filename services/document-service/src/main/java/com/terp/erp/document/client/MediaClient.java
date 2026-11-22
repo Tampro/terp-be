@@ -26,11 +26,36 @@ public class MediaClient {
     }
 
     private final CallerHttp http;
+    private final CallerHttp internal;
     private final ObjectMapper mapper;
 
-    public MediaClient(DocumentProperties props, ObjectMapper mapper) {
+    public MediaClient(DocumentProperties props, ObjectMapper mapper, ServiceTokenProvider serviceToken) {
         this.http = new CallerHttp(props.mediaServiceUrl(), mapper, EDocumentError.DOC_007, "media-service");
+        this.internal = new CallerHttp(props.mediaServiceUrl(), mapper, EDocumentError.DOC_007, "media-service",
+                serviceToken::token);
         this.mapper = mapper;
+    }
+
+    /**
+     * Signed links of a company file through document-service's service account, so a caller with DOCUMENT_VIEW but
+     * no MEDIA_VIEW can download. Only after the caller passed the download rules here (status, acknowledgment).
+     * 400 DOC_008 when the file is not in that company; 503 DOC_007 when media or Keycloak is unreachable.
+     */
+    public MediaFile linksAsService(Long fileId, Long companyId) {
+        JsonNode data;
+        try {
+            data = internal.call(c -> c.get().uri("/api/v1/internal/media/files/{id}?companyId={c}", fileId,
+                    companyId)).path("data");
+        } catch (RemoteApiException e) {
+            if (e.getStatus().value() == 404) {
+                throw ApiException.badRequest(EDocumentError.DOC_008);
+            }
+            throw e;
+        }
+        if (data.isMissingNode() || data.isNull()) {
+            throw ApiException.badRequest(EDocumentError.DOC_008);
+        }
+        return mapper.convertValue(data, MediaFile.class);
     }
 
     /** The file, checked against the company; 400 DOC_008 when it is not there. */

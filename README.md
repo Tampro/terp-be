@@ -119,6 +119,7 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   MEETING_ENC_KEY                      (meeting-service; encrypts Zoom client secrets: openssl rand -base64 32)
 #   DOCUMENT_DB_PASSWORD                 (document-service; same note for an existing MySQL volume)
 #   EMPLOYEE_SERVICE_CLIENT_SECRET        (secret of client erp-employee-service; realm import and employee-service)
+#   DOCUMENT_SERVICE_CLIENT_SECRET        (secret of client erp-document-service; realm import and document-service)
 #   ERP_SETTINGS_ENC_KEY                  (optional; base64 of 32 random bytes — needed to save the SMTP password
 #                                          or reCAPTCHA secret in Settings: openssl rand -base64 32)
 # optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,

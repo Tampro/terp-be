@@ -46,7 +46,7 @@ class HrDocumentApprovalTest {
         doc.setFileId(41L);
         doc.setStatus(HrDocument.EStatus.PENDING);
         when(documents.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(doc));
-        when(media.require(41L, 10L)).thenReturn(new MediaClient.MediaFile("41", "10", "policy.pdf", null,
+        when(media.linksAsService(41L, 10L)).thenReturn(new MediaClient.MediaFile("41", "10", "policy.pdf", null,
                 "application/pdf", 10L, null, "https://media.example.invalid/signed"));
     }
 

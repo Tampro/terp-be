@@ -46,7 +46,7 @@ public class SecurityConfig {
 
     /**
      * Service-to-service endpoints. A service-account token has no IAM user, so the user chain (authorities from
-     * IAM) does not apply: the token must be valid (same issuer and keys) and issued to the one allowed client (azp).
+     * IAM) does not apply: the token must be valid (same issuer and keys) and issued to one of the allowed clients (azp).
      */
     @Bean
     @Order(1)
@@ -57,7 +57,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.anyRequest().access((auth, ctx) -> new AuthorizationDecision(
                         auth.get() instanceof JwtAuthenticationToken jwt
-                                && Objects.equals(jwt.getToken().getClaimAsString("azp"), props.internalClientId()))))
+                                && props.internalClientIds().contains(Objects.toString(jwt.getToken().getClaimAsString("azp"), "")))))
                 .oauth2ResourceServer(o -> o.jwt(j -> { })
                         .authenticationEntryPoint((req, res, ex) -> write(res, mapper, HttpStatus.UNAUTHORIZED,
                                 ECommonError.COMMON_003)))

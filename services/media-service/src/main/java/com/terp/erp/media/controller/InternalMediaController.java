@@ -16,7 +16,7 @@ import com.terp.erp.media.service.MediaDtos.MediaFileDto;
 import com.terp.erp.media.service.MediaService;
 
 /**
- * Service-to-service only: accepted for the service-account token of erp.media.internal-client-id (SecurityConfig),
+ * Service-to-service only: accepted for the service-account tokens of erp.media.internal-client-ids (SecurityConfig),
  * not routed by the gateway. The calling service authorizes its own user before asking.
  */
 @Tag(name = "Internal")
