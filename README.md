@@ -2,8 +2,8 @@
 
 Multi-company ERP SaaS as microservices on Spring Boot 3.5 / Java 17 (package `com.terp.erp`). Keycloak proves who
 the caller is; the IAM service decides which company they belong to and what they may do. The services below cover
-the HR side of the ERP; inventory, sales/purchase, accounting, CRM, projects, support and notifications are planned
-(ports 8091–8097).
+all 20 sections of the user manual: HR, inventory, sales/purchase/POS, accounting, CRM, projects, support and company
+settings. A notification service (port 8097, email and webhook dispatch) is still planned — see [Status](#status).
 
 Ports are the container ports. `docker-compose.yml` (project `erp`) publishes them on the host **+10000**, so the
 gateway is `http://localhost:18080` and Keycloak `http://localhost:18180` — this keeps it apart from other local
@@ -22,8 +22,14 @@ stacks that use the plain ports.
 | `meeting-service` | 8088 (18088) | Meeting types and rooms, meetings, action items, company events, Zoom meetings (client secrets encrypted). Database `erp_meeting`. |
 | `document-service` | 8089 (18089) | Document categories, employee contracts, HR documents, templates. Database `erp_document`. |
 | `report-service` | 8090 (18090) | Dashboards and the unified calendar, read from the other services (no database of its own). |
+| `inventory-service` | 8091 (18091) | Items (product / service / part, images from media), categories, taxes, units, warehouses, stock and stock movements, transfers. Stock moves are all-or-nothing and idempotent per source. Database `erp_inventory`. |
+| `commerce-service` | 8092 (18092) | Quotations, proposals, sales invoices and returns, purchase invoices and returns, POS. Posting moves stock through inventory and books the journal entry in accounting, with the caller's token. Database `erp_commerce`. |
+| `accounting-service` | 8093 (18093) | Customers, vendors, VAS TT200 chart of accounts, journal entries (manual and automatic, idempotent per source), bank accounts and transfers, revenue / expense, payments, credit / debit notes, reports (trial balance, P&L, cash flow, balance sheet, aging, tax), year-end close, financial goals and budgets. Database `erp_accounting`. |
+| `crm-service` | 8094 (18094) | Pipelines and stages, leads, deals (tasks, calls, emails, files), lead → deal conversion, customer contracts. Database `erp_crm`. |
+| `project-service` | 8095 (18095) | Projects, tasks and bugs with Kanban, milestones, task calendar; form builder with a public link. Database `erp_project`. |
+| `support-service` | 8096 (18096) | Support tickets with custom fields, public support portal per company, knowledge base and FAQ (CSV import), contact messages, one-to-one messenger. Database `erp_support`. |
 | `erp-common` | — | Library shared by the servlet services: API envelope, error handling + i18n, trace id, resource-server setup, `ErpPrincipal`, `PermissionChecker`, `TenantGuard`. |
-| Keycloak 26 | 8080 (18180) | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Clients `erp-web` (FE), `erp-iam-admin`, `erp-employee-service`. Config in `deploy/keycloak/erp-realm.json`. |
+| Keycloak 26 | 8080 (18180) | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Clients `erp-web` (FE), `erp-iam-admin`, `erp-employee-service`, `erp-document-service`. Config in `deploy/keycloak/erp-realm.json`. |
 | MySQL 8.4 | 3306 (13316) | One database per service (`erp_*`) plus `keycloak`, created by `deploy/mysql/init`. |
 
 ## How a request is authorized
@@ -118,6 +124,8 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   MEETING_DB_PASSWORD                  (meeting-service; same note for an existing MySQL volume)
 #   MEETING_ENC_KEY                      (meeting-service; encrypts Zoom client secrets: openssl rand -base64 32)
 #   DOCUMENT_DB_PASSWORD                 (document-service; same note for an existing MySQL volume)
+#   INVENTORY_DB_PASSWORD, COMMERCE_DB_PASSWORD, ACCOUNTING_DB_PASSWORD, CRM_DB_PASSWORD, PROJECT_DB_PASSWORD
+#                                        (one per service; same note for an existing MySQL volume)
 #   SUPPORT_DB_PASSWORD                  (support-service, database erp_support / user erp_support; same note
 #                                          for an existing MySQL volume)
 #   EMPLOYEE_SERVICE_CLIENT_SECRET        (secret of client erp-employee-service; realm import and employee-service)
@@ -141,13 +149,52 @@ The realm is imported only when it does not exist yet; after editing `erp-realm.
 
 ## Tests
 
-`mvn package` runs the unit tests of all 12 modules (628 on 2026-11-21: tenant guard, permission checker, role
-escalation rules, login gating, temporary password policy, and the business rules of each service).
+`mvn package` runs the unit tests of all modules (1000 on 2026-11-22): tenant guard, permission checker, role
+escalation rules, login gating, the business rules of each service, journal postings, SSRF guard.
 
-End-to-end, against the running stack through the gateway (2026-11-21, 26/26 checks): no-token 401, temporary
-password → `AUTH_004`, first-login password, company creation with its `COMPANY_ADMIN`, cross-company read → 404,
-changing your own status → `IAM_013`, missing permission → 403, locked user and suspended company tokens rejected,
-refresh-token rotation (old token refused), logout. The checks create test companies `E2EA_/E2EB_<random>`.
+End-to-end checks run against the ERP stack through the gateway, with two fake companies each:
+- `.claude/scripts/e2e-login.mjs` (26 checks): no-token 401, temporary password → `AUTH_004`, first-login password,
+  company creation with its `COMPANY_ADMIN`, cross-company read → 404, changing your own status → `IAM_013`, missing
+  permission → 403, locked user and suspended company tokens rejected, refresh-token rotation, logout. It leaves test
+  companies `E2EA_/E2EB_<random>` behind.
+- Per-module E2E runs were done for every manual section before its PR (results in each PR's test plan); those
+  scripts are not in the repo yet.
+- The public career, support and form endpoints are rate-limited per IP (writes: burst 5, 10/min). Running their
+  checks back to back returns 429 until the bucket refills (about a minute).
+
+## Status
+
+What still needs a decision or is not built (2026-11-22):
+
+- **No notification service yet.** Email-notification switches, integrations (Slack, Telegram, Twilio, AI, Google
+  Calendar) and webhooks are stored and testable, but no business event is dispatched. This needs a message broker
+  and an outbox, which have not been chosen.
+- **No outbox for cross-service writes.** A commerce post runs: accounting validate-only → stock move → journal post.
+  If the journal post fails after the stock move, the document stays draft with stock moved; a retry completes it
+  (both calls are idempotent). Clearing a customer payment marks the commerce invoice paid before the journal is
+  written, with no compensation.
+- **To confirm with the chief accountant:**
+  - the accounts used by automatic journal entries, all changeable through the system account mapping:
+    - sales: 131 / 5111 / 5113 / 33311
+    - cost of sales: 632 / 156, at the item's purchase price
+    - sales returns: 5213
+    - purchases: 156 / 6428 / 1331 / 331
+    - payroll: 6421 / 334
+  - the costing method (`06_ARQ_Register`)
+  - documents posted before automatic journals (#20) were not back-posted
+- **To confirm with the BA (`TODO(assumption)` in the code):** status transition tables (trip, HR document, employee
+  contract), a completed performance review can't be reopened, recruitment offer approval rules, support portal
+  rules (no public attachments, items start unpublished).
+- **Security notes:**
+  - outbound integration and webhook URLs pass an SSRF guard, but there is no IP pinning, so a DNS-rebinding window
+    remains
+  - the attendance IP allow-list trusts the gateway's `X-Client-IP`, while services are also published on host
+    ports locally
+- **Platform:**
+  - IAM is a single point of failure: permission checks fail closed
+  - creating a user writes Keycloak first, so a database failure leaves an orphan Keycloak user
+  - login uses the password grant through IAM; PKCE is preferred if the FE can change
+  - no CI workflow, Testcontainers, ShedLock or tracing backend yet
 
 ## Adding a service
 
