@@ -22,7 +22,7 @@ public class PlanModuleFilterTest {
     private static final Set<String> SEEDED_MODULES = Set.of("ANNOUNCEMENT", "ASSET", "ATTENDANCE", "CONTRACT",
             "DOCUMENT", "EMPLOYEE", "EVENT", "HELPDESK", "IAM", "LEAVE", "LIFECYCLE", "MEDIA", "MEETING", "NOTIFICATION",
             "ORG", "PAYROLL", "PERFORMANCE", "RECRUITMENT", "SAAS", "TRAINING", "ZOOM", "INVENTORY", "SALES", "CUSTOMER",
-            "QUOTATION", "CRM", "CRM_CONTRACT", "PURCHASE", "VENDOR", "POS", "BANK", "PROJECT", "FORM");
+            "QUOTATION", "CRM", "CRM_CONTRACT", "PURCHASE", "VENDOR", "POS", "BANK", "PROJECT", "FORM", "COA", "REVENUE", "EXPENSE", "PAYMENT", "NOTE", "ACCOUNTING_REPORT");
 
     /** A filter for a company without a plan: every permission passes (used by other tests). */
     public static PlanModuleFilter noPlan() {
