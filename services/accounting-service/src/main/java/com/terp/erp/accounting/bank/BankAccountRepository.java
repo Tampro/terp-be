@@ -24,5 +24,7 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, Long> 
     @Query("select a from BankAccount a where a.id = :id and a.deleted = false")
     Optional<BankAccount> lockById(Long id);
 
+    boolean existsByGlAccountId(Long glAccountId);
+
     boolean existsByCompanyIdAndAccountNumberAndDeletedFalseAndIdNot(Long companyId, String accountNumber, Long id);
 }

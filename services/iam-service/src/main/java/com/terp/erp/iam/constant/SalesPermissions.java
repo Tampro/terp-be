@@ -38,6 +38,14 @@ public final class SalesPermissions {
     /** project-service form builder: forms, responses, convert. */
     public static final Set<String> FORM = Set.of("FORM_VIEW", "FORM_MANAGE");
 
+    /** accounting-service: chart of accounts, revenue/expense, payments, credit/debit notes, reports (ERP manual 12). */
+    public static final Set<String> ACCOUNTING = Set.of("COA_VIEW", "COA_MANAGE", "REVENUE_VIEW", "REVENUE_MANAGE",
+            "REVENUE_APPROVE", "EXPENSE_VIEW", "EXPENSE_MANAGE", "EXPENSE_APPROVE", "PAYMENT_VIEW", "PAYMENT_MANAGE",
+            "PAYMENT_CLEAR", "NOTE_VIEW", "NOTE_MANAGE", "NOTE_APPROVE", "ACCOUNTING_REPORT_VIEW");
+
+    /** accounting-service double entry: manual journals, reversal, ledger reports, balance sheet, year-end close. */
+    public static final Set<String> LEDGER = Set.of("LEDGER_VIEW", "LEDGER_MANAGE", "LEDGER_REPORT_VIEW", "LEDGER_CLOSE");
+
     public static final Set<String> ALL;
 
     static {
@@ -53,6 +61,8 @@ public final class SalesPermissions {
         all.addAll(BANK);
         all.addAll(PROJECT);
         all.addAll(FORM);
+        all.addAll(ACCOUNTING);
+        all.addAll(LEDGER);
         ALL = Set.copyOf(all);
     }
 

@@ -1,6 +1,6 @@
 package com.terp.erp.accounting.bank;
 
-/** Kind of bank movement; more types (expense, transfer) come later. */
+/** CREDIT adds to the bank balance (money in), DEBIT subtracts (money out). Former INCOME rows are CREDIT. */
 public enum ETransactionType {
-    INCOME
+    CREDIT, DEBIT
 }

@@ -27,7 +27,10 @@ public enum ECommerceError implements ErrorCode {
     SAL_017("A new version can be made only of a sent, accepted or rejected quotation."),
     SAL_018("Line {0} is not a line of the original invoice."),
     SAL_019("A service-wise invoice has no warehouse and no quantity other than 1."),
-    SAL_020("The period must end on or after its start and last at most {0} days.");
+    SAL_020("The period must end on or after its start and last at most {0} days."),
+    SAL_021("Only a posted or partly paid invoice can take a payment."),
+    SAL_022("The payment amount {0} is more than the invoice balance {1}."),
+    SAL_023("Payment {0} was already applied to this invoice with a different amount.");
 
     private final String message;
 }

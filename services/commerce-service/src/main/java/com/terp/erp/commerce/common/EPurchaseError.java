@@ -20,7 +20,10 @@ public enum EPurchaseError implements ErrorCode {
     PUR_010("Only an approved purchase return can be completed."),
     PUR_011("Line {0} is not a line of the original invoice."),
     PUR_012("No items available for return."),
-    PUR_013("The period must end on or after its start and last at most {0} days.");
+    PUR_013("The period must end on or after its start and last at most {0} days."),
+    PUR_014("Only a posted or partly paid purchase invoice can take a payment."),
+    PUR_015("The payment amount {0} is more than the purchase invoice balance {1}."),
+    PUR_016("Payment {0} was already applied to this purchase invoice with a different amount.");
 
     private final String message;
 }
