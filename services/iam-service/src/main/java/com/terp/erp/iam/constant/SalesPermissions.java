@@ -46,6 +46,10 @@ public final class SalesPermissions {
     /** accounting-service double entry: manual journals, reversal, ledger reports, balance sheet, year-end close. */
     public static final Set<String> LEDGER = Set.of("LEDGER_VIEW", "LEDGER_MANAGE", "LEDGER_REPORT_VIEW", "LEDGER_CLOSE");
 
+    /** accounting-service financial goals and budgets (ERP manual 14). */
+    public static final Set<String> GOAL_BUDGET = Set.of("GOAL_VIEW", "GOAL_MANAGE", "BUDGET_VIEW", "BUDGET_MANAGE",
+            "BUDGET_APPROVE");
+
     public static final Set<String> ALL;
 
     static {
@@ -63,6 +67,7 @@ public final class SalesPermissions {
         all.addAll(FORM);
         all.addAll(ACCOUNTING);
         all.addAll(LEDGER);
+        all.addAll(GOAL_BUDGET);
         ALL = Set.copyOf(all);
     }
 
