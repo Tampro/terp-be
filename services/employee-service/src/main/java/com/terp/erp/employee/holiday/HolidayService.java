@@ -147,6 +147,7 @@ public class HolidayService {
         h.setStartDate(f.startDate());
         h.setEndDate(f.endDate());
         h.setDescription(f.description() == null || f.description().isBlank() ? null : f.description().trim());
+        h.setPaid(f.isPaid() == null || f.isPaid());
         h.getBranchIds().clear();
         h.getBranchIds().addAll(wanted);
     }
@@ -174,7 +175,7 @@ public class HolidayService {
             return new HolidayDto(h.getId().toString(), h.getCompanyId().toString(), h.getName(),
                     c == null ? null : CategoryDto.of(c), h.getStartDate(), h.getEndDate(),
                     ChronoUnit.DAYS.between(h.getStartDate(), h.getEndDate()) + 1, h.getDescription(),
-                    h.getBranchIds().isEmpty(), refs, h.getCreatedDate(), h.getUpdatedDate());
+                    h.isPaid(), h.getBranchIds().isEmpty(), refs, h.getCreatedDate(), h.getUpdatedDate());
         }));
     }
 

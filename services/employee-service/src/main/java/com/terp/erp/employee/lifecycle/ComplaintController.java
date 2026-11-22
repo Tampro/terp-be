@@ -68,7 +68,7 @@ public class ComplaintController {
                 pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Submitted, Under Investigation, Resolved, Dismissed)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, In Review, Assigned, In Progress, Resolved)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
     @GetMapping("/status-counts")
@@ -90,7 +90,7 @@ public class ComplaintController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Add a complaint (status SUBMITTED)")
+    @Operation(summary = "Add a complaint (status PENDING)")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Complainant = against (EMP_068), type not in the "
                     + "company's list (EMP_050) or inactive (EMP_054), file (EMP_012)"),
@@ -113,18 +113,22 @@ public class ComplaintController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Change Status (Submitted, Under Investigation, Resolved, Dismissed)")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @Operation(summary = "Change Status: PENDING -> IN_REVIEW, ASSIGNED -> IN_PROGRESS",
+            description = "ASSIGNED is set by assign, RESOLVED by resolve; any other move is refused (EMP_096).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Move not allowed (EMP_096)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/status")
     public ApiMessageDto<ComplaintDto> status(@PathVariable Long id, @Valid @RequestBody StatusForm form) {
         return ApiMessageDto.ok(service.changeStatus(id, form.status()));
     }
 
-    @Operation(summary = "Assign to a handler", description = "A SUBMITTED complaint moves to UNDER_INVESTIGATION.")
+    @Operation(summary = "Assign to a handler", description = "Sets ASSIGNED; from PENDING, IN_REVIEW, ASSIGNED "
+            + "(re-assign) or IN_PROGRESS (re-assign), not once RESOLVED (EMP_096).")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Handler is the accused (EMP_069), deadline before the "
-                    + "complaint date (EMP_052)"),
+                    + "complaint date (EMP_052), already resolved (EMP_096)"),
             @ApiResponse(responseCode = "404", description = "No such complaint (EMP_067) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/assign")
@@ -133,10 +137,11 @@ public class ComplaintController {
     }
 
     @Operation(summary = "Resolve", description = "Full replacement of the resolution and follow-up action/date; "
-            + "sets RESOLVED.")
+            + "sets RESOLVED. From IN_REVIEW, ASSIGNED, IN_PROGRESS or RESOLVED (correction), not PENDING (EMP_096).")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Resolution type not in the list (EMP_050) or inactive "
-                    + "(EMP_054), resolution before the complaint / follow-up before the resolution (EMP_052)"),
+                    + "(EMP_054), resolution before the complaint / follow-up before the resolution (EMP_052), "
+                    + "move not allowed (EMP_096)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/resolve")

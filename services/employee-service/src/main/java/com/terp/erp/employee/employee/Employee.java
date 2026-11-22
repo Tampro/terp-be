@@ -136,6 +136,16 @@ public class Employee extends BaseAuditableEntity {
     @Column(name = "base_salary", precision = 15, scale = 2)
     private BigDecimal baseSalary;
 
+    /** Hours & Rates (FR-ERP-EMP-001); like the base salary, shown only with EMPLOYEE_BANKING_VIEW. */
+    @Column(name = "hours_per_day", precision = 5, scale = 2)
+    private BigDecimal hoursPerDay;
+
+    @Column(name = "days_per_week")
+    private Integer daysPerWeek;
+
+    @Column(name = "rate_per_hour", precision = 19, scale = 4)
+    private BigDecimal ratePerHour;
+
     @Column(name = "reports_to_id")
     private Long reportsToId;
 

@@ -61,6 +61,10 @@ public class Announcement extends BaseAuditableEntity {
     @Column(name = "company_wide", nullable = false)
     private boolean companyWide;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 10)
+    private EAnnouncementStatus status = EAnnouncementStatus.ACTIVE;
+
     @ElementCollection
     @CollectionTable(name = "announcement_branch", joinColumns = @JoinColumn(name = "announcement_id"))
     @Column(name = "branch_id", nullable = false)

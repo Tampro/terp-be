@@ -17,7 +17,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_warning")
 public class EmployeeWarning extends BaseAuditableEntity {
-    public enum EStatus { DRAFT, ISSUED, ACKNOWLEDGED, EXPIRED }
+    /** FR-ERP-ISS-001: Pending -> Approved | Rejected; the employee responds while Pending. */
+    public enum EStatus { PENDING, APPROVED, REJECTED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
@@ -52,7 +53,7 @@ public class EmployeeWarning extends BaseAuditableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
-    private EStatus status = EStatus.DRAFT;
+    private EStatus status = EStatus.PENDING;
 
     @Column(name = "acknowledgment_date")
     private LocalDate acknowledgmentDate;

@@ -32,17 +32,19 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Warnings page (docs/analysis/06 §7.2.4). Type and severity come from the company's lists; the warning is issued by
- * another employee of the company (EMP_053). The status moves freely (Change Status); acknowledging records the date
- * (today when omitted) and the employee's response. A warning past its expiry date is only flagged while Issued /
- * Acknowledged, and a nightly job sets EXPIRED (PO 2026-11-21).
+ * Warnings page (docs/analysis/06 §7.2.4, FR-ERP-ISS-001). Type and severity come from the company's lists; the
+ * warning is issued by another employee of the company (EMP_053). It starts PENDING and is decided once: APPROVED or
+ * REJECTED (EMP_096 otherwise). While PENDING the warned employee — and only them — may respond (EMP_097); the
+ * response date is the acknowledgment date. An APPROVED warning past its expiry date is flagged expired at read time;
+ * there is no EXPIRED status any more (the nightly job that set it was retired with the manual's statuses).
  */
 @Service
 @RequiredArgsConstructor
 public class WarningService {
     /** TODO(assumption): "today" is the Vietnam date until companies carry their own time zone. */
     static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    private static final Set<EStatus> IN_FORCE = EnumSet.of(EStatus.ISSUED, EStatus.ACKNOWLEDGED);
+    static final Map<EStatus, Set<EStatus>> MOVES = Map.of(
+            EStatus.PENDING, EnumSet.of(EStatus.APPROVED, EStatus.REJECTED));
 
     private final EmployeeWarningRepository warnings;
     private final LifecycleCatalogService catalogs;
@@ -50,17 +52,11 @@ public class WarningService {
     private final LifecycleSupport support;
     private final Clock clock;
 
-    /** Nightly: warnings in force past their expiry date (Vietnam date) become EXPIRED. */
-    @org.springframework.transaction.annotation.Transactional
-    public int expireOverdue() {
-        return warnings.expireOverdue(java.time.LocalDate.now(clock.withZone(ZONE)), IN_FORCE, clock.instant());
-    }
-
     public record ImprovementPlan(boolean hasImprovementPlan, String goals, LocalDate startDate, LocalDate endDate,
                                   String progress) {
     }
 
-    /** expired = past the expiry date while Issued / Acknowledged; document only on the details. */
+    /** expired = APPROVED and past the expiry date; document only on the details. */
     public record WarningDto(String id, EmployeeRef employee, EmployeeRef warnedBy, Ref warningType, Ref severity,
                              String subject, LocalDate warningDate, String description, String documentId,
                              FileRef document, LocalDate expiryDate, boolean expired, EStatus status,
@@ -90,9 +86,14 @@ public class WarningService {
     }
 
     public record StatusForm(
-            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EStatus status,
-            @Schema(description = "With ACKNOWLEDGED; omitted = today") LocalDate acknowledgmentDate,
-            @Size(max = 5000) String employeeResponse) {
+            @Schema(description = "APPROVED or REJECTED, only from PENDING",
+                    requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EStatus status) {
+    }
+
+    /** The warned employee's response while PENDING. */
+    public record ResponseForm(
+            @Schema(example = "I was late because of the flood.", requiredMode = Schema.RequiredMode.REQUIRED)
+            @NotBlank @Size(max = 5000) String response) {
     }
 
     public record PlanForm(
@@ -143,7 +144,7 @@ public class WarningService {
         return detail(require(id));
     }
 
-    /** Starts as DRAFT. */
+    /** Starts as PENDING. */
     @Transactional
     public WarningDto create(WarningForm form) {
         EmployeeWarning w = new EmployeeWarning();
@@ -159,20 +160,54 @@ public class WarningService {
         return detail(w);
     }
 
+    /** PENDING -> APPROVED | REJECTED, once. */
     @Transactional
     public WarningDto changeStatus(Long id, StatusForm f) {
         EmployeeWarning w = require(id);
-        LocalDate ack = f.acknowledgmentDate();
-        if (f.status() == EStatus.ACKNOWLEDGED && ack == null) {
-            ack = today();
-        }
-        if (ack != null && ack.isBefore(w.getWarningDate())) {
-            throw ApiException.badRequest(EEmployeeError.EMP_052, "acknowledgment date", "warning date");
-        }
+        LifecycleSupport.assertMove(MOVES, w.getStatus(), f.status());
         w.setStatus(f.status());
-        w.setAcknowledgmentDate(ack);
-        w.setEmployeeResponse(AwardService.blankToNull(f.employeeResponse()));
         return detail(w);
+    }
+
+    /**
+     * The warned employee answers their own PENDING warning (replacing an earlier answer); the acknowledgment date is
+     * today. Another employee's warning reads as not found (EMP_051), so ids cannot be probed.
+     */
+    @Transactional
+    public WarningDto respond(Long id, ResponseForm f) {
+        Employee me = support.me();
+        EmployeeWarning w = require(id);
+        if (!w.getEmployeeId().equals(me.getId())) {
+            throw ApiException.notFound(EEmployeeError.EMP_051);
+        }
+        if (w.getStatus() != EStatus.PENDING) {
+            throw ApiException.badRequest(EEmployeeError.EMP_097);
+        }
+        LocalDate today = today();
+        w.setAcknowledgmentDate(today.isBefore(w.getWarningDate()) ? w.getWarningDate() : today);
+        w.setEmployeeResponse(f.response().trim());
+        return detail(w);
+    }
+
+    /** The caller's own warnings (any status), newest first as the pageable says. */
+    @Transactional(readOnly = true)
+    public Page<WarningDto> mine(EStatus status, Pageable pageable) {
+        Employee me = support.me();
+        Page<EmployeeWarning> page = warnings.search(me.getCompanyId(), me.getId(), null, null, status, "", pageable);
+        Set<Long> people = new HashSet<>();
+        Set<Long> lists = new HashSet<>();
+        for (EmployeeWarning w : page) {
+            people.add(w.getEmployeeId());
+            if (w.getWarnedById() != null) {
+                people.add(w.getWarnedById());
+            }
+            lists.add(w.getWarningTypeId());
+            lists.add(w.getSeverityId());
+        }
+        Map<Long, EmployeeRef> refs = support.refs(people);
+        Map<Long, String> names = names(lists);
+        LocalDate today = today();
+        return page.map(w -> dto(w, refs, names, today, false));
     }
 
     /** The Improvement Plan modal: replaces the plan; turning it off clears it. */
@@ -248,7 +283,7 @@ public class WarningService {
     }
 
     static boolean expired(EmployeeWarning w, LocalDate today) {
-        return w.getExpiryDate() != null && w.getExpiryDate().isBefore(today) && IN_FORCE.contains(w.getStatus());
+        return w.getExpiryDate() != null && w.getExpiryDate().isBefore(today) && w.getStatus() == EStatus.APPROVED;
     }
 
     private WarningDto dto(EmployeeWarning w, Map<Long, EmployeeRef> refs, Map<Long, String> names, LocalDate today,

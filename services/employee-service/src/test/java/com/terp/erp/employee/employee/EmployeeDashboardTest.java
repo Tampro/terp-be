@@ -91,8 +91,8 @@ class EmployeeDashboardTest {
                 new Object[]{com.terp.erp.employee.lifecycle.EDecision.APPROVED, 2L},
                 new Object[]{com.terp.erp.employee.lifecycle.EDecision.PENDING, 4L}));
         when(terminations.countByStatus(10L, null, from, to, "")).thenReturn(List.<Object[]>of(
-                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.PLANNED, 1L},
-                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.COMPLETED, 2L}));
+                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.PENDING, 1L},
+                new Object[]{com.terp.erp.employee.lifecycle.EmployeeTermination.EStatus.APPROVED, 2L}));
 
         var d = service.dashboard(null, 2026);
 

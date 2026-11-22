@@ -86,18 +86,21 @@ class SeparationTest {
     }
 
     @Test
-    void completingTerminatesTheEmployeeAndLocksTheRecord() {
+    void acceptingTerminatesTheEmployeeAndLocksTheRecord() {
         EmployeeResignation r = existingResignation();
         var done = resignationService.changeStatus(9L, new ResignationService.StatusForm(
-                EmployeeResignation.EStatus.COMPLETED, true, DAY, " Good team "));
+                EmployeeResignation.EStatus.ACCEPTED, true, DAY, " Good team "));
         verify(iam).setLoginEnabled(77L, false);
         assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.TERMINATED);
         assertThat(employee.isLoginEnabled()).isFalse();
         assertThat(done.completedAt()).isEqualTo(clock.instant());
         assertThat(done.exitInterview().feedback()).isEqualTo("Good team");
-        assertCode(() -> resignationService.delete(9L), EEmployeeError.EMP_057);
+        assertCode(() -> resignationService.delete(9L), EEmployeeError.EMP_046);
         assertCode(() -> resignationService.changeStatus(9L, new ResignationService.StatusForm(
-                EmployeeResignation.EStatus.PENDING, false, null, null)), EEmployeeError.EMP_057);
+                EmployeeResignation.EStatus.REJECTED, false, null, null)), EEmployeeError.EMP_096);
+        // the exit interview stays recordable after the decision
+        var later = resignationService.exitInterview(9L, new ResignationService.ExitInterviewForm(true, DAY, "ok"));
+        assertThat(later.exitInterview().feedback()).isEqualTo("ok");
         assertThat(r.isDeleted()).isFalse();
         // a new record for someone who has left is refused
         assertCode(() -> resignationService.create(new ResignationForm(1L, DAY, null, null, null, null, null)),
@@ -109,22 +112,69 @@ class SeparationTest {
         existingResignation();
         doThrow(new IllegalStateException("IAM down")).when(iam).setLoginEnabled(anyLong(), anyBoolean());
         assertThatThrownBy(() -> resignationService.changeStatus(9L, new ResignationService.StatusForm(
-                EmployeeResignation.EStatus.COMPLETED, false, null, null))).isInstanceOf(IllegalStateException.class);
+                EmployeeResignation.EStatus.ACCEPTED, false, null, null))).isInstanceOf(IllegalStateException.class);
         assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.ACTIVE);
     }
 
     @Test
-    void otherStatusesAndNoLoginDoNotCallIam() {
+    void rejectingAndNoLoginDoNotCallIam() {
         EmployeeResignation r = existingResignation();
-        var approved = resignationService.changeStatus(9L, new ResignationService.StatusForm(
-                EmployeeResignation.EStatus.APPROVED, false, DAY, "dropped"));
-        assertThat(approved.exitInterview().date()).isNull();
-        assertThat(approved.exitInterview().feedback()).isNull();
+        var rejected = resignationService.changeStatus(9L, new ResignationService.StatusForm(
+                EmployeeResignation.EStatus.REJECTED, false, DAY, "dropped"));
+        assertThat(rejected.exitInterview().date()).isNull();
+        assertThat(rejected.exitInterview().feedback()).isNull();
+        assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.ACTIVE);
+        r.setStatus(EmployeeResignation.EStatus.PENDING);
         employee.setUserId(null);
         resignationService.changeStatus(9L, new ResignationService.StatusForm(
-                EmployeeResignation.EStatus.COMPLETED, false, null, null));
+                EmployeeResignation.EStatus.ACCEPTED, false, null, null));
         verify(iam, never()).setLoginEnabled(anyLong(), anyBoolean());
-        assertThat(r.getStatus()).isEqualTo(EmployeeResignation.EStatus.COMPLETED);
+        assertThat(r.getStatus()).isEqualTo(EmployeeResignation.EStatus.ACCEPTED);
+    }
+
+    @Test
+    void resignationAndTerminationTransitionTables() {
+        EmployeeResignation r = existingResignation();
+        assertCode(() -> resignationService.changeStatus(9L, new ResignationService.StatusForm(
+                EmployeeResignation.EStatus.PENDING, false, null, null)), EEmployeeError.EMP_096);
+        resignationService.changeStatus(9L, new ResignationService.StatusForm(EmployeeResignation.EStatus.REJECTED,
+                false, null, null));
+        assertCode(() -> resignationService.changeStatus(9L, new ResignationService.StatusForm(
+                EmployeeResignation.EStatus.ACCEPTED, false, null, null)), EEmployeeError.EMP_096);
+        assertCode(() -> resignationService.update(9L, new ResignationForm(1L, DAY, null, null, null, null, null)),
+                EEmployeeError.EMP_046);
+        assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.ACTIVE);
+
+        EmployeeTermination t = existingTermination(10L);
+        assertCode(() -> terminationService.changeStatus(8L, new TerminationService.StatusForm(
+                EmployeeTermination.EStatus.PENDING, false, null, null)), EEmployeeError.EMP_096);
+        var approved = terminationService.changeStatus(8L, new TerminationService.StatusForm(
+                EmployeeTermination.EStatus.APPROVED, false, null, null));
+        assertThat(approved.completedAt()).isEqualTo(clock.instant());
+        assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.TERMINATED);
+        assertCode(() -> terminationService.changeStatus(8L, new TerminationService.StatusForm(
+                EmployeeTermination.EStatus.REJECTED, false, null, null)), EEmployeeError.EMP_096);
+        assertCode(() -> terminationService.delete(8L), EEmployeeError.EMP_046);
+        assertThat(t.getStatus()).isEqualTo(EmployeeTermination.EStatus.APPROVED);
+    }
+
+    @Test
+    void anotherCompanysSeparationIsNotFound() {
+        existingTermination(11L);
+        assertCode(() -> terminationService.changeStatus(8L, new TerminationService.StatusForm(
+                EmployeeTermination.EStatus.APPROVED, false, null, null)), EEmployeeError.EMP_056);
+        assertThat(employee.getStatus()).isEqualTo(EEmployeeStatus.ACTIVE);
+    }
+
+    private EmployeeTermination existingTermination(Long companyId) {
+        EmployeeTermination t = new EmployeeTermination();
+        t.setId(8L);
+        t.setCompanyId(companyId);
+        t.setEmployeeId(1L);
+        t.setTerminationTypeId(5L);
+        t.setTerminationDate(DAY);
+        when(terminations.findByIdAndDeletedFalse(8L)).thenReturn(Optional.of(t));
+        return t;
     }
 
     @Test
@@ -142,7 +192,7 @@ class SeparationTest {
         });
         var t = terminationService.create(new TerminationForm(1L, 5L, DAY, DAY.plusDays(30), " 30 days ", null, null,
                 null));
-        assertThat(t.status()).isEqualTo(EmployeeTermination.EStatus.PLANNED);
+        assertThat(t.status()).isEqualTo(EmployeeTermination.EStatus.PENDING);
         assertThat(t.terminationType().name()).isEqualTo("Layoff");
         assertThat(t.noticePeriod()).isEqualTo("30 days");
     }

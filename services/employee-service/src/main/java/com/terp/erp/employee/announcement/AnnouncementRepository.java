@@ -24,13 +24,15 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
             + "and (:featured is null or a.featured = :featured) "
             + "and (:highPriority is null or a.highPriority = :highPriority) "
             + "and (:startAfter is null or a.startDate > :startAfter) "
+            + "and (:status is null or a.status = :status) "
             + "and (:kw = '' or lower(a.title) like :kw escape '!' or lower(a.shortDescription) like :kw escape '!')")
     Page<Announcement> search(Long companyId, Long categoryId, Long branchId, Long departmentId, LocalDate from,
-                              LocalDate to, Boolean featured, Boolean highPriority, LocalDate startAfter, String kw,
-                              Pageable pageable);
+                              LocalDate to, Boolean featured, Boolean highPriority, LocalDate startAfter,
+                              EAnnouncementStatus status, String kw, Pageable pageable);
 
-    /** Employee feed: active today and reaching the employee's branch or department (union), or company-wide. */
+    /** Employee feed: ACTIVE, inside its dates today, reaching the employee's branch or department or everyone. */
     @Query("select a from Announcement a where a.companyId = :companyId and a.deleted = false "
+            + "and a.status = com.terp.erp.employee.announcement.EAnnouncementStatus.ACTIVE "
             + "and a.startDate <= :today and a.endDate >= :today "
             + "and (a.companyWide = true or (:branchId is not null and :branchId member of a.branchIds) "
             + "or (:departmentId is not null and :departmentId member of a.departmentIds)) "

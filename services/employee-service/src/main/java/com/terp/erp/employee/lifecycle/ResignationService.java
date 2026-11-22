@@ -26,8 +26,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Resignations page (docs/analysis/06 §7.2.5). The status moves freely until COMPLETED, which terminates the employee
- * at once (and locks the login) and locks the record (PO, 2026-11-20).
+ * Resignations page (docs/analysis/06 §7.2.5, FR-ERP-CAR-001). PENDING -> ACCEPTED | REJECTED, once (EMP_096).
+ * ACCEPTED terminates the employee at once (and locks the login); a decided record is locked (EMP_046) except for
+ * its exit interview.
  */
 @Service
 @RequiredArgsConstructor
@@ -58,10 +59,20 @@ public class ResignationService {
             @Schema(description = "Media library file id") Long documentMediaId) {
     }
 
+    static final Map<EStatus, java.util.Set<EStatus>> MOVES = Map.of(
+            EStatus.PENDING, java.util.EnumSet.of(EStatus.ACCEPTED, EStatus.REJECTED));
+
     public record StatusForm(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
-                    description = "COMPLETED terminates the employee now and locks the record") @NotNull
+                    description = "ACCEPTED (terminates the employee now) or REJECTED; only from PENDING") @NotNull
             EStatus status,
+            boolean exitInterviewConducted,
+            LocalDate exitInterviewDate,
+            @Size(max = 5000) String exitFeedback) {
+    }
+
+    /** The exit interview alone; recordable at any status (it usually happens after the decision). */
+    public record ExitInterviewForm(
             boolean exitInterviewConducted,
             LocalDate exitInterviewDate,
             @Size(max = 5000) String exitFeedback) {
@@ -103,7 +114,7 @@ public class ResignationService {
         return detail(resignations.save(r));
     }
 
-    /** Full replacement of the form until completed; status and exit interview are kept. */
+    /** Full replacement of the form while PENDING; status and exit interview are kept. */
     @Transactional
     public ResignationDto update(Long id, ResignationForm form) {
         EmployeeResignation r = requireOpen(id);
@@ -113,13 +124,21 @@ public class ResignationService {
 
     @Transactional
     public ResignationDto changeStatus(Long id, StatusForm f) {
-        EmployeeResignation r = requireOpen(id);
+        EmployeeResignation r = require(id);
+        LifecycleSupport.assertMove(MOVES, r.getStatus(), f.status());
         EmployeeExit.interview(r, f.exitInterviewConducted(), f.exitInterviewDate(), f.exitFeedback());
-        if (f.status() == EStatus.COMPLETED) {
+        if (f.status() == EStatus.ACCEPTED) {
             exit.terminate(support.employee(r.getEmployeeId()));
             r.setCompletedAt(clock.instant());
         }
         r.setStatus(f.status());
+        return detail(r);
+    }
+
+    @Transactional
+    public ResignationDto exitInterview(Long id, ExitInterviewForm f) {
+        EmployeeResignation r = require(id);
+        EmployeeExit.interview(r, f.exitInterviewConducted(), f.exitInterviewDate(), f.exitFeedback());
         return detail(r);
     }
 
@@ -158,7 +177,7 @@ public class ResignationService {
 
     private EmployeeResignation requireOpen(Long id) {
         EmployeeResignation r = require(id);
-        EmployeeExit.assertOpen(r.getStatus() == EStatus.COMPLETED);
+        EmployeeExit.assertOpen(r.getStatus() != EStatus.PENDING);
         return r;
     }
 

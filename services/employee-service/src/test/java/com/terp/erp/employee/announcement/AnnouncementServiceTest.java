@@ -247,7 +247,7 @@ class AnnouncementServiceTest {
     private static AnnouncementForm form(String content, boolean companyWide, List<Long> branchIds,
                                          List<Long> departmentIds) {
         return new AnnouncementForm(" Party ", 1L, null, content, TODAY_VN, TODAY_VN.plusDays(3), null, true, false,
-                companyWide, branchIds, departmentIds);
+                companyWide, branchIds, departmentIds, null);
     }
 
     private static Announcement announcement(LocalDate start, LocalDate end) {

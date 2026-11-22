@@ -104,6 +104,7 @@ public class AnnouncementService {
         Long companyId = company(requestedCompanyId);
         Announcement a = new Announcement();
         a.setCompanyId(companyId);
+        a.setStatus(form.status() == null ? EAnnouncementStatus.ACTIVE : form.status());
         apply(a, form);
         announcements.save(a);
         return detail(a, stats(a));
@@ -120,6 +121,22 @@ public class AnnouncementService {
     @Transactional
     public void delete(Long id) {
         require(id).setDeleted(true);
+    }
+
+    /** DRAFT or INACTIVE becomes ACTIVE (shown to employees inside its dates); already ACTIVE = no change. */
+    @Transactional
+    public AnnouncementDto activate(Long id) {
+        Announcement a = require(id);
+        a.setStatus(EAnnouncementStatus.ACTIVE);
+        return detail(a, stats(a));
+    }
+
+    /** Hidden from employees at once; views are kept. */
+    @Transactional
+    public AnnouncementDto deactivate(Long id) {
+        Announcement a = require(id);
+        a.setStatus(EAnnouncementStatus.INACTIVE);
+        return detail(a, stats(a));
     }
 
     // ------------------------------------------------------------------ employee feed
@@ -140,6 +157,7 @@ public class AnnouncementService {
         Employee me = me();
         Announcement a = announcements.findByIdAndDeletedFalse(id)
                 .filter(x -> Objects.equals(x.getCompanyId(), me.getCompanyId()) && reaches(x, me)
+                        && x.getStatus() == EAnnouncementStatus.ACTIVE
                         && EAnnouncementState.of(x.getStartDate(), x.getEndDate(), today()) == EAnnouncementState.ACTIVE)
                 .orElseThrow(() -> ApiException.notFound(EEmployeeError.EMP_037));
         views.recordFirstView(a.getId(), me.getId(), clock.instant());
@@ -209,7 +227,7 @@ public class AnnouncementService {
         ETab t = tab == null ? ETab.ALL : tab;
         return announcements.search(companyId, f.categoryId(), f.branchId(), f.departmentId(), f.dateFrom(),
                 f.dateTo(), t == ETab.FEATURED ? Boolean.TRUE : null, t == ETab.HIGH_PRIORITY ? Boolean.TRUE : null,
-                t == ETab.UPCOMING ? today() : null, DepartmentService.kw(f.keyword()), pageable);
+                t == ETab.UPCOMING ? today() : null, f.status(), DepartmentService.kw(f.keyword()), pageable);
     }
 
     private void apply(Announcement a, AnnouncementForm f) {
@@ -325,7 +343,7 @@ public class AnnouncementService {
         return new AnnouncementDto(a.getId().toString(), a.getCompanyId().toString(), a.getTitle(),
                 c == null ? null : CategoryDto.of(c), a.getShortDescription(),
                 HtmlSanitizer.preview(a.getContent(), PREVIEW_CHARS), detail ? a.getContent() : null,
-                a.getStartDate(), a.getEndDate(), EAnnouncementState.of(a.getStartDate(), a.getEndDate(), today()),
+                a.getStartDate(), a.getEndDate(), a.getStatus(), EAnnouncementState.of(a.getStartDate(), a.getEndDate(), today()),
                 a.isFeatured(), a.isHighPriority(), a.isCompanyWide(), refs(a.getBranchIds(), n.branches()),
                 refs(a.getDepartmentIds(), n.departments()), attachmentDtos(a, detail, asService), stats, a.getCreatedDate(),
                 a.getUpdatedDate());

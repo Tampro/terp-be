@@ -38,7 +38,9 @@ public final class AnnouncementDtos {
      */
     public record AnnouncementDto(String id, String companyId, String title, CategoryDto category,
                                   String shortDescription, String contentPreview, String content, LocalDate startDate,
-                                  LocalDate endDate, EAnnouncementState state, boolean featured, boolean highPriority,
+                                  LocalDate endDate, EAnnouncementStatus status,
+                                  @Schema(description = "From the dates; meaningful for ACTIVE ones")
+                                  EAnnouncementState state, boolean featured, boolean highPriority,
                                   boolean companyWide, List<Ref> branches, List<Ref> departments,
                                   List<AttachmentDto> attachments, Stats stats, Instant createdDate,
                                   Instant updatedDate) {
@@ -73,7 +75,9 @@ public final class AnnouncementDtos {
             boolean companyWide,
             @Schema(description = "Audience = employees of any of these branches or any of the departments")
             @Size(max = 200) List<@NotNull Long> branchIds,
-            @Size(max = 500) List<@NotNull Long> departmentIds) {
+            @Size(max = 500) List<@NotNull Long> departmentIds,
+            @Schema(description = "Initial status on create (omitted = ACTIVE); ignored on edit, use activate / "
+                    + "deactivate") EAnnouncementStatus status) {
     }
 
     public record CategoryForm(
@@ -85,7 +89,11 @@ public final class AnnouncementDtos {
 
     /** Admin list filters. tab narrows to HIGH_PRIORITY, FEATURED or UPCOMING (dashboard tabs). */
     public record Filter(String keyword, Long categoryId, Long branchId, Long departmentId, LocalDate dateFrom,
-                         LocalDate dateTo, ETab tab) {
+                         LocalDate dateTo, ETab tab, EAnnouncementStatus status) {
+        public Filter(String keyword, Long categoryId, Long branchId, Long departmentId, LocalDate dateFrom,
+                      LocalDate dateTo, ETab tab) {
+            this(keyword, categoryId, branchId, departmentId, dateFrom, dateTo, tab, null);
+        }
     }
 
     public enum ETab {

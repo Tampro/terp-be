@@ -68,9 +68,11 @@ public class AnnouncementController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) ETab tab,
+            @Parameter(description = "DRAFT, ACTIVE or INACTIVE; omitted = all")
+            @RequestParam(required = false) EAnnouncementStatus status,
             @ParameterObject @PageableDefault(size = 20, sort = "startDate", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        Filter f = new Filter(keyword, categoryId, branchId, departmentId, dateFrom, dateTo, tab);
+        Filter f = new Filter(keyword, categoryId, branchId, departmentId, dateFrom, dateTo, tab, status);
         return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, f, pageable)));
     }
 
@@ -86,12 +88,14 @@ public class AnnouncementController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
-        Filter f = new Filter(keyword, categoryId, branchId, departmentId, dateFrom, dateTo, null);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) EAnnouncementStatus status) {
+        Filter f = new Filter(keyword, categoryId, branchId, departmentId, dateFrom, dateTo, null, status);
         return ApiMessageDto.ok(service.tabCounts(companyId, f));
     }
 
-    @Operation(summary = "My announcements: active ones reaching my branch or department, or company-wide",
+    @Operation(summary = "My announcements: ACTIVE ones inside their dates reaching my branch or department, or "
+            + "company-wide",
             description = "For every employee with a profile; no permission needed. tab = ALL, HIGH_PRIORITY or FEATURED.")
     @ApiResponses(@ApiResponse(responseCode = "403", description = "No employee profile in the company (EMP_041)"))
     @PreAuthorize("isAuthenticated()")
@@ -108,7 +112,8 @@ public class AnnouncementController {
             description = "The first open of each employee is one view of the statistics.")
     @ApiResponses({
             @ApiResponse(responseCode = "403", description = "No employee profile in the company (EMP_041)"),
-            @ApiResponse(responseCode = "404", description = "Not active or not addressed to you (EMP_037)")})
+            @ApiResponse(responseCode = "404", description = "Draft / inactive, outside its dates or not addressed "
+                    + "to you (EMP_037)")})
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/announcements/my/{id}")
     public ApiMessageDto<AnnouncementDto> read(@PathVariable Long id) {
@@ -155,6 +160,24 @@ public class AnnouncementController {
     @PutMapping("/announcements/{id}")
     public ApiMessageDto<AnnouncementDto> update(@PathVariable Long id, @Valid @RequestBody AnnouncementForm form) {
         return ApiMessageDto.ok(service.update(id, form));
+    }
+
+    @Operation(summary = "Activate an announcement (status ACTIVE)",
+            description = "From DRAFT or INACTIVE; employees see it while today is inside its dates.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such announcement in your company (EMP_037)"))
+    @PreAuthorize("@PermissionChecker.has('ANNOUNCEMENT_MANAGE')")
+    @PutMapping("/announcements/{id}/activate")
+    public ApiMessageDto<AnnouncementDto> activate(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.activate(id));
+    }
+
+    @Operation(summary = "Deactivate an announcement (status INACTIVE)",
+            description = "Hidden from employees at once; views are kept.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such announcement in your company (EMP_037)"))
+    @PreAuthorize("@PermissionChecker.has('ANNOUNCEMENT_MANAGE')")
+    @PutMapping("/announcements/{id}/deactivate")
+    public ApiMessageDto<AnnouncementDto> deactivate(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.deactivate(id));
     }
 
     @Operation(summary = "Delete an announcement")

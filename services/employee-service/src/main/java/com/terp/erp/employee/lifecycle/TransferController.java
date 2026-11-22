@@ -56,14 +56,14 @@ public class TransferController {
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) EDecision status,
+            @RequestParam(required = false) ETransferStatus status,
             @ParameterObject @PageableDefault(size = 20, sort = "transferDate", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ApiMessageDto.ok(ResponseListDto.of(
                 service.search(companyId, keyword, departmentId, from, to, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Pending, Approved, Rejected)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, Approved, In Progress, Rejected, Cancelled)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
     @GetMapping("/status-counts")
@@ -96,7 +96,7 @@ public class TransferController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a pending transfer", description = "Full replacement.")
+    @Operation(summary = "Edit an open transfer", description = "Full replacement; while PENDING or IN_PROGRESS.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Already decided (EMP_046), " + CHAIN + ", EMP_049, "
                     + "EMP_012"),
@@ -107,9 +107,10 @@ public class TransferController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Approve: the employee moves to the new placement now")
+    @Operation(summary = "Approve: the employee moves to the new placement now",
+            description = "From PENDING or IN_PROGRESS.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Already decided (EMP_046); the placement no longer "
+            @ApiResponse(responseCode = "400", description = "Move not allowed (EMP_096); the placement no longer "
                     + "valid or no change since the employee moved: " + CHAIN),
             @ApiResponse(responseCode = "404", description = "No such transfer in your company (EMP_045)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
@@ -118,14 +119,34 @@ public class TransferController {
         return ApiMessageDto.ok(service.approve(id));
     }
 
-    @Operation(summary = "Reject")
+    @Operation(summary = "Reject", description = "From PENDING or IN_PROGRESS.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Already decided (EMP_046)"),
+            @ApiResponse(responseCode = "400", description = "Move not allowed (EMP_096)"),
             @ApiResponse(responseCode = "404", description = "No such transfer in your company (EMP_045)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/reject")
     public ApiMessageDto<TransferDto> reject(@PathVariable Long id) {
         return ApiMessageDto.ok(service.reject(id));
+    }
+
+    @Operation(summary = "Start processing (PENDING -> IN_PROGRESS)", description = "Still editable and decidable.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Move not allowed (EMP_096)"),
+            @ApiResponse(responseCode = "404", description = "No such transfer in your company (EMP_045)")})
+    @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
+    @PutMapping("/{id}/start")
+    public ApiMessageDto<TransferDto> start(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.start(id));
+    }
+
+    @Operation(summary = "Cancel (from PENDING or IN_PROGRESS)", description = "The employee stays where they are.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Move not allowed (EMP_096)"),
+            @ApiResponse(responseCode = "404", description = "No such transfer in your company (EMP_045)")})
+    @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
+    @PutMapping("/{id}/cancel")
+    public ApiMessageDto<TransferDto> cancel(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.cancel(id));
     }
 
     @Operation(summary = "Delete a pending transfer")

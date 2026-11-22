@@ -36,9 +36,14 @@ public final class EmployeeDtos {
     public record StatusCounts(long all, long active, long inactive, long probation, long terminated) {
     }
 
+    /** Employment-type tabs (Full Time, Part Time, Temporary, Contract, ...); every type is present, 0 when none. */
+    public record TypeCounts(long all, java.util.Map<EEmploymentType, Long> byType) {
+    }
+
     /** Present only for callers with EMPLOYEE_BANKING_VIEW; otherwise the field is null. */
     public record BankingDto(String bankName, String accountHolderName, String accountNumber, String bankIdentifierCode,
-                             String bankBranch, String taxPayerId, BigDecimal baseSalary) {
+                             String bankBranch, String taxPayerId, BigDecimal baseSalary, BigDecimal hoursPerDay,
+                             Integer daysPerWeek, BigDecimal ratePerHour) {
     }
 
     public record DocumentDto(String id, Ref documentType, String fileId, String fileName, String mimeType,
@@ -73,7 +78,13 @@ public final class EmployeeDtos {
             @Schema(description = "BIC / SWIFT", example = "BFTVVNVX") @Size(max = 20) String bankIdentifierCode,
             @Schema(example = "Ha Noi") @Size(max = 150) String bankBranch,
             @Schema(description = "Stored encrypted", example = "8000000000") @Size(max = 50) String taxPayerId,
-            @Schema(example = "15000000") @DecimalMin("0") BigDecimal baseSalary) {
+            @Schema(example = "15000000") @DecimalMin("0") BigDecimal baseSalary,
+            @Schema(description = "Hours & Rates: working hours per day", example = "8")
+            @DecimalMin("0") @jakarta.validation.constraints.DecimalMax("24") BigDecimal hoursPerDay,
+            @Schema(description = "Hours & Rates: working days per week", example = "5")
+            @jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(7) Integer daysPerWeek,
+            @Schema(description = "Hours & Rates: pay per hour", example = "85000") @DecimalMin("0")
+            BigDecimal ratePerHour) {
     }
 
     /** Everything an administrator edits after creation (email and password are not here: they are the login). */
@@ -159,14 +170,27 @@ public final class EmployeeDtos {
     /** ids = only these employees (other services resolving names in one call); null = no such filter. */
     public record Filter(String keyword, Long branchId, Long departmentId, Long designationId, EEmployeeStatus status,
                          @Schema(description = "true = only employees missing a Required document type")
-                         Boolean missingRequiredDocuments, java.util.Set<Long> ids) {
+                         Boolean missingRequiredDocuments, java.util.Set<Long> ids,
+                         @Schema(description = "The employment-type tab") EEmploymentType employmentType,
+                         EGender gender) {
         public Filter(String keyword, Long branchId, Long departmentId, Long designationId, EEmployeeStatus status) {
-            this(keyword, branchId, departmentId, designationId, status, null, null);
+            this(keyword, branchId, departmentId, designationId, status, null, null, null, null);
         }
 
         public Filter(String keyword, Long branchId, Long departmentId, Long designationId, EEmployeeStatus status,
                       Boolean missingRequiredDocuments) {
-            this(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, null);
+            this(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, null, null, null);
+        }
+
+        public Filter(String keyword, Long branchId, Long departmentId, Long designationId, EEmployeeStatus status,
+                      Boolean missingRequiredDocuments, java.util.Set<Long> ids) {
+            this(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, ids, null, null);
+        }
+
+        /** The same filters without the employment type (for the type tabs). */
+        public Filter withoutType() {
+            return new Filter(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, ids,
+                    null, gender);
         }
     }
 }

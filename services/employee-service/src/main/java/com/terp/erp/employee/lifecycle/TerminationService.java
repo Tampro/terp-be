@@ -28,9 +28,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Terminations page (docs/analysis/06 §7.2.6). Type from the company's termination-types list. The status moves
- * freely until COMPLETED, which terminates the employee at once (and locks the login) and locks the record
- * (PO, 2026-11-20).
+ * Terminations page (docs/analysis/06 §7.2.6, FR-ERP-CAR-001). Type from the company's termination-types list.
+ * PENDING -> APPROVED | REJECTED, once (EMP_096). APPROVED terminates the employee at once (and locks the login); a
+ * decided record is locked (EMP_046) except for its exit interview.
  */
 @Service
 @RequiredArgsConstructor
@@ -65,10 +65,20 @@ public class TerminationService {
             @Schema(description = "Media library file id") Long documentMediaId) {
     }
 
+    static final Map<EStatus, java.util.Set<EStatus>> MOVES = Map.of(
+            EStatus.PENDING, java.util.EnumSet.of(EStatus.APPROVED, EStatus.REJECTED));
+
     public record StatusForm(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
-                    description = "COMPLETED terminates the employee now and locks the record") @NotNull
+                    description = "APPROVED (terminates the employee now) or REJECTED; only from PENDING") @NotNull
             EStatus status,
+            boolean exitInterviewConducted,
+            LocalDate exitInterviewDate,
+            @Size(max = 5000) String exitFeedback) {
+    }
+
+    /** The exit interview alone; recordable at any status (it usually happens after the decision). */
+    public record ExitInterviewForm(
             boolean exitInterviewConducted,
             LocalDate exitInterviewDate,
             @Size(max = 5000) String exitFeedback) {
@@ -103,7 +113,7 @@ public class TerminationService {
         return detail(require(id));
     }
 
-    /** Starts as PLANNED. */
+    /** Starts as PENDING. */
     @Transactional
     public TerminationDto create(TerminationForm form) {
         EmployeeTermination t = new EmployeeTermination();
@@ -111,7 +121,7 @@ public class TerminationService {
         return detail(terminations.save(t));
     }
 
-    /** Full replacement of the form until completed; status and exit interview are kept. */
+    /** Full replacement of the form while PENDING; status and exit interview are kept. */
     @Transactional
     public TerminationDto update(Long id, TerminationForm form) {
         EmployeeTermination t = requireOpen(id);
@@ -121,13 +131,21 @@ public class TerminationService {
 
     @Transactional
     public TerminationDto changeStatus(Long id, StatusForm f) {
-        EmployeeTermination t = requireOpen(id);
+        EmployeeTermination t = require(id);
+        LifecycleSupport.assertMove(MOVES, t.getStatus(), f.status());
         EmployeeExit.interview(t, f.exitInterviewConducted(), f.exitInterviewDate(), f.exitFeedback());
-        if (f.status() == EStatus.COMPLETED) {
+        if (f.status() == EStatus.APPROVED) {
             exit.terminate(support.employee(t.getEmployeeId()));
             t.setCompletedAt(clock.instant());
         }
         t.setStatus(f.status());
+        return detail(t);
+    }
+
+    @Transactional
+    public TerminationDto exitInterview(Long id, ExitInterviewForm f) {
+        EmployeeTermination t = require(id);
+        EmployeeExit.interview(t, f.exitInterviewConducted(), f.exitInterviewDate(), f.exitFeedback());
         return detail(t);
     }
 
@@ -177,7 +195,7 @@ public class TerminationService {
 
     private EmployeeTermination requireOpen(Long id) {
         EmployeeTermination t = require(id);
-        EmployeeExit.assertOpen(t.getStatus() == EStatus.COMPLETED);
+        EmployeeExit.assertOpen(t.getStatus() != EStatus.PENDING);
         return t;
     }
 

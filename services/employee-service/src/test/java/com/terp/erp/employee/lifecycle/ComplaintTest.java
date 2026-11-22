@@ -81,7 +81,7 @@ class ComplaintTest {
         assertCode(() -> service.assign(9L, new AssignForm(2L, null)), EEmployeeError.EMP_069);
         assertCode(() -> service.assign(9L, new AssignForm(3L, DAY.minusDays(1))), EEmployeeError.EMP_052);
         var a = service.assign(9L, new AssignForm(3L, DAY.plusDays(7)));
-        assertThat(a.status()).isEqualTo(EStatus.UNDER_INVESTIGATION);
+        assertThat(a.status()).isEqualTo(EStatus.ASSIGNED);
         assertThat(a.assignment().assignedTo().id()).isEqualTo("3");
         // the accused cannot become the handler through an edit either
         assertCode(() -> service.update(9L, form(1L, 3L, false)), EEmployeeError.EMP_069);
@@ -105,6 +105,37 @@ class ComplaintTest {
         assertCode(() -> catalogs.delete(ELifecycleCatalogKind.RESOLUTION_TYPE, 6L), EEmployeeError.EMP_010);
         when(repo.existsByComplaintTypeIdAndDeletedFalse(5L)).thenReturn(true);
         assertCode(() -> catalogs.delete(ELifecycleCatalogKind.COMPLAINT_TYPE, 5L), EEmployeeError.EMP_010);
+    }
+
+    @Test
+    void transitionTable() {
+        var c = service.create(form(1L, 2L, false));
+        assertThat(c.status()).isEqualTo(EStatus.PENDING);
+        // PENDING: cannot jump to IN_PROGRESS, cannot be resolved, cannot set ASSIGNED / RESOLVED by plain status
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_PROGRESS), EEmployeeError.EMP_096);
+        assertCode(() -> service.changeStatus(9L, EStatus.ASSIGNED), EEmployeeError.EMP_096);
+        assertCode(() -> service.changeStatus(9L, EStatus.RESOLVED), EEmployeeError.EMP_096);
+        assertCode(() -> service.resolve(9L, new ResolveForm(6L, null, null, DAY, null, null)),
+                EEmployeeError.EMP_096);
+        assertThat(service.changeStatus(9L, EStatus.IN_REVIEW).status()).isEqualTo(EStatus.IN_REVIEW);
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_PROGRESS), EEmployeeError.EMP_096);
+        assertThat(service.assign(9L, new AssignForm(3L, null)).status()).isEqualTo(EStatus.ASSIGNED);
+        assertThat(service.changeStatus(9L, EStatus.IN_PROGRESS).status()).isEqualTo(EStatus.IN_PROGRESS);
+        assertThat(service.resolve(9L, new ResolveForm(6L, null, null, DAY, null, null)).status())
+                .isEqualTo(EStatus.RESOLVED);
+        // RESOLVED is final except for correcting the resolution
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_REVIEW), EEmployeeError.EMP_096);
+        assertCode(() -> service.assign(9L, new AssignForm(3L, null)), EEmployeeError.EMP_096);
+        assertThat(service.resolve(9L, new ResolveForm(6L, "fix", null, DAY, null, null)).status())
+                .isEqualTo(EStatus.RESOLVED);
+    }
+
+    @Test
+    void anotherCompanysComplaintIsNotFoundForStateActions() {
+        service.create(form(1L, 2L, false));
+        TestLogin.as(11L, "LIFECYCLE_MANAGE");
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_REVIEW), EEmployeeError.EMP_067);
+        assertCode(() -> service.assign(9L, new AssignForm(3L, null)), EEmployeeError.EMP_067);
     }
 
     private static ComplaintForm form(Long complainant, Long against, boolean anonymous) {

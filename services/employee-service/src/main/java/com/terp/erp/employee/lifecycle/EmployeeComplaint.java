@@ -17,7 +17,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_complaint")
 public class EmployeeComplaint extends BaseAuditableEntity {
-    public enum EStatus { SUBMITTED, UNDER_INVESTIGATION, RESOLVED, DISMISSED }
+    /** FR-ERP-ISS-001 / manual §15: Pending, In Review, Assigned, In Progress, Resolved. */
+    public enum EStatus { PENDING, IN_REVIEW, ASSIGNED, IN_PROGRESS, RESOLVED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
@@ -50,7 +51,7 @@ public class EmployeeComplaint extends BaseAuditableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private EStatus status = EStatus.SUBMITTED;
+    private EStatus status = EStatus.PENDING;
 
     @Column(name = "assigned_to_id")
     private Long assignedToId;

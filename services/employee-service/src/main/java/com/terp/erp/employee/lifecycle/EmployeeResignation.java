@@ -16,7 +16,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_resignation")
 public class EmployeeResignation extends SeparationRecord {
-    public enum EStatus { PENDING, APPROVED, REJECTED, COMPLETED }
+    /** FR-ERP-CAR-001: Pending -> Accepted | Rejected; ACCEPTED ends the employment. */
+    public enum EStatus { PENDING, ACCEPTED, REJECTED }
 
     @Column(name = "resignation_date", nullable = false)
     private LocalDate resignationDate;

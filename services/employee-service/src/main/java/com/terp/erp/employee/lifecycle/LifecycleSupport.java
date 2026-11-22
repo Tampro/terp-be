@@ -12,6 +12,7 @@ import com.terp.erp.security.TenantGuard;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** What every Employee Lifecycle page (docs/analysis/06 §7.2) shares: the employee column and attached files. */
@@ -30,6 +31,26 @@ public class LifecycleSupport {
     }
 
     public record Ref(String id, String name) {
+    }
+
+    /**
+     * Refuses a status move the entity's table does not allow (400 EMP_096 "from X to Y").
+     * TODO(assumption): the transition tables follow the ERP manual §15 (FR-ERP-ISS/CAR/REC-001); confirm with BA.
+     */
+    public static <E extends Enum<E>> void assertMove(Map<E, Set<E>> allowed, E from, E to) {
+        if (!allowed.getOrDefault(from, Set.of()).contains(to)) {
+            throw ApiException.badRequest(EEmployeeError.EMP_096, from.name(), to.name());
+        }
+    }
+
+    /** The caller's own employee profile in their company (403 EMP_041 without one), like the announcement feed. */
+    public Employee me() {
+        com.terp.erp.security.ErpPrincipal p = com.terp.erp.security.CurrentUser.get();
+        if (p.companyId() == null || p.userId() == null) {
+            throw ApiException.forbidden(EEmployeeError.EMP_041);
+        }
+        return employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(p.companyId(), p.userId())
+                .orElseThrow(() -> ApiException.forbidden(EEmployeeError.EMP_041));
     }
 
     public static Long company(Long requested) {
