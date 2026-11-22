@@ -42,6 +42,8 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
 
     Optional<TrainingSession> findByIdAndDeletedFalse(Long id);
 
+    boolean existsByTrainerIdAndDeletedFalse(Long trainerId);
+
     boolean existsByProgramIdAndDeletedFalse(Long programId);
 
     /** [programId, status, count] for the program cards. */

@@ -48,7 +48,8 @@ import java.util.stream.Collectors;
 
 /**
  * Training Sessions page and calendar (docs/analysis/06 §7.4.2). A new session needs a draft or active program
- * (EMP_083); trainers are employees of the company; end after start (EMP_052). A recurring session is saved as
+ * (EMP_083); trainers are employees of the company; the optional trainerId is an active entry of the company's
+ * trainer list (EMP_101); end after start (EMP_052). Status IN_PROGRESS is the manual's "Ongoing". A recurring session is saved as
  * copies sharing a series id (PO, 2026-11-20). Attendance lists the program's trainees (PO, 2026-11-20).
  */
 @Service
@@ -64,6 +65,8 @@ public class TrainingSessionService {
     private final TrainingProgramRepository programRepo;
     private final TrainingProgramService programs;
     private final LifecycleSupport support;
+    private final TrainerService trainerService;
+    private final TrainerRepository trainerRepo;
 
     public enum EFrequency { DAILY, WEEKLY, MONTHLY }
 
@@ -77,7 +80,7 @@ public class TrainingSessionService {
     /** durationMinutes = end − start; attendance (list of trainees) and program info only on the details. */
     public record SessionDto(String id, ProgramInfo program, String name, LocalDateTime startAt, LocalDateTime endAt,
                              long durationMinutes, ELocationType locationType, String location, String meetingLink,
-                             EStatus status, String notes, String seriesId, List<EmployeeRef> trainers,
+                             EStatus status, String notes, String seriesId, Ref trainer, List<EmployeeRef> trainers,
                              long attendees, List<AttendanceDto> attendance, String createdBy, Instant createdDate,
                              Instant updatedDate) {
     }
@@ -109,6 +112,8 @@ public class TrainingSessionService {
             @Schema(example = "https://meet.example.invalid/abc") @Size(max = 500) String meetingLink,
             @Schema(description = "Omitted = SCHEDULED on create, kept on edit") EStatus status,
             @Size(max = 5000) String notes,
+            @Schema(description = "Entry of /training/trainers (active, same company); optional", example = "4")
+            Long trainerId,
             @Schema(description = "Employee ids; full set") Set<@NotNull Long> trainerIds,
             @Schema(description = "Create only: repeat the session; ignored on edit") @Valid Recurrence recurrence) {
     }
@@ -198,6 +203,7 @@ public class TrainingSessionService {
             copy.setStatus(first.getStatus());
             copy.setNotes(first.getNotes());
             copy.setSeriesId(series);
+            copy.setTrainerId(first.getTrainerId());
             copy.getTrainerIds().addAll(first.getTrainerIds());
             sessions.save(copy);
         }
@@ -279,8 +285,11 @@ public class TrainingSessionService {
                 EmployeeExit.assertEmployed(e);
             }
         }
+        Long trainerId = f.trainerId() == null ? null
+                : trainerService.usable(f.trainerId(), p.getCompanyId(), s.getTrainerId()).getId();
         s.setCompanyId(p.getCompanyId());
         s.setProgramId(p.getId());
+        s.setTrainerId(trainerId);
         s.setName(f.name().trim());
         s.setStartAt(f.startAt());
         s.setEndAt(f.endAt());
@@ -304,14 +313,18 @@ public class TrainingSessionService {
     }
 
     private record Lookups(Map<Long, TrainingProgram> programs, Map<Long, EmployeeRef> people,
-                           Map<Long, Long> present) {
+                           Map<Long, Long> present, Map<Long, String> trainerNames) {
     }
 
     private Lookups lookups(List<TrainingSession> list) {
         Set<Long> programIds = new HashSet<>();
         Set<Long> people = new HashSet<>();
+        Set<Long> trainerIds = new HashSet<>();
         for (TrainingSession s : list) {
             programIds.add(s.getProgramId());
+            if (s.getTrainerId() != null) {
+                trainerIds.add(s.getTrainerId());
+            }
             people.addAll(s.getTrainerIds());
         }
         Map<Long, Long> present = new HashMap<>();
@@ -322,7 +335,8 @@ public class TrainingSessionService {
         }
         return new Lookups(programRepo.findAllById(programIds).stream()
                 .collect(Collectors.toMap(TrainingProgram::getId, Function.identity())), support.refs(people),
-                present);
+                present, trainerIds.isEmpty() ? Map.of() : trainerRepo.findAllById(trainerIds).stream()
+                        .collect(Collectors.toMap(Trainer::getId, Trainer::getName)));
     }
 
     private SessionDto detail(TrainingSession s) {
@@ -354,7 +368,9 @@ public class TrainingSessionService {
                 .toList();
         return new SessionDto(s.getId().toString(), program, s.getName(), s.getStartAt(), s.getEndAt(),
                 Duration.between(s.getStartAt(), s.getEndAt()).toMinutes(), s.getLocationType(), s.getLocation(),
-                s.getMeetingLink(), s.getStatus(), s.getNotes(), s.getSeriesId(), trainers,
+                s.getMeetingLink(), s.getStatus(), s.getNotes(), s.getSeriesId(),
+                s.getTrainerId() == null ? null : new Ref(s.getTrainerId().toString(),
+                        l.trainerNames().get(s.getTrainerId())), trainers,
                 l.present().getOrDefault(s.getId(), 0L), rows, s.getCreatedBy(), s.getCreatedDate(),
                 s.getUpdatedDate());
     }

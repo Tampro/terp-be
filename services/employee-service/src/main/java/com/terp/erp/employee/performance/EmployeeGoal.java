@@ -17,7 +17,11 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_goal")
 public class EmployeeGoal extends BaseAuditableEntity {
-    public enum EStatus { NOT_STARTED, IN_PROGRESS, COMPLETED }
+    /**
+     * OVERDUE is never stored: a NOT_STARTED / IN_PROGRESS goal whose end date is before today (Vietnam time) reads
+     * as OVERDUE. TODO(assumption): derived rather than a stored status — confirm with BA.
+     */
+    public enum EStatus { NOT_STARTED, IN_PROGRESS, COMPLETED, OVERDUE }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;

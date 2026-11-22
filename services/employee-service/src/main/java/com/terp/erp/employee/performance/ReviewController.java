@@ -64,7 +64,7 @@ public class ReviewController {
                 service.search(companyId, keyword, cycleId, from, to, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Scheduled, In Progress, Completed)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, In Progress, Completed)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_VIEW')")
     @GetMapping("/status-counts")
@@ -87,7 +87,7 @@ public class ReviewController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Schedule a review (SCHEDULED or IN_PROGRESS)")
+    @Operation(summary = "Schedule a review (PENDING or IN_PROGRESS)")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Reviewer = employee (EMP_076), employee terminated "
                     + "(EMP_058), cycle not in the company (EMP_073) or inactive (EMP_054), COMPLETED given "
@@ -100,10 +100,10 @@ public class ReviewController {
     }
 
     @Operation(summary = "Edit the schedule", description = "Full replacement while not completed; status omitted = "
-            + "kept. Ratings are kept.")
+            + "kept and only moves forward. Ratings are kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), EMP_076, EMP_058, EMP_073, "
-                    + "EMP_054, EMP_079"),
+            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), status moved back (EMP_096), "
+                    + "EMP_076, EMP_058, EMP_073, EMP_054, EMP_079"),
             @ApiResponse(responseCode = "404", description = "No such review (EMP_075) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}")
@@ -112,11 +112,11 @@ public class ReviewController {
     }
 
     @Operation(summary = "Conduct Review", description = "Saves ratings (1 Poor – 5 Excellent) and comments of the "
-            + "listed indicators plus the overall comments; the overall rating is the weighted average of the rated "
-            + "indicators. submit = false keeps the review IN_PROGRESS; true completes it.")
+            + "listed indicators plus the overall comments, pros and cons (replaced); the overall rating is the weighted average of the rated "
+            + "indicators. submit = false moves a PENDING review to IN_PROGRESS; true completes it.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), indicator not in the review "
-                    + "(EMP_078), submit with an unrated indicator or none at all (EMP_079)"),
+            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), rating outside 1–5 (COMMON_001), "
+                    + "indicator not in the review (EMP_078), submit with an unrated indicator or none at all (EMP_079)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}/conduct")
@@ -124,10 +124,11 @@ public class ReviewController {
         return ApiMessageDto.ok(service.conduct(id, form));
     }
 
-    @Operation(summary = "Update Status", description = "COMPLETED needs every indicator rated; another status "
-            + "reopens a completed review for conducting.")
+    @Operation(summary = "Update Status", description = "PENDING -> IN_PROGRESS -> COMPLETED, forward only. "
+            + "COMPLETED needs every indicator rated and is read-only afterwards.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Not every indicator rated (EMP_079)"),
+            @ApiResponse(responseCode = "400", description = "Not every indicator rated (EMP_079), completed (EMP_077), "
+                    + "status moved back (EMP_096)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}/status")

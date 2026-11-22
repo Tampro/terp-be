@@ -22,6 +22,7 @@ import java.util.Set;
 @Entity
 @Table(name = "training_session")
 public class TrainingSession extends BaseAuditableEntity {
+    /** Manual 16 "Ongoing" is IN_PROGRESS. */
     public enum EStatus { SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED }
 
     /** TODO(assumption): the spec names a Location Type dropdown without its values — confirm with BA. */
@@ -63,6 +64,10 @@ public class TrainingSession extends BaseAuditableEntity {
     /** Shared by the copies of a recurring session. */
     @Column(name = "series_id", length = 36)
     private String seriesId;
+
+    /** Optional entry of the trainer list (FR-TRN-002), besides the employees conducting it. */
+    @Column(name = "trainer_id")
+    private Long trainerId;
 
     /** Employees conducting the session. */
     @ElementCollection

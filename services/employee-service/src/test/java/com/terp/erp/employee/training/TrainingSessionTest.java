@@ -49,8 +49,10 @@ class TrainingSessionTest {
     private final TrainingProgramService programs = new TrainingProgramService(programRepo, typeRepo,
             new TrainingTypeService(typeRepo, programRepo, mock(BranchRepository.class),
                     mock(DepartmentRepository.class)), support, trainingRepo, sessionRepo, mock(TrainingAssessmentRepository.class));
+    private final TrainerRepository trainerRepo = mock(TrainerRepository.class);
     private final TrainingSessionService service = new TrainingSessionService(sessionRepo, attendanceRepo,
-            trainingRepo, programRepo, programs, support);
+            trainingRepo, programRepo, programs, support, new TrainerService(trainerRepo, sessionRepo,
+            mock(BranchRepository.class), mock(DepartmentRepository.class)), trainerRepo);
 
     private TrainingProgram program;
 
@@ -120,6 +122,36 @@ class TrainingSessionTest {
     }
 
     @Test
+    void trainerMustBeAnActiveTrainerOfTheCompany() {
+        Trainer mine = trainer(4L, 10L, true);
+        Trainer other = trainer(6L, 20L, true);
+        Trainer inactive = trainer(7L, 10L, false);
+        for (Trainer t : List.of(mine, other, inactive)) {
+            when(trainerRepo.findByIdAndDeletedFalse(t.getId())).thenReturn(Optional.of(t));
+        }
+        when(trainerRepo.findAllById(any())).thenReturn(List.of(mine));
+        assertCode(() -> service.create(form(6L)), EEmployeeError.EMP_101);
+        assertCode(() -> service.create(form(7L)), EEmployeeError.EMP_101);
+        assertCode(() -> service.create(form(99L)), EEmployeeError.EMP_101);
+        var r = service.create(form(4L));
+        assertThat(r.session().trainer().id()).isEqualTo("4");
+        assertThat(r.session().trainer().name()).isEqualTo("Trainer 4");
+        // deactivated after being chosen: the session keeps it on edit
+        mine.setActive(false);
+        assertThat(service.update(9L, form(4L)).trainer().id()).isEqualTo("4");
+        assertThat(service.update(9L, form(null)).trainer()).isNull();
+    }
+
+    private static Trainer trainer(Long id, Long companyId, boolean active) {
+        Trainer t = new Trainer();
+        t.setId(id);
+        t.setCompanyId(companyId);
+        t.setName("Trainer " + id);
+        t.setActive(active);
+        return t;
+    }
+
+    @Test
     void attendanceOnlyForTrainees() {
         service.create(form(START.plusHours(1), null, null));
         assertCode(() -> service.updateAttendance(9L, List.of(new AttendanceItem(2L,
@@ -140,7 +172,12 @@ class TrainingSessionTest {
 
     private static SessionForm form(LocalDateTime end, Set<Long> trainers, Recurrence rec) {
         return new SessionForm(5L, " Module 1 ", START, end, ELocationType.IN_PERSON, "Room 3", null, null, null,
-                trainers, rec);
+                null, trainers, rec);
+    }
+
+    private static SessionForm form(Long trainerId) {
+        return new SessionForm(5L, "Module 1", START, START.plusHours(2), ELocationType.IN_PERSON, null, null, null,
+                null, trainerId, null, null);
     }
 
     private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, EEmployeeError code) {

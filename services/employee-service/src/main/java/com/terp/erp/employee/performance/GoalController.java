@@ -43,7 +43,8 @@ public class GoalController {
     private final GoalService service;
 
     @Operation(summary = "Goals of the company", description = "employeeId / goalTypeId = the filters; status = "
-            + "the tab.")
+            + "the tab; OVERDUE = NOT_STARTED / IN_PROGRESS goals whose end date is before today (Vietnam time), derived "
+            + "on read and shown as status OVERDUE (those goals leave their stored tab).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_VIEW')")
     @GetMapping
@@ -59,7 +60,7 @@ public class GoalController {
                 service.search(companyId, keyword, employeeId, goalTypeId, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Not Started, In Progress, Completed)")
+    @Operation(summary = "Counts of the status tabs (All, Not Started, In Progress, Completed, Overdue)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_VIEW')")
     @GetMapping("/status-counts")
@@ -82,7 +83,7 @@ public class GoalController {
     @Operation(summary = "Add a goal")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Employee terminated (EMP_058), goal type not in the "
-                    + "company's list (EMP_071) or inactive (EMP_054), end before start (EMP_052)"),
+                    + "company's list (EMP_071) or inactive (EMP_054), end before start (EMP_052), status OVERDUE given (EMP_099)"),
             @ApiResponse(responseCode = "404", description = "No such employee in your company (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PostMapping
@@ -92,7 +93,7 @@ public class GoalController {
 
     @Operation(summary = "Edit a goal", description = "Full replacement; status omitted = kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "EMP_058, EMP_071, EMP_054, EMP_052"),
+            @ApiResponse(responseCode = "400", description = "EMP_058, EMP_071, EMP_054, EMP_052, EMP_099"),
             @ApiResponse(responseCode = "404", description = "No such goal (EMP_074) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}")
