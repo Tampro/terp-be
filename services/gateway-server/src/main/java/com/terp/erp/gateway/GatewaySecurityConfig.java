@@ -54,6 +54,10 @@ public class GatewaySecurityConfig {
                         // Public career page: read and apply only, limited per IP (CareerRateLimitFilter).
                         .pathMatchers(HttpMethod.GET, "/api/v1/public/career/**").permitAll()
                         .pathMatchers(HttpMethod.POST, CareerRateLimitFilter.APPLY).permitAll()
+                        // Public form link: read the form and submit a response only, limited per IP
+                        // (PublicFormRateLimitFilter); project-service checks the form token and that it is active.
+                        .pathMatchers(HttpMethod.GET, "/api/v1/public/forms/*").permitAll()
+                        .pathMatchers(HttpMethod.POST, PublicFormRateLimitFilter.APPLY).permitAll()
                         .pathMatchers("/actuator/health/**").permitAll()
                         // API docs only (no data); the endpoints they describe still need a token.
                         .pathMatchers(HttpMethod.GET, swaggerEnabled ? SWAGGER_PATHS : new String[0]).permitAll()

@@ -36,6 +36,8 @@ services:
       ACCOUNTING_DB_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?set in .env}
       CRM_DB_USERNAME: ${CRM_DB_USERNAME:-erp_crm}
       CRM_DB_PASSWORD: ${CRM_DB_PASSWORD:?set in .env}
+      PROJECT_DB_USERNAME: ${PROJECT_DB_USERNAME:-erp_project}
+      PROJECT_DB_PASSWORD: ${PROJECT_DB_PASSWORD:?set in .env}
     ports:
       - "13316:3306"
     volumes:
@@ -296,6 +298,9 @@ services:
       PAYROLL_SERVICE_URL: http://payroll-service:8086
       ASSET_SERVICE_URL: http://asset-service:8087
       MEETING_SERVICE_URL: http://meeting-service:8088
+      COMMERCE_SERVICE_URL: http://commerce-service:8092
+      CRM_SERVICE_URL: http://crm-service:8094
+      PROJECT_SERVICE_URL: http://project-service:8095
     ports:
       - "18090:8090"
     depends_on:
@@ -380,6 +385,27 @@ services:
       keycloak:
         condition: service_healthy
 
+  project-service:
+    build: ./services/project-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
+    environment:
+      PROJECT_DB_URL: jdbc:mysql://mysql:3306/erp_project?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      PROJECT_DB_USERNAME: ${PROJECT_DB_USERNAME:-erp_project}
+      PROJECT_DB_PASSWORD: ${PROJECT_DB_PASSWORD}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
+      IAM_SERVICE_URL: http://iam-service:8081
+      MEDIA_SERVICE_URL: http://media-service:8082
+      CRM_SERVICE_URL: http://crm-service:8094
+      ACCOUNTING_SERVICE_URL: http://accounting-service:8093
+    ports:
+      - "18095:8095"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
   gateway-server:
     build: ./services/gateway-server
     mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
@@ -400,6 +426,7 @@ services:
       COMMERCE_SERVICE_URL: http://commerce-service:8092
       ACCOUNTING_SERVICE_URL: http://accounting-service:8093
       CRM_SERVICE_URL: http://crm-service:8094
+      PROJECT_SERVICE_URL: http://project-service:8095
     ports:
       - "18080:8080"
     depends_on:

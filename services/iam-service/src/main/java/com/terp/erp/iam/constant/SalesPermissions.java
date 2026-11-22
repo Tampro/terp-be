@@ -32,6 +32,12 @@ public final class SalesPermissions {
     /** accounting-service: bank accounts and their transactions. */
     public static final Set<String> BANK = Set.of("BANK_VIEW", "BANK_MANAGE");
 
+    /** project-service: projects, milestones, tasks, bugs, project report. */
+    public static final Set<String> PROJECT = Set.of("PROJECT_VIEW", "PROJECT_MANAGE", "PROJECT_TASK_MANAGE");
+
+    /** project-service form builder: forms, responses, convert. */
+    public static final Set<String> FORM = Set.of("FORM_VIEW", "FORM_MANAGE");
+
     public static final Set<String> ALL;
 
     static {
@@ -45,6 +51,8 @@ public final class SalesPermissions {
         all.addAll(VENDOR);
         all.addAll(POS);
         all.addAll(BANK);
+        all.addAll(PROJECT);
+        all.addAll(FORM);
         ALL = Set.copyOf(all);
     }
 
