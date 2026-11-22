@@ -17,6 +17,8 @@ import com.terp.erp.document.common.EDocumentError;
 import com.terp.erp.document.common.EStatus;
 import com.terp.erp.document.common.Texts;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -41,10 +43,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class HrDocumentService {
     static final int EXPIRING_DAYS = 30;
+    /** Managers may download a document in any stage (to review it before approving). */
+    static final String MANAGE = "DOCUMENT_MANAGE";
 
     private final HrDocumentRepository documents;
     private final DocumentCategoryRepository categories;
     private final MediaClient media;
+    private final AcknowledgmentRepository acks;
     private final Clock clock;
 
     public record DocumentForm(
@@ -69,8 +74,12 @@ public class HrDocumentService {
     /** status = effective (EXPIRED once past the expiry date unless archived); storedStatus = as set. */
     public record DocumentDto(String id, String title, CategoryRef category, String description, FileRef file,
                               LocalDate effectiveDate, LocalDate expiryDate, boolean requiresAcknowledgment,
-                              HrDocument.EStatus status, HrDocument.EStatus storedStatus, Instant createdDate,
-                              Instant updatedDate) {
+                              HrDocument.EStatus status, HrDocument.EStatus storedStatus, String decidedByName,
+                              Instant decidedAt, String decisionComment, Instant createdDate, Instant updatedDate) {
+    }
+
+    public record DecisionForm(@Schema(description = "Optional comment", example = "Checked with legal")
+                               @Size(max = 1000) String comment) {
     }
 
     public record StatusCounts(long all, Map<HrDocument.EStatus, Long> byStatus) {
@@ -134,18 +143,70 @@ public class HrDocumentService {
         return detail(require(id));
     }
 
-    /** Download: a signed, time-limited link of the media library. */
+    /**
+     * Download: a signed, time-limited link of the media library. FR-ERP-DOC-001 / ACK-001: without DOCUMENT_MANAGE
+     * only an APPROVED or PUBLISHED (effective) document (DOC_025), and not while the caller still has a pending
+     * acknowledgment for it (DOC_026).
+     */
     @Transactional(readOnly = true)
     public Download download(Long id) {
         HrDocument d = require(id);
+        ErpPrincipal me = CurrentUser.find().orElse(null);
+        if (me == null || !me.has(MANAGE)) {
+            assertDownloadable(d);
+            if (me != null && me.userId() != null && acks.existsByDocumentIdAndEmployeeUserIdAndStatusAndDeletedFalse(
+                    d.getId(), me.userId(), Acknowledgment.EStatus.PENDING)) {
+                throw ApiException.badRequest(EDocumentError.DOC_026);
+            }
+        }
+        return link(d);
+    }
+
+    /** APPROVED or PUBLISHED, read as effective (an expired one is refused). */
+    void assertDownloadable(HrDocument d) {
+        HrDocument.EStatus s = effective(d);
+        if (s != HrDocument.EStatus.APPROVED && s != HrDocument.EStatus.PUBLISHED) {
+            throw ApiException.badRequest(EDocumentError.DOC_025);
+        }
+    }
+
+    Download link(HrDocument d) {
         MediaFile f = media.require(d.getFileId(), d.getCompanyId());
         return new Download(f.downloadUrl());
+    }
+
+    /** Approve (FR-ERP-DOC-001): PENDING only (DOC_024). */
+    @Transactional
+    public DocumentDto approve(Long id, DecisionForm form) {
+        return decide(id, HrDocument.EStatus.APPROVED, form);
+    }
+
+    /** Reject (FR-ERP-DOC-001): PENDING only (DOC_024). */
+    @Transactional
+    public DocumentDto reject(Long id, DecisionForm form) {
+        return decide(id, HrDocument.EStatus.REJECTED, form);
+    }
+
+    private DocumentDto decide(Long id, HrDocument.EStatus to, DecisionForm form) {
+        HrDocument d = require(id);
+        if (d.getStatus() != HrDocument.EStatus.PENDING) {
+            throw ApiException.badRequest(EDocumentError.DOC_024);
+        }
+        ErpPrincipal me = CurrentUser.find().orElse(null);
+        d.setStatus(to);
+        d.setDecidedBy(me == null ? null : me.keycloakId());
+        d.setDecidedByName(me == null ? null : me.username());
+        d.setDecidedAt(clock.instant());
+        d.setDecisionComment(form == null ? null : Texts.blankToNull(form.comment()));
+        return detail(d);
     }
 
     @Transactional
     public DocumentDto create(Long requestedCompanyId, DocumentForm form) {
         HrDocument d = new HrDocument();
         d.setCompanyId(Texts.company(requestedCompanyId));
+        // FR-ERP-DOC-001: an uploaded document waits for approval. TODO(assumption): was DRAFT before — confirm with BA.
+        d.setStatus(HrDocument.EStatus.PENDING);
         apply(d, form);
         return detail(documents.save(d));
     }
@@ -217,7 +278,8 @@ public class HrDocumentService {
         return new DocumentDto(d.getId().toString(), d.getTitle(),
                 c == null ? null : new CategoryRef(c.getId().toString(), c.getName(), c.getColor(), c.getIcon()),
                 d.getDescription(), file, d.getEffectiveDate(), d.getExpiryDate(), d.isRequiresAcknowledgment(),
-                effective(d), d.getStatus(), d.getCreatedDate(), d.getUpdatedDate());
+                effective(d), d.getStatus(), d.getDecidedByName(), d.getDecidedAt(), d.getDecisionComment(),
+                d.getCreatedDate(), d.getUpdatedDate());
     }
 
     private LocalDate today() {

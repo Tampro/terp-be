@@ -40,7 +40,8 @@ class HrDocumentServiceTest {
     private final MediaClient media = mock(MediaClient.class);
     private final AcknowledgmentRepository ackRepo = mock(AcknowledgmentRepository.class);
     private final EmployeeClient employees = mock(EmployeeClient.class);
-    private final HrDocumentService service = new HrDocumentService(documents, categories, media, CLOCK);
+    private final HrDocumentService service = new HrDocumentService(documents, categories, media, ackRepo,
+            CLOCK);
     private final AcknowledgmentService acks = new AcknowledgmentService(ackRepo, documents, service, employees,
             CLOCK);
     private final DocumentCategory policies = new DocumentCategory();
@@ -83,7 +84,7 @@ class HrDocumentServiceTest {
     void createTakesTheMandatoryFlagAndChecksTheFile() {
         var d = service.create(null, form(null, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31)));
         assertThat(d.requiresAcknowledgment()).isTrue();
-        assertThat(d.status()).isEqualTo(HrDocument.EStatus.DRAFT);
+        assertThat(d.status()).isEqualTo(HrDocument.EStatus.PENDING);
         verify(media).require(41L, 10L);
         assertCode(() -> service.create(null, form(null, LocalDate.of(2026, 12, 31), LocalDate.of(2026, 1, 1))),
                 EDocumentError.DOC_010);

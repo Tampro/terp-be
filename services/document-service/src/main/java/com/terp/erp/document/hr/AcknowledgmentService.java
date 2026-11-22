@@ -178,11 +178,30 @@ public class AcknowledgmentService {
 
     @Transactional
     public AckDto acknowledgeMine(Long id, AcknowledgeForm f) {
+        return dtos(List.of(acknowledge(own(id), f))).get(0);
+    }
+
+    /**
+     * Download my document (FR-ERP-ACK-001: downloadable once acknowledged): only after I acknowledged it (DOC_026) and
+     * only an approved or published document (DOC_025).
+     * TODO(assumption): an EXEMPTED assignment is not downloadable from here either — confirm with BA.
+     */
+    @Transactional(readOnly = true)
+    public HrDocumentService.Download downloadMine(Long id) {
+        Acknowledgment a = own(id);
+        HrDocument d = documentService.require(a.getDocumentId());
+        if (a.getStatus() != EStatus.ACKNOWLEDGED) {
+            throw ApiException.badRequest(EDocumentError.DOC_026);
+        }
+        documentService.assertDownloadable(d);
+        return documentService.link(d);
+    }
+
+    private Acknowledgment own(Long id) {
         ErpPrincipal me = self();
-        Acknowledgment a = acks.findByIdAndDeletedFalse(id)
+        return acks.findByIdAndDeletedFalse(id)
                 .filter(x -> x.getCompanyId().equals(me.companyId()) && me.userId().equals(x.getEmployeeUserId()))
                 .orElseThrow(() -> ApiException.notFound(EDocumentError.DOC_011));
-        return dtos(List.of(acknowledge(a, f))).get(0);
     }
 
     private Acknowledgment acknowledge(Acknowledgment a, AcknowledgeForm f) {

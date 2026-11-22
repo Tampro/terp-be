@@ -44,4 +44,8 @@ public interface AcknowledgmentRepository extends JpaRepository<Acknowledgment, 
                                                                              Acknowledgment.EStatus status, Long id);
 
     Optional<Acknowledgment> findByIdAndDeletedFalse(Long id);
+
+    /** The download gate: the caller still has to acknowledge this document. */
+    boolean existsByDocumentIdAndEmployeeUserIdAndStatusAndDeletedFalse(Long documentId, Long employeeUserId,
+                                                                       Acknowledgment.EStatus status);
 }

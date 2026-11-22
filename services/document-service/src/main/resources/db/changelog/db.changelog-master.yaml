@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121140000_employee_contract_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261121150000_template_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122740000_hr_document_approval_changelog.mysql.sql

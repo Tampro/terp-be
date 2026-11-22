@@ -20,6 +20,8 @@ import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.report.calendar.CalendarService;
 import com.terp.erp.report.calendar.CalendarService.CalendarView;
 import com.terp.erp.report.dashboard.DashboardService.CompanyDashboard;
+import com.terp.erp.report.dashboard.HrDashboardService.HrDashboard;
+import com.terp.erp.report.dashboard.HrDashboardService.MyDashboard;
 
 import java.time.LocalDate;
 
@@ -34,6 +36,7 @@ public class ReportController {
 
     private final DashboardService dashboard;
     private final CalendarService calendar;
+    private final HrDashboardService hr;
 
     @Operation(summary = "Company dashboard",
             description = "Each card is read from the service that owns it with your token: a card you may not see "
@@ -47,6 +50,35 @@ public class ReportController {
             @Parameter(description = "Year of the hiring and payroll trends; default this year")
             @RequestParam(required = false) @Min(2000) @Max(2100) Integer year) {
         return ApiMessageDto.ok(dashboard.dashboard(companyId, year));
+    }
+
+    @Operation(summary = "HR dashboard",
+            description = "FR-ERP-DSH-001. Today's attendance (rate, present / absent / on leave) and missing "
+                    + "attendance (ATTENDANCE_VIEW), employees per branch (ORG_VIEW) and per department "
+                    + "(EMPLOYEE_VIEW), recent promotions and terminations (LIFECYCLE_VIEW), upcoming approved events "
+                    + "(EVENT_VIEW), recent leave applications (LEAVE_VIEW), active announcements (ANNOUNCEMENT_VIEW). "
+                    + "Each part is read with your token from its service and checked there: a part you may not see "
+                    + "or whose service is down is data = null and listed in unavailable with the reason.")
+    @ApiResponses(@ApiResponse(responseCode = "401", description = "Not signed in (COMMON_003)"))
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/hr-dashboard")
+    public ApiMessageDto<HrDashboard> hrDashboard(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
+        return ApiMessageDto.ok(hr.hrDashboard(companyId));
+    }
+
+    @Operation(summary = "My dashboard (the signed-in employee)",
+            description = "FR-ERP-DSH-001, from the services' self endpoints with your token: myProfile "
+                    + "(employees/me, EMPLOYEE_SELF or EMPLOYEE_VIEW), myShift and myAttendanceToday "
+                    + "(attendance/me/today, ATTENDANCE_SELF), myWarnings (lifecycle/warnings/my), myAnnouncements "
+                    + "(org/announcements/my). myAttendanceThisMonth, myLeaveBalances, myLeaveApplications, myAwards "
+                    + "and myComplaints have no self endpoint yet: always data = null with NOT_AVAILABLE. Any part "
+                    + "that fails is data = null and listed in unavailable with the reason; the others still show.")
+    @ApiResponses(@ApiResponse(responseCode = "401", description = "Not signed in (COMMON_003)"))
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/my-dashboard")
+    public ApiMessageDto<MyDashboard> myDashboard() {
+        return ApiMessageDto.ok(hr.myDashboard());
     }
 
     @Operation(summary = "Unified calendar (month / week / day)",
