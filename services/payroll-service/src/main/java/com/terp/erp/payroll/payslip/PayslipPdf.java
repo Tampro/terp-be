@@ -79,9 +79,11 @@ final class PayslipPdf {
             row(calc, "Total Earnings", money(e.getTotalEarnings()), regular, regular);
             row(calc, "− LOP Deduction", money(e.getLopDeduction()), regular, regular);
             row(calc, "− Unpaid Leave Deduction", money(e.getUnpaidLeaveDeduction()), regular, regular);
-            row(calc, "+ Overtime Amount", money(e.getOvertimeAmount()), regular, regular);
+            row(calc, "+ Attendance Overtime", money(e.getOvertimeAmount()), regular, regular);
+            row(calc, "+ Manual Overtime", money(e.getManualOvertimeAmount()), regular, regular);
             row(calc, "Gross Pay", money(e.getGrossPay()), bold, bold);
             row(calc, "− Component Deductions", money(e.getTotalDeductions()), regular, regular);
+            row(calc, "− Loan Deduction", money(e.getLoanDeduction()), regular, regular);
             row(calc, "Net Salary (Take Home)", money(e.getNetPay()), bold, bold);
             doc.add(calc);
             doc.close();

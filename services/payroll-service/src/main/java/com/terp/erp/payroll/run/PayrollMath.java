@@ -14,7 +14,8 @@ import java.math.RoundingMode;
  * LOP deduction    = basic / working days × LOP days
  * Unpaid leave     = basic / working days × unpaid leave days
  * Gross pay        = total earnings − LOP deduction − unpaid leave deduction + overtime amount
- * Net pay          = gross pay − deduction components
+ *                    + manual overtime amount
+ * Net pay          = gross pay − deduction components − loan deduction
  * </pre>
  * Overtime amount is the attendance records' own amount (hours × the attendance policy's rate per hour, §6.4).
  * Amounts are rounded half-up to whole units like {@link SalaryMath}.
@@ -26,6 +27,11 @@ public final class PayrollMath {
     }
 
     public static void fill(PayrollEntry e, Totals t, Summary a) {
+        fill(e, t, a, BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    /** manualOvertime and loanDeduction are already rounded amounts (see PayrollAdjustments). */
+    public static void fill(PayrollEntry e, Totals t, Summary a, BigDecimal manualOvertime, BigDecimal loanDeduction) {
         BigDecimal basic = t.basicSalary();
         e.setBasicSalary(basic);
         e.setWorkingDays(a.workingDays());
@@ -39,9 +45,11 @@ public final class PayrollMath {
         e.setUnpaidLeaveDeduction(perDay(basic, a.workingDays(), e.getUnpaidLeaveDays()));
         e.setOvertimeAmount(SalaryMath.round(nz(a.overtimeAmount())));
         e.setGrossPay(t.totalEarnings().subtract(e.getLopDeduction()).subtract(e.getUnpaidLeaveDeduction())
-                .add(e.getOvertimeAmount()));
+                .add(e.getOvertimeAmount()).add(manualOvertime));
+        e.setManualOvertimeAmount(manualOvertime);
+        e.setLoanDeduction(loanDeduction);
         e.setTotalDeductions(t.totalDeductions());
-        e.setNetPay(e.getGrossPay().subtract(t.totalDeductions()));
+        e.setNetPay(e.getGrossPay().subtract(t.totalDeductions()).subtract(loanDeduction));
         e.getLines().clear();
         t.lines().forEach(l -> e.getLines().add(new PayrollEntry.Line(l.componentId(), l.name(), l.type(),
                 l.calculation(), l.value(), l.amount())));

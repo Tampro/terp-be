@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.payroll.client.AccountingClient;
 import com.terp.erp.payroll.client.AttendanceClient;
 import com.terp.erp.payroll.client.AttendanceClient.Summary;
 import com.terp.erp.payroll.client.EmployeeClient;
@@ -19,11 +20,15 @@ import com.terp.erp.payroll.common.Texts;
 import com.terp.erp.payroll.component.SalaryComponent;
 import com.terp.erp.payroll.component.SalaryComponentRepository;
 import com.terp.erp.payroll.payslip.PayslipRepository;
+import com.terp.erp.payroll.run.PayrollAdjustments.Amounts;
 import com.terp.erp.payroll.run.PayrollRun.EFrequency;
+import com.terp.erp.payroll.run.PayrollRun.EPaymentStatus;
 import com.terp.erp.payroll.run.PayrollRun.EStatus;
 import com.terp.erp.payroll.salary.EmployeeSalary;
 import com.terp.erp.payroll.salary.EmployeeSalaryRepository;
 import com.terp.erp.payroll.salary.SalaryMath;
+import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -34,6 +39,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -56,6 +62,9 @@ public class PayrollRunService {
     private final EmployeeClient employees;
     private final PayslipRepository payslips;
     private final Clock clock;
+    private final PayrollRunExclusionRepository exclusions;
+    private final PayrollAdjustments adjustments;
+    private final AccountingClient accounting;
 
     public record RunForm(
             @Schema(example = "November 2026", requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank @Size(max = 200)
@@ -64,12 +73,30 @@ public class PayrollRunService {
             @Schema(example = "2026-11-01", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate periodStart,
             @Schema(example = "2026-11-30", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate periodEnd,
             @Schema(example = "2026-12-05", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate payDate,
-            @Size(max = 1000) String notes) {
+            @Size(max = 1000) String notes,
+            @Schema(description = "Accounting bank account to pay from (checked in accounting-service: needs "
+                    + "BANK_VIEW); may also be given when paying", example = "3") Long bankAccountId) {
+        /** Without a bank account (Excel import). */
+        public RunForm(String title, EFrequency frequency, LocalDate periodStart, LocalDate periodEnd,
+                       LocalDate payDate, String notes) {
+            this(title, frequency, periodStart, periodEnd, payDate, notes, null);
+        }
     }
 
+    /** totalDeductions = deduction components + loan deductions, so netPay = grossPay - totalDeductions. */
     public record RunDto(String id, String title, EFrequency frequency, LocalDate periodStart, LocalDate periodEnd,
                          LocalDate payDate, String notes, EStatus status, int employeeCount, BigDecimal grossPay,
-                         BigDecimal totalDeductions, BigDecimal netPay, Instant processedAt, Instant createdDate) {
+                         BigDecimal totalDeductions, BigDecimal netPay, Instant processedAt, Instant createdDate,
+                         String bankAccountId, EPaymentStatus paymentStatus, Instant paidAt, String paidBy) {
+    }
+
+    public record PayForm(
+            @Schema(description = "Omitted = the run's bank account", example = "3") Long bankAccountId,
+            @Schema(description = "Omitted = the run's pay date", example = "2026-12-05") LocalDate paymentDate) {
+    }
+
+    public record ExclusionForm(@Schema(example = "7", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull
+                                Long employeeId) {
     }
 
     public record StatusCounts(long all, Map<EStatus, Long> byStatus) {
@@ -87,7 +114,8 @@ public class PayrollRunService {
                            BigDecimal presentDays, BigDecimal paidLeaveDays, BigDecimal unpaidLeaveDays,
                            BigDecimal lopDays, BigDecimal overtimeHours, BigDecimal totalEarnings,
                            BigDecimal lopDeduction, BigDecimal unpaidLeaveDeduction, BigDecimal overtimeAmount,
-                           BigDecimal grossPay, BigDecimal totalDeductions, BigDecimal netPay, List<LineDto> lines) {
+                           BigDecimal grossPay, BigDecimal totalDeductions, BigDecimal netPay, List<LineDto> lines,
+                           BigDecimal manualOvertimeAmount, BigDecimal loanDeduction) {
     }
 
     // ------------------------------------------------------------------ runs
@@ -143,8 +171,13 @@ public class PayrollRunService {
         if (r.getStatus() == EStatus.CANCELLED) {
             throw ApiException.badRequest(EPayrollError.PAY_023);
         }
+        assertUnpaid(r);
         if (payslips.existsByRunId(r.getId())) {
             throw ApiException.badRequest(EPayrollError.PAY_025);
+        }
+        if (r.getStatus() == EStatus.COMPLETED) {
+            // the loan installments and manual overtime this run took are owed again
+            adjustments.release(r.getId());
         }
         r.setStatus(EStatus.CANCELLED);
         return dto(r);
@@ -162,12 +195,21 @@ public class PayrollRunService {
         if (active.isEmpty()) {
             throw ApiException.badRequest(EPayrollError.PAY_015);
         }
+        Set<Long> excluded = exclusions.findByRunId(r.getId()).stream().map(PayrollRunExclusion::getEmployeeId)
+                .collect(Collectors.toSet());
+        List<EmployeeSalary> included = active.stream().filter(s -> !excluded.contains(s.getEmployeeId())).toList();
+        if (included.isEmpty()) {
+            throw ApiException.badRequest(EPayrollError.PAY_015);
+        }
         Map<Long, Summary> att = attendance.summaries(r.getCompanyId(), r.getPeriodStart(), r.getPeriodEnd(),
-                active.stream().map(EmployeeSalary::getEmployeeId).toList());
-        Map<Long, SalaryComponent> byId = components.findAllById(active.stream()
+                included.stream().map(EmployeeSalary::getEmployeeId).toList());
+        Map<Long, Amounts> booked = adjustments.book(r.getCompanyId(), r.getId(), r.getPeriodStart(),
+                r.getPeriodEnd(), included.stream().map(EmployeeSalary::getEmployeeId)
+                        .filter(att::containsKey).toList());
+        Map<Long, SalaryComponent> byId = components.findAllById(included.stream()
                         .flatMap(s -> s.getLines().stream().map(EmployeeSalary.Line::getComponentId)).distinct().toList())
                 .stream().collect(Collectors.toMap(SalaryComponent::getId, Function.identity()));
-        List<PayrollEntry> made = active.stream().filter(s -> att.containsKey(s.getEmployeeId())).map(s -> {
+        List<PayrollEntry> made = included.stream().filter(s -> att.containsKey(s.getEmployeeId())).map(s -> {
             PayrollEntry e = new PayrollEntry();
             e.setRunId(r.getId());
             e.setCompanyId(r.getCompanyId());
@@ -176,8 +218,9 @@ public class PayrollRunService {
             e.setEmployeeNo(s.getEmployeeNo());
             e.setEmployeeEmail(s.getEmployeeEmail());
             e.setSalaryId(s.getId());
+            Amounts extra = PayrollAdjustments.of(booked, s.getEmployeeId());
             PayrollMath.fill(e, SalaryMath.totals(s.getBasicSalary(), s.getLines(), byId),
-                    att.get(s.getEmployeeId()));
+                    att.get(s.getEmployeeId()), extra.manualOvertime(), extra.loanDeduction());
             return e;
         }).toList();
         if (made.isEmpty()) {
@@ -214,12 +257,79 @@ public class PayrollRunService {
         if (r.getStatus() != EStatus.COMPLETED) {
             throw ApiException.badRequest(EPayrollError.PAY_014);
         }
+        assertUnpaid(r);
         if (payslips.existsByRunId(r.getId())) {
             throw ApiException.badRequest(EPayrollError.PAY_025);
         }
-        entries.delete(requireEntry(r, entryId));
+        PayrollEntry removed = requireEntry(r, entryId);
+        adjustments.release(r.getId(), removed.getEmployeeId());
+        entries.delete(removed);
         entries.flush();
         totals(r, entries.findByRunId(r.getId()));
+        return dto(r);
+    }
+
+    // ------------------------------------------------------------------ exclusions
+
+    /** Employee ids left out of the run; processing a DRAFT run skips them. */
+    @Transactional(readOnly = true)
+    public List<String> exclusions(Long runId) {
+        PayrollRun r = require(runId);
+        return exclusions.findByRunId(r.getId()).stream().map(x -> x.getEmployeeId().toString()).toList();
+    }
+
+    /** DRAFT runs only (PAY_013); excluding twice keeps one row. */
+    @Transactional
+    public List<String> exclude(Long runId, Long employeeId) {
+        PayrollRun r = requireDraft(runId);
+        if (exclusions.findByRunIdAndEmployeeId(r.getId(), employeeId).isEmpty()) {
+            PayrollRunExclusion x = new PayrollRunExclusion();
+            x.setRunId(r.getId());
+            x.setCompanyId(r.getCompanyId());
+            x.setEmployeeId(employeeId);
+            exclusions.save(x);
+        }
+        return exclusions(runId);
+    }
+
+    @Transactional
+    public List<String> include(Long runId, Long employeeId) {
+        PayrollRun r = requireDraft(runId);
+        exclusions.findByRunIdAndEmployeeId(r.getId(), employeeId).ifPresent(exclusions::delete);
+        return exclusions(runId);
+    }
+
+    // ------------------------------------------------------------------ payment
+
+    /**
+     * Pays a COMPLETED (PAY_036), UNPAID (PAY_037) run: one call to accounting-service for the run's total net pay,
+     * idempotent there on the run id, then the run is PAID. A failed call leaves the run UNPAID (PAY_041, or the
+     * accounting error relayed); a retry never books twice.
+     * TODO(assumption): one bank debit for the run total, not one per employee.
+     */
+    @Transactional
+    public RunDto pay(Long id, PayForm form) {
+        PayrollRun r = require(id);
+        if (r.getStatus() != EStatus.COMPLETED) {
+            throw ApiException.badRequest(EPayrollError.PAY_036);
+        }
+        if (r.getPaymentStatus() == EPaymentStatus.PAID) {
+            throw ApiException.badRequest(EPayrollError.PAY_037);
+        }
+        Long bankId = form != null && form.bankAccountId() != null ? form.bankAccountId() : r.getBankAccountId();
+        if (bankId == null) {
+            throw ApiException.badRequest(EPayrollError.PAY_038);
+        }
+        if (r.getNetPay().signum() <= 0) {
+            throw ApiException.badRequest(EPayrollError.PAY_040);
+        }
+        LocalDate date = form != null && form.paymentDate() != null ? form.paymentDate() : r.getPayDate();
+        accounting.payrollPosting(r.getCompanyId(), r.getId(), bankId, r.getNetPay(), date, "PAYROLL-" + r.getId(),
+                "Salaries " + r.getTitle());
+        r.setBankAccountId(bankId);
+        r.setPaymentStatus(EPaymentStatus.PAID);
+        r.setPaidAt(clock.instant());
+        r.setPaidBy(CurrentUser.find().map(ErpPrincipal::keycloakId).orElse(null));
         return dto(r);
     }
 
@@ -239,12 +349,18 @@ public class PayrollRunService {
         r.setPeriodEnd(f.periodEnd());
         r.setPayDate(f.payDate());
         r.setNotes(Texts.blankToNull(f.notes()));
+        if (f.bankAccountId() != null && !f.bankAccountId().equals(r.getBankAccountId())
+                && !accounting.bankAccount(f.bankAccountId()).active()) {
+            // another company's account is answered 404 ACC_006 by accounting-service (relayed)
+            throw ApiException.badRequest(EPayrollError.PAY_039);
+        }
+        r.setBankAccountId(f.bankAccountId());
     }
 
     static void totals(PayrollRun r, List<PayrollEntry> list) {
         r.setEmployeeCount(list.size());
         r.setGrossPay(list.stream().map(PayrollEntry::getGrossPay).reduce(BigDecimal.ZERO, BigDecimal::add));
-        r.setTotalDeductions(list.stream().map(PayrollEntry::getTotalDeductions)
+        r.setTotalDeductions(list.stream().map(e -> e.getTotalDeductions().add(nz(e.getLoanDeduction())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
         r.setNetPay(list.stream().map(PayrollEntry::getNetPay).reduce(BigDecimal.ZERO, BigDecimal::add));
     }
@@ -252,7 +368,20 @@ public class PayrollRunService {
     static RunDto dto(PayrollRun r) {
         return new RunDto(r.getId().toString(), r.getTitle(), r.getFrequency(), r.getPeriodStart(), r.getPeriodEnd(),
                 r.getPayDate(), r.getNotes(), r.getStatus(), r.getEmployeeCount(), r.getGrossPay(),
-                r.getTotalDeductions(), r.getNetPay(), r.getProcessedAt(), r.getCreatedDate());
+                r.getTotalDeductions(), r.getNetPay(), r.getProcessedAt(), r.getCreatedDate(),
+                r.getBankAccountId() == null ? null : r.getBankAccountId().toString(), r.getPaymentStatus(),
+                r.getPaidAt(), r.getPaidBy());
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    /** A paid run is final (PAY_042). */
+    private static void assertUnpaid(PayrollRun r) {
+        if (r.getPaymentStatus() == EPaymentStatus.PAID) {
+            throw ApiException.badRequest(EPayrollError.PAY_042);
+        }
     }
 
     /** An entry of the caller's company by its own id (Show Payroll). */
@@ -278,7 +407,8 @@ public class PayrollRunService {
         return new EntryDto(e.getId().toString(), e.getRunId().toString(), info, e.getBasicSalary(),
                 e.getWorkingDays(), e.getPresentDays(), e.getPaidLeaveDays(), e.getUnpaidLeaveDays(), e.getLopDays(),
                 e.getOvertimeHours(), e.getTotalEarnings(), e.getLopDeduction(), e.getUnpaidLeaveDeduction(),
-                e.getOvertimeAmount(), e.getGrossPay(), e.getTotalDeductions(), e.getNetPay(), lines);
+                e.getOvertimeAmount(), e.getGrossPay(), e.getTotalDeductions(), e.getNetPay(), lines,
+                e.getManualOvertimeAmount(), e.getLoanDeduction());
     }
 
     public PayrollRun require(Long id) {

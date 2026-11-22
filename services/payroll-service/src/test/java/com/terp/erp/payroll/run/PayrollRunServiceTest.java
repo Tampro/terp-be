@@ -47,8 +47,13 @@ class PayrollRunServiceTest {
     private final EmployeeClient employees = mock(EmployeeClient.class);
     private final com.terp.erp.payroll.payslip.PayslipRepository payslips =
             mock(com.terp.erp.payroll.payslip.PayslipRepository.class);
+    private final PayrollRunExclusionRepository exclusions = mock(PayrollRunExclusionRepository.class);
+    private final PayrollAdjustments adjustments = mock(PayrollAdjustments.class);
+    private final com.terp.erp.payroll.client.AccountingClient accounting =
+            mock(com.terp.erp.payroll.client.AccountingClient.class);
     private final PayrollRunService service = new PayrollRunService(runs, entries, salaries, components, attendance,
-            employees, payslips, Clock.fixed(Instant.parse("2026-12-01T00:00:00Z"), ZoneOffset.UTC));
+            employees, payslips, Clock.fixed(Instant.parse("2026-12-01T00:00:00Z"), ZoneOffset.UTC), exclusions,
+            adjustments, accounting);
 
     private final PayrollRun run = new PayrollRun();
     private final List<PayrollEntry> saved = new ArrayList<>();

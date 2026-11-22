@@ -109,6 +109,14 @@ public class PayrollEntry extends BaseAuditableEntity {
     @Column(name = "overtime_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal overtimeAmount;
 
+    /** Approved manual overtime paid by this run (days × hours × rate). */
+    @Column(name = "manual_overtime_amount", nullable = false, precision = 15, scale = 2)
+    private BigDecimal manualOvertimeAmount = BigDecimal.ZERO;
+
+    /** Loan installments deducted by this run, each capped at the loan's remaining balance. */
+    @Column(name = "loan_deduction", nullable = false, precision = 15, scale = 2)
+    private BigDecimal loanDeduction = BigDecimal.ZERO;
+
     @Column(name = "gross_pay", nullable = false, precision = 15, scale = 2)
     private BigDecimal grossPay;
 
