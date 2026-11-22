@@ -57,7 +57,19 @@ public enum EAccountingError implements ErrorCode {
     ACC_062("Only a draft note can be approved or deleted."),
     ACC_063("Return {0} is not completed: only a completed return gives a note."),
     ACC_064("Return {0} already has note {1}."),
-    ACC_065("The period must end on or after its start and last at most {0} days.");
+    ACC_065("The period must end on or after its start and last at most {0} days."),
+    ACC_066("The journal entry is not balanced: debit {0}, credit {1}, difference {2}."),
+    ACC_067("Only a draft journal entry can be edited, deleted or posted."),
+    ACC_068("An automatic journal entry cannot be edited or deleted."),
+    ACC_069("Only a posted entry that is not itself a reversal can be reversed, and only once."),
+    ACC_070("The books are closed up to {0}: no entry can be dated on or before that day."),
+    ACC_071("The reversal date cannot be before the original entry date {0}."),
+    ACC_072("The balance sheet does not exist."),
+    ACC_073("Only a draft balance sheet can be regenerated, edited, deleted or finalised."),
+    ACC_074("Only two finalised balance sheets of the same company can be compared."),
+    ACC_075("Financial year {0} is already closed."),
+    ACC_076("Financial year {0} has {1} draft journal entries: post or delete them before closing."),
+    ACC_077("Date {0} is not in financial year {1}.");
 
     private final String message;
 }

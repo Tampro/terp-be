@@ -16,7 +16,10 @@ public enum ESystemAccount {
     GENERAL_EXPENSE("6428"),
     BANK_CHARGES("6427"),
     INVENTORY("156"),
-    COGS("632");
+    COGS("632"),
+    /** Year-end close: revenue and expense balances are carried here, then its net to RETAINED_EARNINGS. */
+    INCOME_SUMMARY("911"),
+    RETAINED_EARNINGS("4212");
 
     /** Account code the default chart maps this key to. */
     private final String defaultCode;

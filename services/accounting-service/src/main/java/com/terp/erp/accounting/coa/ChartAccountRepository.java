@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ChartAccountRepository extends JpaRepository<ChartAccount, Long> {
@@ -18,6 +19,8 @@ public interface ChartAccountRepository extends JpaRepository<ChartAccount, Long
             + "or lower(a.code) like :kw escape '!' or lower(a.name) like :kw escape '!')")
     Page<ChartAccount> search(Long companyId, Long typeId, ENormalBalance normalBalance, Boolean active, String kw,
                               Pageable pageable);
+
+    List<ChartAccount> findByCompanyIdOrderByCode(Long companyId);
 
     Optional<ChartAccount> findByCompanyIdAndCode(Long companyId, String code);
 

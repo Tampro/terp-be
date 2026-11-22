@@ -29,7 +29,8 @@ class JournalServiceTest {
     private final JournalEntryRepository entries = mock(JournalEntryRepository.class);
     private final ChartAccountRepository accounts = mock(ChartAccountRepository.class);
     private final DocumentNumbering numbering = mock(DocumentNumbering.class);
-    private final JournalService service = new JournalService(entries, accounts, numbering);
+    private final JournalService service = new JournalService(entries, accounts, numbering,
+            mock(FiscalYearCloseRepository.class));
     private final ChartAccount bank = account(1L, 10L, ENormalBalance.DEBIT, "100");
     private final ChartAccount revenue = account(2L, 10L, ENormalBalance.CREDIT, "0");
 

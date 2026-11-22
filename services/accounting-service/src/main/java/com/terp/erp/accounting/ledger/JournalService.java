@@ -24,15 +24,21 @@ import java.util.Optional;
 import java.util.TreeSet;
 
 /**
- * The general journal. Every posting in this service (revenue, expense, transfer, POS income, payments, notes)
- * writes one balanced entry here in its own transaction, and the entry moves each account's current balance.
+ * The general journal. Every posting in this service (revenue, expense, transfer, POS income, payments, notes,
+ * year-end close) writes one balanced entry here in its own transaction, and the entry moves each account's current
+ * balance. Manual entries and reversals ({@link ManualJournalService}) reuse the validation and balance helpers.
+ * No entry may be dated on or before the end of the company's latest closed financial year.
  */
 @Service
 @RequiredArgsConstructor
 public class JournalService {
+    /** Statuses that are in the books: a reversed entry and its reversal both count and cancel each other. */
+    public static final List<EJournalStatus> COUNTED = List.of(EJournalStatus.POSTED, EJournalStatus.REVERSED);
+
     private final JournalEntryRepository entries;
     private final ChartAccountRepository accounts;
     private final DocumentNumbering numbering;
+    private final FiscalYearCloseRepository closes;
 
     /** One side of an entry; null debit/credit = 0. */
     public record Line(Long accountId, BigDecimal debit, BigDecimal credit, String description) {
@@ -46,14 +52,23 @@ public class JournalService {
     public record JournalEntryDto(String id, String companyId, String number, LocalDate date, EJournalType type,
                                   String reference, String description, String sourceType, String sourceId,
                                   EJournalStatus status, BigDecimal totalDebit, BigDecimal totalCredit,
-                                  List<JournalLineDto> lines, Instant createdDate) {
+                                  List<JournalLineDto> lines, Instant createdDate, EReferenceType referenceType,
+                                  String reversalOfId, String reversedById) {
+        /** Without the manual-journal fields (callers and tests written before §13). */
+        public JournalEntryDto(String id, String companyId, String number, LocalDate date, EJournalType type,
+                               String reference, String description, String sourceType, String sourceId,
+                               EJournalStatus status, BigDecimal totalDebit, BigDecimal totalCredit,
+                               List<JournalLineDto> lines, Instant createdDate) {
+            this(id, companyId, number, date, type, reference, description, sourceType, sourceId, status,
+                    totalDebit, totalCredit, lines, createdDate, null, null, null);
+        }
     }
 
     /**
      * Writes an AUTOMATIC, POSTED entry for a source document in the caller's transaction. Idempotent on
-     * (company, sourceType, sourceId): a repeat returns the existing entry and changes no balance. Refuses an
-     * empty entry or a line without exactly one positive side (ACC_019), an unbalanced entry (ACC_018) and an
-     * account of another company or inactive (ACC_020).
+     * (company, sourceType, sourceId): a repeat returns the existing entry and changes no balance. Refuses a date in a
+     * closed year (ACC_070), an empty entry or a line without exactly one positive side (ACC_019), an unbalanced
+     * entry (ACC_018) and an account of another company or inactive (ACC_020).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public JournalEntryDto post(Long companyId, LocalDate date, String sourceType, Long sourceId, String reference,
@@ -63,6 +78,57 @@ public class JournalService {
         if (existing.isPresent()) {
             return dto(existing.get(), true);
         }
+        assertOpen(companyId, date);
+        BigDecimal[] totals = totals(lines);
+        if (totals[0].compareTo(totals[1]) != 0) {
+            throw ApiException.badRequest(EAccountingError.ACC_018);
+        }
+        JournalEntry e = new JournalEntry();
+        e.setCompanyId(companyId);
+        e.setNumber(nextNumber(companyId, date));
+        e.setEntryDate(date);
+        e.setType(EJournalType.AUTOMATIC);
+        e.setStatus(EJournalStatus.POSTED);
+        e.setReference(blankToNull(reference));
+        e.setDescription(blankToNull(description));
+        e.setSourceType(sourceType);
+        e.setSourceId(sourceId);
+        setLines(e, lines, totals);
+        applyBalances(companyId, e.getLines());
+        return dto(entries.save(e), true);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<JournalEntryDto> search(Long requestedCompanyId, String sourceType, EJournalType type,
+                                        EJournalStatus status, LocalDate from, LocalDate to, Pageable pageable) {
+        Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
+        return entries.search(companyId, blankToNull(sourceType), type, status, from, to, pageable)
+                .map(e -> dto(e, false));
+    }
+
+    @Transactional(readOnly = true)
+    public JournalEntryDto get(Long id) {
+        JournalEntry e = entries.findById(id).orElseThrow(() -> ApiException.notFound(EAccountingError.ACC_021));
+        TenantGuard.assertSameCompany(e.getCompanyId(), EAccountingError.ACC_021);
+        return dto(e, true);
+    }
+
+    /**
+     * 400 ACC_070 when {@code date} is on or before 31 December of the company's latest closed financial year.
+     * TODO(assumption): the financial year is the calendar year (VAS default; companies may choose another).
+     */
+    public void assertOpen(Long companyId, LocalDate date) {
+        Integer year = closes.maxClosedYear(companyId);
+        if (year != null && year > 0) {
+            LocalDate end = LocalDate.of(year, 12, 31);
+            if (!date.isAfter(end)) {
+                throw ApiException.badRequest(EAccountingError.ACC_070, end.toString());
+            }
+        }
+    }
+
+    /** [debit, credit]; 400 ACC_019 when empty or a line has no account or not exactly one positive side. */
+    static BigDecimal[] totals(List<Line> lines) {
         if (lines == null || lines.isEmpty()) {
             throw ApiException.badRequest(EAccountingError.ACC_019);
         }
@@ -78,29 +144,16 @@ public class JournalService {
             totalDebit = totalDebit.add(d);
             totalCredit = totalCredit.add(c);
         }
-        if (totalDebit.compareTo(totalCredit) != 0) {
-            throw ApiException.badRequest(EAccountingError.ACC_018);
-        }
-        // Lock in id order so two postings touching the same accounts cannot deadlock.
-        Map<Long, ChartAccount> locked = new HashMap<>();
-        for (Long id : new TreeSet<>(lines.stream().map(Line::accountId).toList())) {
-            ChartAccount a = accounts.lockById(id)
-                    .filter(x -> x.isActive() && Objects.equals(x.getCompanyId(), companyId))
-                    .orElseThrow(() -> ApiException.badRequest(EAccountingError.ACC_020, id));
-            locked.put(id, a);
-        }
-        JournalEntry e = new JournalEntry();
-        e.setCompanyId(companyId);
-        e.setNumber(numbering.next(companyId, "JE", String.valueOf(date.getYear())));
-        e.setEntryDate(date);
-        e.setType(EJournalType.AUTOMATIC);
-        e.setStatus(EJournalStatus.POSTED);
-        e.setReference(blankToNull(reference));
-        e.setDescription(blankToNull(description));
-        e.setSourceType(sourceType);
-        e.setSourceId(sourceId);
-        e.setTotalDebit(totalDebit);
-        e.setTotalCredit(totalCredit);
+        return new BigDecimal[]{totalDebit, totalCredit};
+    }
+
+    String nextNumber(Long companyId, LocalDate date) {
+        return numbering.next(companyId, "JE", String.valueOf(date.getYear()));
+    }
+
+    /** Replaces the entry's lines and totals (no balance change). */
+    static void setLines(JournalEntry e, List<Line> lines, BigDecimal[] totals) {
+        e.getLines().clear();
         for (Line l : lines) {
             JournalLine row = new JournalLine();
             row.setAccountId(l.accountId());
@@ -108,30 +161,33 @@ public class JournalService {
             row.setCredit(orZero(l.credit()));
             row.setDescription(blankToNull(l.description()));
             e.getLines().add(row);
-            ChartAccount a = locked.get(l.accountId());
+        }
+        e.setTotalDebit(totals[0]);
+        e.setTotalCredit(totals[1]);
+    }
+
+    /**
+     * Moves each account's current balance by the lines, on its normal side. Accounts are locked in id order so two
+     * postings touching the same accounts cannot deadlock; 400 ACC_020 for an inactive or foreign account.
+     */
+    void applyBalances(Long companyId, List<JournalLine> lines) {
+        Map<Long, ChartAccount> locked = new HashMap<>();
+        for (Long id : new TreeSet<>(lines.stream().map(JournalLine::getAccountId).toList())) {
+            ChartAccount a = accounts.lockById(id)
+                    .filter(x -> x.isActive() && Objects.equals(x.getCompanyId(), companyId))
+                    .orElseThrow(() -> ApiException.badRequest(EAccountingError.ACC_020, id));
+            locked.put(id, a);
+        }
+        for (JournalLine row : lines) {
+            ChartAccount a = locked.get(row.getAccountId());
             BigDecimal change = a.getNormalBalance() == ENormalBalance.DEBIT
                     ? row.getDebit().subtract(row.getCredit())
                     : row.getCredit().subtract(row.getDebit());
             a.setCurrentBalance(a.getCurrentBalance().add(change));
         }
-        return dto(entries.save(e), true);
     }
 
-    @Transactional(readOnly = true)
-    public Page<JournalEntryDto> search(Long requestedCompanyId, String sourceType, LocalDate from, LocalDate to,
-                                        Pageable pageable) {
-        Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
-        return entries.search(companyId, blankToNull(sourceType), from, to, pageable).map(e -> dto(e, false));
-    }
-
-    @Transactional(readOnly = true)
-    public JournalEntryDto get(Long id) {
-        JournalEntry e = entries.findById(id).orElseThrow(() -> ApiException.notFound(EAccountingError.ACC_021));
-        TenantGuard.assertSameCompany(e.getCompanyId(), EAccountingError.ACC_021);
-        return dto(e, true);
-    }
-
-    private JournalEntryDto dto(JournalEntry e, boolean withLines) {
+    JournalEntryDto dto(JournalEntry e, boolean withLines) {
         List<JournalLineDto> lines = null;
         if (withLines) {
             Map<Long, ChartAccount> byId = new HashMap<>();
@@ -147,14 +203,16 @@ public class JournalService {
         return new JournalEntryDto(e.getId() == null ? null : e.getId().toString(), e.getCompanyId().toString(),
                 e.getNumber(), e.getEntryDate(), e.getType(), e.getReference(), e.getDescription(),
                 e.getSourceType(), e.getSourceId() == null ? null : e.getSourceId().toString(), e.getStatus(),
-                e.getTotalDebit(), e.getTotalCredit(), lines, e.getCreatedDate());
+                e.getTotalDebit(), e.getTotalCredit(), lines, e.getCreatedDate(), e.getReferenceType(),
+                e.getReversalOfId() == null ? null : e.getReversalOfId().toString(),
+                e.getReversedById() == null ? null : e.getReversedById().toString());
     }
 
-    private static BigDecimal orZero(BigDecimal v) {
+    static BigDecimal orZero(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    private static String blankToNull(String s) {
+    static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.trim();
     }
 }

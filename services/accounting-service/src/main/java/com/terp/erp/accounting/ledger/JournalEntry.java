@@ -59,6 +59,19 @@ public class JournalEntry extends BaseAuditableEntity {
     @Column(name = "total_credit", nullable = false, precision = 19, scale = 4)
     private BigDecimal totalCredit = BigDecimal.ZERO;
 
+    /** Manual entries only; see EReferenceType. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reference_type", length = 30)
+    private EReferenceType referenceType;
+
+    /** Set on a reversal entry: the entry it cancels. */
+    @Column(name = "reversal_of_id")
+    private Long reversalOfId;
+
+    /** Set on a REVERSED entry: the reversal that cancels it. */
+    @Column(name = "reversed_by_id")
+    private Long reversedById;
+
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "entry_id", nullable = false)
     @OrderBy("id")

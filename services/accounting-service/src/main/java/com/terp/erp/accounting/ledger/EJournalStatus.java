@@ -1,6 +1,9 @@
 package com.terp.erp.accounting.ledger;
 
-/** Only POSTED is written today; DRAFT and REVERSED are reserved for manual entries (§13). */
+/**
+ * DRAFT = manual entry not yet posted (moves no balance); POSTED = in the books; REVERSED = posted, then cancelled
+ * by a reversal entry (both still count in reports and cancel each other).
+ */
 public enum EJournalStatus {
     DRAFT, POSTED, REVERSED
 }

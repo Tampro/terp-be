@@ -5,10 +5,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
+
 public interface AccountTypeRepository extends JpaRepository<AccountType, Long> {
     @Query("select t from AccountType t where t.companyId = :companyId "
             + "and (:category is null or t.category = :category) and (:active is null or t.active = :active)")
     Page<AccountType> search(Long companyId, EAccountCategory category, Boolean active, Pageable pageable);
+
+    List<AccountType> findByCompanyId(Long companyId);
 
     boolean existsByCompanyIdAndCodeAndIdNot(Long companyId, String code, Long id);
 }
