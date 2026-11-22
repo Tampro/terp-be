@@ -47,9 +47,10 @@ class PublicCareerServiceTest {
     private final JobPostingRepository postings = mock(JobPostingRepository.class);
     private final CatalogItemRepository items = mock(CatalogItemRepository.class);
     private final CandidateService candidates = mock(CandidateService.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final PublicCareerService service = new PublicCareerService(settings, postings,
             mock(JobLocationRepository.class), items, mock(CustomQuestionRepository.class), candidates,
-            Clock.fixed(Instant.parse("2026-11-19T17:30:00Z"), ZoneOffset.UTC));
+            Clock.fixed(Instant.parse("2026-11-19T17:30:00Z"), ZoneOffset.UTC), outbox);
     private final MockMultipartFile resume = new MockMultipartFile("resume", "cv.pdf", "application/pdf",
             "%PDF-1.4".getBytes());
 
@@ -126,6 +127,7 @@ class PublicCareerServiceTest {
         posting.setApplicationUrl("https://careers.example.invalid/dev");
         assertCode(() -> service.apply("test-co", 5L, form(true, null), resume, null), ERecruitmentError.REC_052);
         verify(candidates, never()).register(any(), any(), any(), any());
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -177,6 +179,9 @@ class PublicCareerServiceTest {
         assertThat(captor.getValue().dateOfBirth()).isNull();
         assertThat(captor.getValue().coverLetterMessage()).isNull();
         assertThat(captor.getValue().jobPostingId()).isEqualTo(5L);
+        verify(outbox).publish(eq(10L), eq("recruitment.application.received"), eq("CANDIDATE"), any(),
+                org.mockito.ArgumentMatchers.<Object>argThat(x -> "ABCDEFGH2345".equals(((java.util.Map<?, ?>) x)
+                        .get("trackingId"))));
     }
 
     @Test

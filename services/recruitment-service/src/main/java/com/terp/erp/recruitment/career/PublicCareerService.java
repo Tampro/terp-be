@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.recruitment.candidate.Candidate;
 import com.terp.erp.recruitment.candidate.CandidateDtos.AnswerForm;
 import com.terp.erp.recruitment.candidate.CandidateDtos.CandidateForm;
@@ -57,6 +59,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class PublicCareerService {
+    static final String EVENT_APPLICATION_RECEIVED = "recruitment.application.received";
+
     static final int SIMILAR = 4;
     /** TODO(assumption): "today" (deadline check) is the Vietnam date until companies carry their own time zone. */
     static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -68,6 +72,7 @@ public class PublicCareerService {
     private final CustomQuestionRepository questions;
     private final CandidateService candidates;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record Ref(String id, String name) {
     }
@@ -216,6 +221,11 @@ public class PublicCareerService {
                 f.country(), p.isShowCoverLetter() ? f.coverLetterMessage() : null, f.termsAccepted(), null,
                 f.answers());
         Candidate c = candidates.register(p, form, resume, coverLetter);
+        // Notifications: APPLICATION_RECEIVED to the applicant, webhook NEW_JOB_CANDIDATE. No salary in the event.
+        outbox.publish(s.getCompanyId(), EVENT_APPLICATION_RECEIVED, "CANDIDATE", String.valueOf(c.getId()),
+                Payload.of("candidateId", c.getId(), "jobPostingId", p.getId(), "jobTitle", p.getTitle(),
+                        "name", (f.firstName() + " " + f.lastName()).trim(), "trackingId", c.getTrackingId(),
+                        "applicationDate", c.getApplicationDate(), "recipientEmail", f.email()));
         return new Applied(p.getTitle(), c.getApplicationDate(), c.getTrackingId());
     }
 

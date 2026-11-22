@@ -28,12 +28,14 @@ public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Lo
 
     /** overdue = invoices posted or partly paid whose due date has passed. */
     @Query("select d " + FILTERS + " and (:status is null or d.status = :status) "
+            + "and (:journalStatus is null or d.journalStatus = :journalStatus) "
             + "and (:overdue = false or (d.status in (com.terp.erp.commerce.sales.EDocumentStatus.POSTED, "
             + "com.terp.erp.commerce.sales.EDocumentStatus.PARTIAL) and d.dueDate < :today))")
     Page<SalesDocument> search(@Param("companyId") Long companyId, @Param("kind") EDocumentKind kind,
                                @Param("customerId") Long customerId, @Param("warehouseId") Long warehouseId,
                                @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("kw") String keyword,
                                @Param("status") EDocumentStatus status, @Param("overdue") boolean overdue,
+                               @Param("journalStatus") com.terp.erp.commerce.common.EJournalStatus journalStatus,
                                @Param("today") LocalDate today, Pageable pageable);
 
     @Query("select d.status, count(d) " + FILTERS + " group by d.status")

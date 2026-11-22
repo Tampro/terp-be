@@ -92,6 +92,10 @@ spring:
               uri: ${SUPPORT_SERVICE_URL:http://localhost:8096}
               predicates:
                 - Path=/api/v1/support/**,/api/v1/messenger/**,/api/v1/public/support/**
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8097}
+              predicates:
+                - Path=/api/v1/notifications/**
 
 springdoc:
   api-docs:

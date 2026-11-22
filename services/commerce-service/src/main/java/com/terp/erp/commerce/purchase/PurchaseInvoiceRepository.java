@@ -36,12 +36,14 @@ public interface PurchaseInvoiceRepository extends JpaRepository<PurchaseInvoice
 
     /** overdue = posted or partly paid past the due date. */
     @Query("select d " + FILTERS + " and (:status is null or d.status = :status) "
+            + "and (:journalStatus is null or d.journalStatus = :journalStatus) "
             + "and (:overdue = false or (d.status in (com.terp.erp.commerce.purchase.PurchaseInvoice.EStatus.POSTED, "
             + "com.terp.erp.commerce.purchase.PurchaseInvoice.EStatus.PARTIAL) and d.dueDate < :today))")
     Page<PurchaseInvoice> search(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
                                  @Param("warehouseId") Long warehouseId, @Param("from") LocalDate from,
                                  @Param("to") LocalDate to, @Param("kw") String keyword,
                                  @Param("status") PurchaseInvoice.EStatus status, @Param("overdue") boolean overdue,
+                                 @Param("journalStatus") com.terp.erp.commerce.common.EJournalStatus journalStatus,
                                  @Param("today") LocalDate today, Pageable pageable);
 
     @Query("select d.status, count(d) " + FILTERS + " group by d.status")

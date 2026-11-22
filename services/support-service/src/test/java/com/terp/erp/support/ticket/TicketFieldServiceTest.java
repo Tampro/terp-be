@@ -50,7 +50,8 @@ class TicketFieldServiceTest {
     private final TicketNumbers numbers = mock(TicketNumbers.class);
     private final TicketCategoryService categories = new TicketCategoryService(categoryRepo, tickets);
     private final TicketService ticketService = new TicketService(tickets, mock(TicketReplyRepository.class),
-            categoryRepo, categories, numbers, new Attachments(mock(MediaClient.class), mapper), fields);
+            categoryRepo, categories, numbers, new Attachments(mock(MediaClient.class), mapper), fields,
+            mock(com.terp.erp.outbox.OutboxPublisher.class));
     private final PortalSettingsRepository portalRepo = mock(PortalSettingsRepository.class);
     private final PortalPageRepository pages = mock(PortalPageRepository.class);
     private final PublicSupportService portal = new PublicSupportService(portalRepo, pages,

@@ -15,6 +15,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import com.terp.erp.commerce.common.BaseAuditableEntity;
+import com.terp.erp.commerce.common.EJournalStatus;
+import com.terp.erp.commerce.common.JournalTracked;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,7 +33,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "purchase_invoice")
-public class PurchaseInvoice extends BaseAuditableEntity {
+public class PurchaseInvoice extends BaseAuditableEntity implements JournalTracked {
     public enum EStatus { DRAFT, POSTED, PARTIAL, PAID }
 
     @Column(name = "company_id", nullable = false)
@@ -87,6 +89,15 @@ public class PurchaseInvoice extends BaseAuditableEntity {
 
     @Column(name = "posted_at")
     private Instant postedAt;
+
+    /** Its accounting journal, written asynchronously (outbox): PENDING until accounting answers, then POSTED or
+     * FAILED with the accounting error code. null = a draft, nothing to journal, or posted before the outbox. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "journal_status", length = 10)
+    private EJournalStatus journalStatus;
+
+    @Column(name = "journal_error_code", length = 30)
+    private String journalErrorCode;
 
     @Column(name = "deleted", nullable = false)
     private boolean deleted;

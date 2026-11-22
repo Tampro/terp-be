@@ -35,6 +35,7 @@
         <module>services/crm-service</module>
         <module>services/project-service</module>
         <module>services/support-service</module>
+        <module>services/notification-service</module>
         <module>services/gateway-server</module>
     </modules>
 

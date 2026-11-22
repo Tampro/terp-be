@@ -17,3 +17,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261122600000_goal_budget_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122700000_commerce_posting_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123100000_outbox_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123200000_processed_event_changelog.mysql.sql

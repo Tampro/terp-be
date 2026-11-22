@@ -253,6 +253,12 @@ public class CompanySettingsService {
                 profileView(companyId, read(companyId, PROFILE, CompanyProfile.class), true));
     }
 
+    /** The company's language, else the platform's (no caller check: for the internal notification endpoint). */
+    @Transactional(readOnly = true)
+    public String defaultLanguageOf(Long companyId) {
+        return or(read(companyId, SYSTEM, CompanySystem.class).defaultLanguage(), platform.system().defaultLanguage());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private <T> T read(Long companyId, String section, Class<T> type) {

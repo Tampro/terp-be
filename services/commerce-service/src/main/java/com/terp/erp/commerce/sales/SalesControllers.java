@@ -62,7 +62,7 @@ final class SalesControllers {
                 @Parameter(description = "Matches the number or the customer") @RequestParam(required = false) String keyword,
                 @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
             return ApiMessageDto.ok(ResponseListDto.of(service.search(KIND, companyId, customerId, null, from, to,
-                    keyword, status, false, pageable)));
+                    keyword, status, false, null, pageable)));
         }
 
         @Operation(summary = "Quotation counts per status (tabs)")
@@ -176,7 +176,7 @@ final class SalesControllers {
                 @Parameter(description = "Matches the number or the customer") @RequestParam(required = false) String keyword,
                 @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
             return ApiMessageDto.ok(ResponseListDto.of(service.search(KIND, companyId, customerId, null, from, to,
-                    keyword, status, false, pageable)));
+                    keyword, status, false, null, pageable)));
         }
 
         @Operation(summary = "Proposal counts per status (tabs)")
@@ -288,12 +288,14 @@ final class SalesControllers {
                 @RequestParam(required = false) Long customerId, @RequestParam(required = false) Long warehouseId,
                 @RequestParam(required = false) EDocumentStatus status,
                 @RequestParam(defaultValue = "false") boolean overdue,
+                @Parameter(description = "PENDING, POSTED or FAILED: state of the asynchronous accounting journal")
+                @RequestParam(required = false) com.terp.erp.commerce.common.EJournalStatus journalStatus,
                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
                 @Parameter(description = "Matches the number or the customer") @RequestParam(required = false) String keyword,
                 @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
             return ApiMessageDto.ok(ResponseListDto.of(service.search(KIND, companyId, customerId, warehouseId, from, to,
-                    keyword, status, overdue, pageable)));
+                    keyword, status, overdue, journalStatus, pageable)));
         }
 
         @Operation(summary = "Unified calendar: invoices falling due in a period",
@@ -354,15 +356,32 @@ final class SalesControllers {
         }
 
         @Operation(summary = "Post: DRAFT → POSTED", description = "A product-wise invoice takes its stocked lines out "
-                + "of its warehouse (all or nothing). The invoice can no longer be edited or deleted.")
+                + "of its warehouse (all or nothing). The invoice can no longer be edited or deleted. The journal is "
+                + "checked now but written asynchronously by accounting: journalStatus PENDING, then POSTED or FAILED "
+                + "(poll the invoice).")
         @ApiResponses({
                 @ApiResponse(responseCode = "400", description = "Not a draft (SAL_002), no warehouse (SAL_009), "
-                        + "not enough stock (INV_ code relayed)"),
-                @ApiResponse(responseCode = "503", description = "Inventory unavailable (SAL_015)")})
+                        + "not enough stock (INV_ code relayed), closed year (ACC_070) / unmapped account (ACC_017) "
+                        + "relayed"),
+                @ApiResponse(responseCode = "503", description = "Inventory (SAL_015) or accounting (SAL_016) unavailable")})
         @PreAuthorize("@PermissionChecker.has('SALES_POST')")
         @PostMapping("/{id}/post")
         public ApiMessageDto<DocumentDetail> post(@PathVariable Long id) {
             return ApiMessageDto.ok(service.post(id));
+        }
+
+        @Operation(summary = "Re-post the journal of an invoice whose journal FAILED", description = "Checks the "
+                + "journal again with accounting (a still-closed year answers at once), then requests it again: "
+                + "journalStatus → PENDING. Moves no stock; accounting writes the entry once per invoice.")
+        @ApiResponses({
+                @ApiResponse(responseCode = "400", description = "journalStatus is not FAILED (SAL_025), closed "
+                        + "year (ACC_070) / unmapped account (ACC_017) relayed"),
+                @ApiResponse(responseCode = "404", description = "No such invoice in your company (SAL_001)"),
+                @ApiResponse(responseCode = "503", description = "Accounting unavailable (SAL_016)")})
+        @PreAuthorize("@PermissionChecker.has('SALES_POST')")
+        @PostMapping("/{id}/journal/retry")
+        public ApiMessageDto<DocumentDetail> retryJournal(@PathVariable Long id) {
+            return ApiMessageDto.ok(service.retryJournal(id));
         }
     }
 }

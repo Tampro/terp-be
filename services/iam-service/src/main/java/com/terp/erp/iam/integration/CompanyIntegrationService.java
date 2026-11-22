@@ -183,6 +183,27 @@ public class CompanyIntegrationService {
         repo.findByCompanyIdAndSection(cid, t.section).ifPresent(repo::delete);
     }
 
+    // ------------------------------------------------------------------ for notification-service (internal)
+
+    /** Decrypted Slack webhook URL when Slack is on for the company; empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<String> slackWebhookUrl(Long companyId) {
+        return read(companyId, EIntegration.SLACK, SlackStored.class)
+                .filter(s -> s.enabled() && s.webhookUrlEnc() != null)
+                .map(s -> cipher.decrypt(s.webhookUrlEnc()));
+    }
+
+    public record TelegramTarget(String botToken, String chatId) {
+    }
+
+    /** Decrypted bot token + chat id when Telegram is on for the company; empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<TelegramTarget> telegramTarget(Long companyId) {
+        return read(companyId, EIntegration.TELEGRAM, TelegramStored.class)
+                .filter(s -> s.enabled() && s.botTokenEnc() != null && s.chatId() != null)
+                .map(s -> new TelegramTarget(cipher.decrypt(s.botTokenEnc()), s.chatId()));
+    }
+
     // ------------------------------------------------------------------ views
 
     private SlackView slack(Long cid) {

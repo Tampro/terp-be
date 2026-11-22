@@ -7,7 +7,8 @@ import lombok.RequiredArgsConstructor;
  * Events a company webhook can subscribe to: the reference TERP Core packages/workdo/Webhook/src/config/
  * webhook-events.php (module + action), grouped by the modules of ERP manual 19. Reference module "general" is split
  * into SALES / PURCHASE / INVENTORY / GENERAL, "Account" is ACCOUNTING, "Taskly" PROJECT, "Lead" CRM.
- * TODO: nothing publishes these yet; dispatch (sign, POST, retry with back-off, delivery log) needs a broker.
+ * Dispatch (sign, POST, retry with back-off, delivery log) is notification-service's. Produced today:
+ * NEW_SALES_INVOICE, NEW_PURCHASE_INVOICE, NEW_JOB_CANDIDATE, LEAD_MOVED, DEAL_MOVED. TODO: the others.
  * Codes are stored in company_webhook.event_code: never rename one.
  */
 @Getter

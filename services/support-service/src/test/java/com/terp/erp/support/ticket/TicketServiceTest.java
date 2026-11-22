@@ -22,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,8 +39,9 @@ class TicketServiceTest {
     private final TicketFieldRepository fieldRepo = mock(TicketFieldRepository.class);
     private final TicketFieldValueRepository valueRepo = mock(TicketFieldValueRepository.class);
     private final TicketFieldService fieldService = new TicketFieldService(fieldRepo, valueRepo, new ObjectMapper());
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final TicketService service = new TicketService(tickets, replies, categoryRepo, categories, numbers,
-            attachments, fieldService);
+            attachments, fieldService, outbox);
 
     @AfterEach
     void tearDown() {
@@ -84,6 +86,7 @@ class TicketServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void createNumbersPerCompanySanitizesAndHashesTheToken() {
         TestLogin.as(10L, "SUPPORT_TICKET_MANAGE");
         category(3L, 10L);
@@ -103,6 +106,11 @@ class TicketServiceTest {
         assertThat(created.trackingToken()).hasSizeGreaterThanOrEqualTo(43);
         assertThat(t.getTrackingTokenHash()).isEqualTo(TrackingTokens.hash(created.trackingToken()))
                 .isNotEqualTo(created.trackingToken());
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("support.ticket.created"), eq("TICKET"), any(), payload.capture());
+        assertThat((java.util.Map<String, Object>) (java.util.Map<?, ?>) payload.getValue()).containsEntry("ticketNumber", "TKT-000042")
+                .containsEntry("recipientEmail", "staff@example.com")
+                .doesNotContainValue(created.trackingToken());
     }
 
     @Test
@@ -127,6 +135,7 @@ class TicketServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ESupportError.SUP_006));
         verify(replies, never()).save(any());
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -139,6 +148,7 @@ class TicketServiceTest {
 
         assertThat(r.senderType()).isEqualTo(TicketReply.ESender.STAFF);
         assertThat(r.senderName()).isEqualTo("u5");
+        verify(outbox).publish(eq(10L), eq("support.ticket.replied"), eq("TICKET"), eq("1"), any());
     }
 
     @Test

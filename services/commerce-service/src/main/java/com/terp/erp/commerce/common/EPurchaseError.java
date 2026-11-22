@@ -23,7 +23,8 @@ public enum EPurchaseError implements ErrorCode {
     PUR_013("The period must end on or after its start and last at most {0} days."),
     PUR_014("Only a posted or partly paid purchase invoice can take a payment."),
     PUR_015("The payment amount {0} is more than the purchase invoice balance {1}."),
-    PUR_016("Payment {0} was already applied to this purchase invoice with a different amount.");
+    PUR_016("Payment {0} was already applied to this purchase invoice with a different amount."),
+    PUR_017("Only a purchase document whose accounting journal failed can have its journal posted again.");
 
     private final String message;
 }

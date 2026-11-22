@@ -1,6 +1,7 @@
 package com.terp.erp.commerce.sales;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.terp.erp.commerce.common.EJournalStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -65,6 +66,11 @@ public final class SalesDtos {
                               @Schema(description = "Invoice posted or partly paid past its due date") boolean overdue,
                               @Schema(description = "Quotation or proposal still SENT past its due date") boolean expired,
                               int versionNo, String versionOfId, String convertedInvoiceId, String convertedFromId,
+                              @Schema(description = "Invoices: accounting journal, written asynchronously after "
+                                      + "posting - PENDING, POSTED or FAILED; null = draft / nothing to journal")
+                              EJournalStatus journalStatus,
+                              @Schema(description = "Accounting error code when journalStatus = FAILED",
+                                      example = "ACC_070") String journalErrorCode,
                               Instant createdDate, Instant updatedDate) {
         static DocumentRow of(SalesDocument d, LocalDate today) {
             boolean late = d.getDueDate().isBefore(today);
@@ -75,7 +81,8 @@ public final class SalesDtos {
                     d.getCustomerId().toString(), d.getCustomerName(), str(d.getWarehouseId()), d.getDocDate(),
                     d.getDueDate(), d.getSubtotal(), d.getDiscountTotal(), d.getTaxTotal(), d.getTotal(),
                     d.getBalance(), d.getStatus(), overdue, expired, d.getVersionNo(), str(d.getVersionOfId()),
-                    str(d.getConvertedInvoiceId()), str(d.getConvertedFromId()), d.getCreatedDate(),
+                    str(d.getConvertedInvoiceId()), str(d.getConvertedFromId()), d.getJournalStatus(),
+                    d.getJournalErrorCode(), d.getCreatedDate(),
                     d.getUpdatedDate());
         }
     }

@@ -24,6 +24,8 @@ import com.terp.erp.crm.setup.SetupEntities.EStageKind;
 import com.terp.erp.crm.setup.SetupService;
 import com.terp.erp.crm.setup.Stage;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -39,6 +41,8 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class LeadService {
+    static final String EVENT_ASSIGNED = "crm.lead.assigned";
+    static final String EVENT_MOVED = "crm.lead.moved";
     /** What a conversion can copy, as named in the manual's "Copy To" list. */
     static final Set<String> COPYABLE = Set.of("PRODUCTS", "SOURCES", "FILES", "DISCUSSIONS", "NOTES", "CALLS",
             "EMAILS", "TASKS", "USERS");
@@ -48,6 +52,7 @@ public class LeadService {
     private final SetupService setup;
     private final ActivityService activity;
     private final AccountingClient accounting;
+    private final OutboxPublisher outbox;
 
     public record LeadForm(
             @Schema(description = "Pipeline id (it decides the company)", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -150,6 +155,7 @@ public class LeadService {
         apply(l, f);
         leads.save(l);
         activity.log(subject(l), "Lead created", l.getName());
+        assigned(l);
         return get(l.getId());
     }
 
@@ -157,7 +163,11 @@ public class LeadService {
     @Transactional
     public LeadDetail update(Long id, LeadForm f) {
         Lead l = require(id);
+        Long owner = l.getOwnerUserId();
         apply(l, f);
+        if (!java.util.Objects.equals(owner, l.getOwnerUserId())) {
+            assigned(l);
+        }
         return get(l.getId());
     }
 
@@ -187,6 +197,11 @@ public class LeadService {
         l.setPosition(pos);
         if (!to.getName().equals(fromName)) {
             activity.log(subject(l), "Moved", fromName + " → " + to.getName());
+            // Notifications LEAD_MOVED (email to the owner, webhook LEAD_MOVED).
+            outbox.publish(l.getCompanyId(), EVENT_MOVED, "LEAD", l.getId(), Payload.of("leadId", l.getId(),
+                    "pipelineId", l.getPipelineId(), "name", l.getName(), "subject", l.getSubject(),
+                    "fromStage", fromName, "toStage", to.getName(), "ownerUserId", l.getOwnerUserId(),
+                    "recipientUserIds", Payload.ids(java.util.Collections.singletonList(l.getOwnerUserId()))));
         }
         return get(l.getId());
     }
@@ -263,6 +278,14 @@ public class LeadService {
                     l.getOwnerUserId().toString(), p[0], p[1], labels, l.getPosition(),
                     l.getConvertedDealId() == null ? null : l.getConvertedDealId().toString(), l.getCreatedDate());
         }).toList();
+    }
+
+    /** Notification LEAD_ASSIGNED to the new owner (an IAM user; notification-service resolves the address). */
+    private void assigned(Lead l) {
+        outbox.publish(l.getCompanyId(), EVENT_ASSIGNED, "LEAD", l.getId(), Payload.of("leadId", l.getId(),
+                "pipelineId", l.getPipelineId(), "name", l.getName(), "subject", l.getSubject(),
+                "ownerUserId", l.getOwnerUserId(),
+                "recipientUserIds", Payload.ids(java.util.Collections.singletonList(l.getOwnerUserId()))));
     }
 
     private static void apply(Lead l, LeadForm f) {

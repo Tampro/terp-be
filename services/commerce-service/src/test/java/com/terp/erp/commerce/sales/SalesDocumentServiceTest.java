@@ -40,8 +40,9 @@ class SalesDocumentServiceTest {
     private final Numbering numbering = mock(Numbering.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
     private final AccountingClient accounting = mock(AccountingClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final SalesDocumentService service = new SalesDocumentService(documents, numbering, inventory, accounting,
-            Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
+            Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC), outbox);
     private long nextId = 100;
 
     @BeforeEach
@@ -130,6 +131,8 @@ class SalesDocumentServiceTest {
         verify(inventory).move(eq("SALES_INVOICE"), eq(7L),
                 eq(List.of(new InventoryClient.MoveLine(1L, 3L, new BigDecimal("2").negate()))));
         assertThat(posted.document().status()).isEqualTo(EDocumentStatus.POSTED);
+        verify(outbox).publish(eq(10L), eq("sales.invoice.posted"), eq("SALES_INVOICE"), eq(7L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> ((java.util.Map<?, ?>) p).get("invoiceId").equals("7")));
         assertThatThrownBy(() -> service.update(EDocumentKind.INVOICE, 7L, form(null, 3L, List.of(
                 new LineForm(1L, BigDecimal.ONE, null, null)))))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_002);
@@ -306,11 +309,22 @@ class SalesDocumentServiceTest {
 
         service.post(7L);
 
-        var order = org.mockito.Mockito.inOrder(accounting, inventory);
-        order.verify(accounting).journal(any(), eq(true));
-        order.verify(inventory).move(eq("SALES_INVOICE"), eq(7L), anyList());
+        var order = org.mockito.Mockito.inOrder(accounting, inventory, outbox);
         var posting = org.mockito.ArgumentCaptor.forClass(AccountingClient.Posting.class);
-        order.verify(accounting).journal(posting.capture(), eq(false));
+        order.verify(accounting).validate(posting.capture());
+        order.verify(inventory).move(eq("SALES_INVOICE"), eq(7L), anyList());
+        // the entry itself: an outbox event in the posting transaction, not a second call to journal-postings
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        order.verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("SALES_INVOICE"), eq(7L),
+                payload.capture());
+        verify(accounting, org.mockito.Mockito.times(1)).validate(any());
+        var event = (java.util.Map<?, ?>) payload.getValue();
+        assertThat(event.get("sourceId")).isEqualTo("7");
+        assertThat(event.get("date")).isEqualTo(TODAY.minusDays(5));
+        assertThat((BigDecimal) event.get("goodsAmount")).isEqualByComparingTo("200");
+        assertThat((BigDecimal) event.get("costAmount")).isEqualByComparingTo("120");
+        assertThat(event.get("actorSub")).isEqualTo("kc-5");
+        assertThat(d.getJournalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
         AccountingClient.Posting p = posting.getValue();
         assertThat(p.sourceType()).isEqualTo("SALES_INVOICE");
         assertThat(p.sourceId()).isEqualTo(7L);
@@ -338,11 +352,54 @@ class SalesDocumentServiceTest {
         when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(d));
         var closed = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.BAD_REQUEST, "ACC_070",
                 "The books are closed up to 2025-12-31");
-        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+        org.mockito.Mockito.doThrow(closed).when(accounting).validate(any());
 
         assertThatThrownBy(() -> service.post(7L)).isSameAs(closed);
         verify(inventory, never()).move(anyString(), anyLong(), anyList());
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
         assertThat(d.getStatus()).isEqualTo(EDocumentStatus.DRAFT);
+    }
+
+    @Test
+    void retryRepublishesTheJournalOnlyWhenItFailed() {
+        TestLogin.as(10L, "SALES_POST");
+        SalesDocument d = doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.POSTED);
+        d.setInvoiceType(EInvoiceType.SERVICE);
+        SalesDocumentLine setup = line(2L, "SERVICE", "1");
+        setup.setLineTotal(new BigDecimal("100"));
+        setup.setTaxAmount(BigDecimal.ZERO);
+        d.getLines().add(setup);
+        d.setTaxTotal(BigDecimal.ZERO);
+        d.setJournalStatus(com.terp.erp.commerce.common.EJournalStatus.POSTED);
+        when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(d));
+
+        assertThatThrownBy(() -> service.retryJournal(7L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_025);
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
+
+        d.setJournalStatus(com.terp.erp.commerce.common.EJournalStatus.FAILED);
+        d.setJournalErrorCode("ACC_070");
+        var row = service.retryJournal(7L).document();
+        assertThat(row.journalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
+        assertThat(row.journalErrorCode()).isNull();
+        verify(accounting).validate(org.mockito.ArgumentMatchers.argThat(p -> p.serviceAmount()
+                .compareTo(new BigDecimal("100")) == 0));
+        verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("SALES_INVOICE"), eq(7L), any());
+        verify(inventory, never()).move(anyString(), anyLong(), anyList());
+    }
+
+    @Test
+    void retryOfAnotherCompanysInvoiceIsNotFound() {
+        TestLogin.as(11L, "SALES_POST");
+        SalesDocument d = doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.POSTED);
+        d.setJournalStatus(com.terp.erp.commerce.common.EJournalStatus.FAILED);
+        when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(d));
+
+        assertThatThrownBy(() -> service.retryJournal(7L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_001);
+        verify(accounting, never()).validate(any());
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
+        assertThat(d.getJournalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.FAILED);
     }
 
     @Test

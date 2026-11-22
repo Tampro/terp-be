@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.ECommerceError;
+import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
@@ -16,6 +17,8 @@ import com.terp.erp.commerce.sales.SalesDtos.DocumentForm;
 import com.terp.erp.commerce.sales.SalesDtos.DocumentRow;
 import com.terp.erp.commerce.sales.SalesDtos.LineForm;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -35,6 +38,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SalesDocumentService {
     static final String STOCK_SOURCE = "SALES_INVOICE";
+    static final String EVENT_POSTED = "sales.invoice.posted";
     /** The unified calendar (report-service) shows a month with the weeks around it. */
     public static final int MAX_CALENDAR_DAYS = 62;
 
@@ -48,6 +52,7 @@ public class SalesDocumentService {
     private final InventoryClient inventory;
     private final AccountingClient accounting;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     // ---------- reads ----------
 
@@ -67,11 +72,11 @@ public class SalesDocumentService {
     @Transactional(readOnly = true)
     public Page<DocumentRow> search(EDocumentKind kind, Long companyId, Long customerId, Long warehouseId,
                                     LocalDate from, LocalDate to, String keyword, EDocumentStatus status,
-                                    boolean overdue, Pageable pageable) {
+                                    boolean overdue, EJournalStatus journalStatus, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
         LocalDate today = today();
         return documents.search(company, kind, customerId, warehouseId, from, to, like(keyword), status, overdue,
-                today, pageable).map(d -> DocumentRow.of(d, today));
+                journalStatus, today, pageable).map(d -> DocumentRow.of(d, today));
     }
 
     @Transactional(readOnly = true)
@@ -196,8 +201,9 @@ public class SalesDocumentService {
     /**
      * DRAFT → POSTED. A product-wise invoice takes its stocked lines out of its warehouse (inventory-service,
      * all-or-nothing, idempotent on the invoice id, so a retry after a failure takes nothing twice) and the invoice
-     * is journalled in accounting-service (Dr 131 / Cr 5111, 5113, 33311; Dr 632 / Cr 156 at cost), in the order of
-     * {@link Postings}: a closed year (ACC_070) or not enough stock is relayed and the invoice stays a draft.
+     * journal (Dr 131 / Cr 5111, 5113, 33311; Dr 632 / Cr 156 at cost) is requested from accounting-service through
+     * the outbox, in the order of {@link Postings}: a closed year (ACC_070) or not enough stock is relayed and the
+     * invoice stays a draft. The journal itself appears asynchronously: journalStatus PENDING → POSTED | FAILED.
      * TODO(assumption): cost = the item's purchase price when posted (costing method is an open ARQ question).
      */
     @Transactional
@@ -207,32 +213,64 @@ public class SalesDocumentService {
         if (product && d.getWarehouseId() == null) {
             throw ApiException.badRequest(ECommerceError.SAL_009);
         }
-        BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO, cost = BigDecimal.ZERO;
         for (SalesDocumentLine l : d.getLines()) {
-            BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
             if (product && l.stocked()) {
-                goods = goods.add(net);
                 l.setUnitCost(Money.nz(inventory.item(l.getItemId()).purchasePrice()));
-                cost = cost.add(Money.round(l.getUnitCost().multiply(l.getQuantity())));
-            } else {
-                service = service.add(net);
             }
         }
-        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, d.getId(), d.getDocDate(),
-                d.getNumber(), "Sales invoice " + d.getNumber() + " - " + d.getCustomerName(), goods, service,
-                d.getTaxTotal(), cost);
-        Postings.run(accounting, posting, () -> {
+        d.setJournalStatus(Postings.run(accounting, outbox, d.getCompanyId(), posting(d), () -> {
             if (product) {
                 inventory.move(STOCK_SOURCE, d.getId(), d.getLines().stream().filter(SalesDocumentLine::stocked)
                         .map(l -> new InventoryClient.MoveLine(l.getItemId(), d.getWarehouseId(),
                                 l.getQuantity().negate()))
                         .toList());
             }
-        });
+        }));
+        d.setJournalErrorCode(null);
         d.setStatus(EDocumentStatus.POSTED);
         d.setPostedAt(Instant.now(clock));
         d.setBalance(d.getTotal().subtract(d.getPaidAmount()));
+        // Notifications (webhook NEW_SALES_INVOICE, email INVOICE_SENT). TODO(assumption): no recipientEmail — the
+        // customer's address lives in accounting-service; the email is SKIPPED (NO_RECIPIENT) until it is added.
+        outbox.publish(d.getCompanyId(), EVENT_POSTED, "SALES_INVOICE", d.getId(), Payload.of(
+                "invoiceId", d.getId(), "number", d.getNumber(), "invoiceType", d.getInvoiceType(),
+                "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "docDate", d.getDocDate(),
+                "dueDate", d.getDueDate(), "total", d.getTotal(), "balance", d.getBalance()));
         return DocumentDetail.of(d, today());
+    }
+
+    /**
+     * Re-post of a journal that accounting refused after the invoice was posted (journalStatus FAILED, e.g. the year
+     * was closed in between): validated again synchronously, then requested again; journalStatus → PENDING. The
+     * amounts are those of the posting (cost from the unit cost kept on the lines). Stock is not moved again.
+     */
+    @Transactional
+    public DocumentDetail retryJournal(Long id) {
+        SalesDocument d = require(EDocumentKind.INVOICE, id);
+        if (d.getJournalStatus() != EJournalStatus.FAILED) {
+            throw ApiException.badRequest(ECommerceError.SAL_025);
+        }
+        Postings.retry(accounting, outbox, d.getCompanyId(), posting(d));
+        d.setJournalStatus(EJournalStatus.PENDING);
+        d.setJournalErrorCode(null);
+        return DocumentDetail.of(d, today());
+    }
+
+    /** Amounts by role of a product / service invoice; cost from the unit cost the lines took when posted. */
+    static AccountingClient.Posting posting(SalesDocument d) {
+        boolean product = d.getInvoiceType() == EInvoiceType.PRODUCT;
+        BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO, cost = BigDecimal.ZERO;
+        for (SalesDocumentLine l : d.getLines()) {
+            BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
+            if (product && l.stocked()) {
+                goods = goods.add(net);
+                cost = cost.add(Money.round(Money.nz(l.getUnitCost()).multiply(l.getQuantity())));
+            } else {
+                service = service.add(net);
+            }
+        }
+        return new AccountingClient.Posting(STOCK_SOURCE, d.getId(), d.getDocDate(), d.getNumber(),
+                "Sales invoice " + d.getNumber() + " - " + d.getCustomerName(), goods, service, d.getTaxTotal(), cost);
     }
 
     /** For returns: a posted (or paid) invoice of the caller's company. */

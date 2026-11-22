@@ -8,9 +8,10 @@ import lombok.RequiredArgsConstructor;
  * Names are the reference TERP Core email template names: database/seeders/EmailTemplatesSeeder (general),
  * packages/workdo/Lead (CRM), SupportTicket, Recruitment. "New User" is {@link EEmailTemplate#USER_CREATE}, which
  * the platform already sends, so it is not repeated here.
- * TODO: nothing sends these yet. Each owning service will publish its event; dispatch (render the template, check
- * this switch through GET /api/v1/settings/email-notifications/{code}/enabled, send) needs the planned
- * notification-service and a message broker (CLAUDE.md "Planned ERP services").
+ * Dispatch: the owning services publish outbox events; notification-service maps them to these codes, reads this
+ * switch through IAM's internal GET /api/v1/internal/notification-config and sends. Produced today: INVOICE_SENT (on
+ * sales invoice post), INVOICE_PAYMENT_CREATED, LEAD_ASSIGNED, LEAD_MOVED, DEAL_ASSIGNED, DEAL_MOVED,
+ * SUPPORT_TICKET_CREATED, SUPPORT_TICKET_REPLY, APPLICATION_RECEIVED. TODO: the others have no producer yet.
  * Codes are stored in company_email_notification.template_code: never rename one, and never reuse an
  * {@link EEmailTemplate} name.
  */
