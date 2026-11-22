@@ -38,6 +38,14 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class TripService {
+    /**
+     * TODO(assumption): the move table is ours (the manual lists only the statuses; statuses were set freely before)
+     * — confirm with BA. COMPLETED and CANCELLED are final.
+     */
+    static final Map<EStatus, java.util.Set<EStatus>> MOVES = Map.of(
+            EStatus.PLANNED, java.util.EnumSet.of(EStatus.ONGOING, EStatus.CANCELLED),
+            EStatus.ONGOING, java.util.EnumSet.of(EStatus.COMPLETED, EStatus.CANCELLED));
+
     private final EmployeeTripRepository trips;
     private final TripExpenseRepository expenses;
     private final LifecycleSupport support;
@@ -130,17 +138,22 @@ public class TripService {
         return detail(trips.save(t));
     }
 
-    /** Full replacement of the form; statuses and expenses are kept. */
+    /** Full replacement of the form while PLANNED (EMP_102 afterwards); statuses and expenses are kept. */
     @Transactional
     public TripDto update(Long id, TripForm form) {
-        EmployeeTrip t = requireActive(id);
+        EmployeeTrip t = require(id);
+        if (t.getStatus() != EStatus.PLANNED) {
+            throw ApiException.badRequest(EEmployeeError.EMP_102, t.getStatus().name());
+        }
         apply(t, form);
         return detail(t);
     }
 
+    /** Follows {@link #MOVES} (400 EMP_096 otherwise); CANCELLED keeps answering EMP_060. */
     @Transactional
     public TripDto changeStatus(Long id, EStatus status) {
         EmployeeTrip t = requireActive(id);
+        LifecycleSupport.assertMove(MOVES, t.getStatus(), status);
         t.setStatus(status);
         return detail(t);
     }
@@ -165,10 +178,18 @@ public class TripService {
         return detail(t);
     }
 
-    /** Allowed in every status (a cancelled trip shows View and Delete). */
+    /**
+     * PLANNED or CANCELLED only (a cancelled trip shows View and Delete, PO 2026-11-20); an ONGOING or COMPLETED trip
+     * carries advances and expenses and stays (EMP_102). TODO(assumption): a cancelled trip may be deleted even with a
+     * paid advance — confirm with BA.
+     */
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        EmployeeTrip t = require(id);
+        if (t.getStatus() != EStatus.PLANNED && t.getStatus() != EStatus.CANCELLED) {
+            throw ApiException.badRequest(EEmployeeError.EMP_102, t.getStatus().name());
+        }
+        t.setDeleted(true);
     }
 
     private void apply(EmployeeTrip t, TripForm f) {

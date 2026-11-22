@@ -120,10 +120,11 @@ public class WarningController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a warning", description = "Full replacement of the form; status, acknowledgment and "
-            + "plan progress are kept (turning the plan off clears it).")
+    @Operation(summary = "Edit a warning", description = "Full replacement of the form, only while PENDING; status, "
+            + "acknowledgment and plan progress are kept (turning the plan off clears it).")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "EMP_050, EMP_052, EMP_053, EMP_054, EMP_012"),
+            @ApiResponse(responseCode = "400", description = "Already decided (EMP_102), EMP_050, EMP_052, EMP_053, "
+                    + "EMP_054, EMP_012"),
             @ApiResponse(responseCode = "404", description = "No such warning (EMP_051) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}")
@@ -152,8 +153,10 @@ public class WarningController {
         return ApiMessageDto.ok(service.updatePlan(id, form));
     }
 
-    @Operation(summary = "Delete a warning")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such warning in your company (EMP_051)"))
+    @Operation(summary = "Delete a warning", description = "Only while PENDING.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Already decided (EMP_102)"),
+            @ApiResponse(responseCode = "404", description = "No such warning in your company (EMP_051)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

@@ -116,7 +116,7 @@ public class OfferController {
     @Operation(summary = "Edit an offer", description = "Full replacement; status and offer date are kept; the "
             + "approval goes back to PENDING.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "REC_036, REC_037"),
+            @ApiResponse(responseCode = "400", description = "Final or converted offer (REC_067), REC_036, REC_037"),
             @ApiResponse(responseCode = "404", description = "REC_035, REC_015, REC_006, EMP_003, EMP_001"),
             @ApiResponse(responseCode = "503", description = "employee-service unavailable (REC_012)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
@@ -128,7 +128,8 @@ public class OfferController {
     @Operation(summary = "Update Status / kanban drag and drop", description = "ACCEPTED makes the candidate HIRED. "
             + "SENT needs approvalStatus APPROVED.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Not approved before sending (REC_058)"),
+            @ApiResponse(responseCode = "400", description = "Not approved before sending (REC_058), final "
+                    + "(ACCEPTED / DECLINED / EXPIRED) or converted offer (REC_067)"),
             @ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}/status")
@@ -139,7 +140,9 @@ public class OfferController {
     @Operation(summary = "Approve or reject an offer",
             description = "Sets approvalStatus (APPROVED / REJECTED, PENDING withdraws) and records who decided "
                     + "(approvalDecidedBy = Keycloak user id) and when. Independent of the offer status.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Final or converted offer (REC_067)"),
+            @ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}/approval")
     public ApiMessageDto<OfferDto> approval(@PathVariable Long id, @Valid @RequestBody ApprovalForm form) {
@@ -188,8 +191,10 @@ public class OfferController {
         return ApiMessageDto.ok(conversions.convert(id, form));
     }
 
-    @Operation(summary = "Delete an offer")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)"))
+    @Operation(summary = "Delete an offer", description = "Not once ACCEPTED, DECLINED or EXPIRED.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Final or converted offer (REC_067)"),
+            @ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

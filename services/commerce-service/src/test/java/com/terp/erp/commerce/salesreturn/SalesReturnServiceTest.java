@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.terp.erp.commerce.TestLogin;
+import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.ECommerceError;
 import com.terp.erp.commerce.common.Numbering;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,8 +45,9 @@ class SalesReturnServiceTest {
     private final SalesDocumentService documents = mock(SalesDocumentService.class);
     private final Numbering numbering = mock(Numbering.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
+    private final AccountingClient accounting = mock(AccountingClient.class);
     private final SalesReturnService service = new SalesReturnService(returns, documents, numbering, inventory,
-            Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
+            accounting, Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
     private final SalesDocument invoice = new SalesDocument();
 
     @BeforeEach
@@ -68,7 +71,9 @@ class SalesReturnServiceTest {
         l.setDiscountPct(new BigDecimal("10"));
         l.setTaxRate(new BigDecimal("10"));
         invoice.getLines().add(l);
+        l.setUnitCost(new BigDecimal("60"));
         when(documents.requirePostedInvoice(40L)).thenReturn(invoice);
+        when(documents.lockPostedInvoice(40L)).thenReturn(invoice);
         when(numbering.next(anyLong(), anyString(), any())).thenReturn("SR-2026-11-001");
         when(returns.save(any(SalesReturn.class))).thenAnswer(inv -> {
             SalesReturn r = inv.getArgument(0);
@@ -131,9 +136,15 @@ class SalesReturnServiceTest {
         l.setItemId(1L);
         l.setItemType("PRODUCT");
         l.setQuantity(new BigDecimal("2"));
+        l.setLineTotal(new BigDecimal("198"));
+        l.setTaxAmount(new BigDecimal("18"));
         r.getLines().add(l);
         r.setInvoiceId(40L);
         r.setCustomerId(5L);
+        r.setNumber("SR-2026-11-001");
+        r.setReturnDate(TODAY);
+        r.setTaxTotal(new BigDecimal("18"));
+        r.setTotal(new BigDecimal("198"));
         when(returns.findByIdAndDeletedFalse(70L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> service.complete(70L))
@@ -144,6 +155,14 @@ class SalesReturnServiceTest {
         verify(inventory).move(eq("SALES_RETURN"), eq(70L),
                 eq(List.of(new InventoryClient.MoveLine(1L, 3L, new BigDecimal("2")))));
         assertThat(done.ret().status()).isEqualTo(SalesReturn.EStatus.COMPLETED);
+        // validated first, then journalled: net 180 (5213), VAT 18, cost 2 x 60 = 120 at the invoice line's cost
+        var order = org.mockito.Mockito.inOrder(accounting, inventory);
+        order.verify(accounting).journal(any(), eq(true));
+        order.verify(inventory).move(eq("SALES_RETURN"), eq(70L), anyList());
+        order.verify(accounting).journal(org.mockito.ArgumentMatchers.argThat(p -> p.sourceType().equals("SALES_RETURN")
+                && p.sourceId() == 70L && p.goodsAmount().compareTo(new BigDecimal("180")) == 0
+                && p.serviceAmount().signum() == 0 && p.taxAmount().compareTo(new BigDecimal("18")) == 0
+                && p.costAmount().compareTo(new BigDecimal("120")) == 0), eq(false));
         assertThatThrownBy(() -> service.delete(70L))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_013);
     }
@@ -158,5 +177,48 @@ class SalesReturnServiceTest {
 
         assertThatThrownBy(() -> service.get(70L))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_012);
+    }
+
+    @Test
+    void returnsLockTheInvoiceRowWhileTheReturnableQuantityIsChecked() {
+        TestLogin.as(10L, "SALES_MANAGE");
+        when(returns.returned(any(), isNull())).thenReturn(java.util.Map.of(31L, new BigDecimal("4")));
+
+        assertThatThrownBy(() -> service.create(new ReturnForm(40L, null, TODAY, null, null,
+                List.of(new LineForm(31L, new BigDecimal("2"), null)))))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_011);
+        // the returnable quantity is read with the invoice locked (SELECT ... FOR UPDATE), not the plain read
+        verify(documents).lockPostedInvoice(40L);
+        verify(documents, org.mockito.Mockito.never()).requirePostedInvoice(40L);
+    }
+
+    @Test
+    void closedYearKeepsTheReturnApprovedAndMovesNoStock() {
+        TestLogin.as(10L, "SALES_POST");
+        SalesReturn r = new SalesReturn();
+        r.setId(70L);
+        r.setCompanyId(10L);
+        r.setWarehouseId(3L);
+        r.setStatus(SalesReturn.EStatus.APPROVED);
+        r.setInvoiceId(40L);
+        r.setNumber("SR-2026-11-001");
+        r.setReturnDate(TODAY);
+        r.setTaxTotal(new BigDecimal("18"));
+        SalesReturn.Line l = new SalesReturn.Line();
+        l.setInvoiceLineId(31L);
+        l.setItemId(1L);
+        l.setItemType("PRODUCT");
+        l.setQuantity(new BigDecimal("2"));
+        l.setLineTotal(new BigDecimal("198"));
+        l.setTaxAmount(new BigDecimal("18"));
+        r.getLines().add(l);
+        when(returns.findByIdAndDeletedFalse(70L)).thenReturn(Optional.of(r));
+        var closed = new com.terp.erp.commerce.client.RemoteApiException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "ACC_070", "closed");
+        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+
+        assertThatThrownBy(() -> service.complete(70L)).isSameAs(closed);
+        verify(inventory, org.mockito.Mockito.never()).move(anyString(), anyLong(), anyList());
+        assertThat(r.getStatus()).isEqualTo(SalesReturn.EStatus.APPROVED);
     }
 }

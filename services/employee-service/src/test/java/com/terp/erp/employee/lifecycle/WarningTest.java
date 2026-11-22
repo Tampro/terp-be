@@ -100,6 +100,22 @@ class WarningTest {
     }
 
     @Test
+    void editAndDeleteOnlyWhilePending() {
+        EmployeeWarning w = existing();
+        service.update(9L, form(2L, 5L, 6L, null, false));
+        assertThat(w.getSubject()).isEqualTo("Late arrival");
+        for (EStatus decided : List.of(EStatus.APPROVED, EStatus.REJECTED)) {
+            w.setStatus(decided);
+            assertCode(() -> service.update(9L, form(2L, 5L, 6L, null, false)), EEmployeeError.EMP_102);
+            assertCode(() -> service.delete(9L), EEmployeeError.EMP_102);
+        }
+        assertThat(w.isDeleted()).isFalse();
+        w.setStatus(EStatus.PENDING);
+        service.delete(9L);
+        assertThat(w.isDeleted()).isTrue();
+    }
+
+    @Test
     void onlyTheWarnedEmployeeRespondsAndOnlyWhilePending() {
         EmployeeWarning w = existing();
         Employee me = employee(1L, 10L);

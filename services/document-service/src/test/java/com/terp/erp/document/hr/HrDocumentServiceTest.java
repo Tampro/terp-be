@@ -102,6 +102,27 @@ class HrDocumentServiceTest {
     }
 
     @Test
+    void decidedDocumentIsLockedAndMovesFollowTheTable() {
+        // PUBLISHED (setUp): no edit, no delete, no way back to PENDING; archive is the way out
+        assertCode(() -> service.update(9L, form(null, null, null)), EDocumentError.DOC_027);
+        assertCode(() -> service.delete(9L), EDocumentError.DOC_027);
+        assertCode(() -> service.changeStatus(9L, HrDocument.EStatus.PENDING), EDocumentError.DOC_028);
+        doc.setStatus(HrDocument.EStatus.PENDING);
+        assertCode(() -> service.changeStatus(9L, HrDocument.EStatus.APPROVED), EDocumentError.DOC_028);
+        doc.setStatus(HrDocument.EStatus.APPROVED);
+        assertCode(() -> service.update(9L, form(null, null, null)), EDocumentError.DOC_027);
+        assertThat(service.changeStatus(9L, HrDocument.EStatus.ARCHIVED).storedStatus())
+                .isEqualTo(HrDocument.EStatus.ARCHIVED);
+        assertCode(() -> service.changeStatus(9L, HrDocument.EStatus.PUBLISHED), EDocumentError.DOC_028);
+        assertThat(doc.isDeleted()).isFalse();
+        // REJECTED can be fixed and resubmitted, or deleted
+        doc.setStatus(HrDocument.EStatus.REJECTED);
+        assertThat(service.update(9L, form(null, null, null)).title()).isEqualTo("Code of Conduct");
+        service.delete(9L);
+        assertThat(doc.isDeleted()).isTrue();
+    }
+
+    @Test
     void assignAndAcknowledgeThemself() {
         when(employees.employee(12L)).thenReturn(new EmployeeClient.Employee("12", "10", "E12", "Test Twelve",
                 "t12@example.invalid", null, "ACTIVE", null, null, "77"));

@@ -30,7 +30,8 @@ public enum ECommerceError implements ErrorCode {
     SAL_020("The period must end on or after its start and last at most {0} days."),
     SAL_021("Only a posted or partly paid invoice can take a payment."),
     SAL_022("The payment amount {0} is more than the invoice balance {1}."),
-    SAL_023("Payment {0} was already applied to this invoice with a different amount.");
+    SAL_023("Payment {0} was already applied to this invoice with a different amount."),
+    SAL_024("The warehouse is inactive.");
 
     private final String message;
 }

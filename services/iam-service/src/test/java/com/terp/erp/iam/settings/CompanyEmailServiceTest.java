@@ -62,6 +62,19 @@ class CompanyEmailServiceTest {
     }
 
     @Test
+    void smtpConfiguredTellsWhetherEventEmailsCanBeSent() {
+        when(repo.findById(10L)).thenReturn(Optional.empty());
+        assertThat(service.get(null).smtpConfigured()).isTrue();
+        when(platform.mailer()).thenReturn(null);
+        assertThat(service.get(null).smtpConfigured()).isFalse();
+        CompanyEmailSetting s = new CompanyEmailSetting();
+        s.setCompanyId(10L);
+        when(repo.findById(10L)).thenReturn(Optional.of(s));
+        assertThat(service.save(null, form(true, "s3cret")).smtpConfigured()).isTrue();
+        assertThat(service.save(null, form(false, null)).smtpConfigured()).isFalse();
+    }
+
+    @Test
     void testWithoutCompanySmtpIsSettings003() {
         when(repo.findById(10L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.sendTest(null, "me@example.invalid")).isInstanceOf(ApiException.class)

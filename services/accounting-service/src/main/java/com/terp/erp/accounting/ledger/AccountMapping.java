@@ -48,6 +48,19 @@ public class AccountMapping {
                 .orElseThrow(() -> ApiException.badRequest(EAccountingError.ACC_017, key.name()));
     }
 
+    /**
+     * Like {@link #require} but empty instead of ACC_017, for an optional key (SERVICE_REVENUE falls back to
+     * SALES_REVENUE). Never throws ACC_017, so the caller's transaction is not marked rollback-only.
+     */
+    @Transactional
+    public java.util.Optional<Long> find(Long companyId, ESystemAccount key) {
+        seeder.ensureSeeded(companyId);
+        return mappingOf(companyId, key)
+                .flatMap(m -> accounts.findById(m.getAccountId()))
+                .filter(a -> a.isActive() && Objects.equals(a.getCompanyId(), companyId))
+                .map(ChartAccount::getId);
+    }
+
     // Not read-only: the first read seeds the chart.
     @Transactional
     public List<MappingDto> get(Long requestedCompanyId) {

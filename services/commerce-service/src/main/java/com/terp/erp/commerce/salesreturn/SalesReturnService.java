@@ -11,10 +11,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.ECommerceError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.commerce.sales.EInvoiceType;
 import com.terp.erp.commerce.sales.SalesDocument;
 import com.terp.erp.commerce.sales.SalesDocumentLine;
@@ -46,6 +48,7 @@ public class SalesReturnService {
     private final SalesDocumentService documents;
     private final Numbering numbering;
     private final InventoryClient inventory;
+    private final AccountingClient accounting;
     private final Clock clock;
 
     public record LineForm(
@@ -131,7 +134,7 @@ public class SalesReturnService {
 
     @Transactional
     public ReturnDetail create(ReturnForm f) {
-        SalesDocument inv = documents.requirePostedInvoice(f.invoiceId());
+        SalesDocument inv = documents.lockPostedInvoice(f.invoiceId());
         SalesReturn r = new SalesReturn();
         r.setCompanyId(inv.getCompanyId());
         apply(r, inv, f, null);
@@ -143,7 +146,7 @@ public class SalesReturnService {
     @Transactional
     public ReturnDetail update(Long id, ReturnForm f) {
         SalesReturn r = requireDraft(id);
-        SalesDocument inv = documents.requirePostedInvoice(f.invoiceId());
+        SalesDocument inv = documents.lockPostedInvoice(f.invoiceId());
         apply(r, inv, f, r.getId());
         return ReturnDetail.of(r);
     }
@@ -160,18 +163,47 @@ public class SalesReturnService {
         return ReturnDetail.of(r);
     }
 
-    /** APPROVED → COMPLETED once the goods are received: stocked lines go back into the receiving warehouse. */
+    /**
+     * APPROVED → COMPLETED once the goods are received: stocked lines go back into the receiving warehouse and the
+     * return is journalled (Dr 5213 net, Dr 33311 VAT / Cr 131 total; Dr 156 / Cr 632 at the invoice line's cost for
+     * restocked lines), in the order of {@link Postings}; a closed year (ACC_070) is relayed, the return stays
+     * APPROVED.
+     * TODO(assumption): an invoice posted before costs were kept has no unit cost: the item's purchase price now.
+     */
     @Transactional
     public ReturnDetail complete(Long id) {
         SalesReturn r = require(id);
         if (r.getStatus() != SalesReturn.EStatus.APPROVED) {
             throw ApiException.badRequest(ECommerceError.SAL_014);
         }
-        if (r.getWarehouseId() != null) {
-            inventory.move(STOCK_SOURCE, r.getId(), r.getLines().stream().filter(SalesReturn.Line::stocked)
-                    .map(l -> new InventoryClient.MoveLine(l.getItemId(), r.getWarehouseId(), l.getQuantity()))
-                    .toList());
+        boolean restock = r.getWarehouseId() != null;
+        BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO, cost = BigDecimal.ZERO;
+        Map<Long, SalesDocumentLine> invoiceLines = restock
+                ? documents.requirePostedInvoice(r.getInvoiceId()).getLines().stream()
+                .collect(Collectors.toMap(SalesDocumentLine::getId, Function.identity()))
+                : Map.of();
+        for (SalesReturn.Line l : r.getLines()) {
+            BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
+            if (restock && l.stocked()) {
+                goods = goods.add(net);
+                SalesDocumentLine src = invoiceLines.get(l.getInvoiceLineId());
+                BigDecimal unitCost = src != null && src.getUnitCost() != null ? src.getUnitCost()
+                        : Money.nz(inventory.item(l.getItemId()).purchasePrice());
+                cost = cost.add(Money.round(unitCost.multiply(l.getQuantity())));
+            } else {
+                service = service.add(net);
+            }
         }
+        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(),
+                r.getNumber(), "Sales return " + r.getNumber() + " - " + r.getCustomerName(), goods, service,
+                r.getTaxTotal(), cost);
+        Postings.run(accounting, posting, () -> {
+            if (restock) {
+                inventory.move(STOCK_SOURCE, r.getId(), r.getLines().stream().filter(SalesReturn.Line::stocked)
+                        .map(l -> new InventoryClient.MoveLine(l.getItemId(), r.getWarehouseId(), l.getQuantity()))
+                        .toList());
+            }
+        });
         r.setStatus(SalesReturn.EStatus.COMPLETED);
         r.setCompletedAt(Instant.now(clock));
         return ReturnDetail.of(r);

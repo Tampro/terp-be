@@ -47,18 +47,22 @@ public class CompanyEmailService {
             @Size(max = 100) String fromName) {
     }
 
-    /** configured = the company has its own SMTP; usingPlatform = the platform SMTP sends the company's emails. */
+    /**
+     * configured = the company has its own SMTP; usingPlatform = the platform SMTP sends the company's emails;
+     * smtpConfigured = some SMTP (its own, switched on, or the platform's) can send them — false means event emails
+     * (welcome, password reset, …) are skipped.
+     */
     public record CompanyEmailView(boolean configured, boolean enabled, String host, Integer port, String username,
                                    boolean passwordSet, EMailEncryption encryption, String fromAddress,
-                                   String fromName, boolean usingPlatform) {
+                                   String fromName, boolean usingPlatform, boolean smtpConfigured) {
     }
 
     @Transactional(readOnly = true)
     public CompanyEmailView get(Long requestedCompanyId) {
         Long companyId = company(requestedCompanyId);
-        return repo.findById(Nulls.nonNull(companyId)).map(CompanyEmailService::view)
+        return repo.findById(Nulls.nonNull(companyId)).map(this::view)
                 .orElse(new CompanyEmailView(false, false, null, 587, null, false, EMailEncryption.TLS, null, null,
-                        true));
+                        true, platform.mailer() != null));
     }
 
     @Transactional
@@ -124,9 +128,11 @@ public class CompanyEmailService {
                 s.getFromAddress(), s.getFromName());
     }
 
-    private static CompanyEmailView view(CompanyEmailSetting s) {
+    /** Its own SMTP counts as soon as it is on (the password is not decrypted here); else the platform's decides. */
+    private CompanyEmailView view(CompanyEmailSetting s) {
         return new CompanyEmailView(true, s.isEnabled(), s.getHost(), s.getPort(), s.getUsername(),
-                s.getPasswordEnc() != null, s.getEncryption(), s.getFromAddress(), s.getFromName(), !s.isEnabled());
+                s.getPasswordEnc() != null, s.getEncryption(), s.getFromAddress(), s.getFromName(), !s.isEnabled(),
+                s.isEnabled() || platform.mailer() != null);
     }
 
     private static Long company(Long requested) {

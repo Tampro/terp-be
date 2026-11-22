@@ -101,10 +101,10 @@ public class TripController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a trip", description = "Full replacement of the form; statuses and expenses are kept. "
-            + "The advance amount is fixed once the advance is approved.")
+    @Operation(summary = "Edit a trip", description = "Full replacement of the form, only while PLANNED; statuses and "
+            + "expenses are kept. The advance amount is fixed once the advance is approved.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = CANCELLED + ", advance amount after approval "
+            @ApiResponse(responseCode = "400", description = "Not PLANNED (EMP_102), advance amount after approval "
                     + "(EMP_062), EMP_052, EMP_012"),
             @ApiResponse(responseCode = "404", description = "No such trip (EMP_059) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
@@ -114,9 +114,10 @@ public class TripController {
     }
 
     @Operation(summary = "Change Trip Status (Planned, Ongoing, Completed, Cancelled)",
-            description = "Set by hand; once CANCELLED the trip can only be viewed or deleted.")
+            description = "Allowed: PLANNED -> ONGOING | CANCELLED, ONGOING -> COMPLETED | CANCELLED; COMPLETED is "
+                    + "final and a CANCELLED trip can only be viewed or deleted.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = CANCELLED),
+            @ApiResponse(responseCode = "400", description = CANCELLED + ", move not allowed (EMP_096)"),
             @ApiResponse(responseCode = "404", description = "No such trip in your company (EMP_059)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/status")
@@ -146,8 +147,10 @@ public class TripController {
         return ApiMessageDto.ok(service.changeReimbursementStatus(id, form.status()));
     }
 
-    @Operation(summary = "Delete a trip", description = "Allowed in every status.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such trip in your company (EMP_059)"))
+    @Operation(summary = "Delete a trip", description = "Only while PLANNED or CANCELLED.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "ONGOING or COMPLETED (EMP_102)"),
+            @ApiResponse(responseCode = "404", description = "No such trip in your company (EMP_059)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

@@ -129,10 +129,10 @@ public class LeaveApplicationController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a pending or rejected application (full replacement)",
-            description = "Omitted attachment is cleared; it goes back to PENDING. Approved ones are final.")
+    @Operation(summary = "Edit a pending application (full replacement)",
+            description = "Omitted attachment is cleared. Approved and rejected ones are final.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = RULES + ", approved (ATT_048)"),
+            @ApiResponse(responseCode = "400", description = RULES + ", already decided (ATT_020)"),
             @ApiResponse(responseCode = "404", description = "No such application (ATT_039), employee or leave type")})
     @PreAuthorize("@PermissionChecker.has('LEAVE_MANAGE')")
     @PutMapping("/{id}")
@@ -163,9 +163,9 @@ public class LeaveApplicationController {
         return ApiMessageDto.ok(service.reject(id, form == null ? null : form.comments()));
     }
 
-    @Operation(summary = "Delete a pending or rejected application")
+    @Operation(summary = "Delete a pending application")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Approved (ATT_048)"),
+            @ApiResponse(responseCode = "400", description = "Already decided (ATT_020)"),
             @ApiResponse(responseCode = "404", description = "No such application in your company (ATT_039)")})
     @PreAuthorize("@PermissionChecker.has('LEAVE_MANAGE')")
     @DeleteMapping("/{id}")

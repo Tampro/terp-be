@@ -61,7 +61,9 @@ public class EmailDispatcher {
         // The company's own SMTP when it set one up (and it is on), else the platform's.
         SettingsService.Mailer mailer = companyMail.mailerFor(e.companyId());
         if (mailer == null) {
-            log.info("Email {} skipped: SMTP not configured", e.template());
+            // WARN: a silently dropped welcome / reset email looks like a bug to users; admins see smtpConfigured
+            // = false on GET /api/v1/settings/company/email. Recipients are never logged.
+            log.warn("Email {} skipped for company {}: SMTP not configured", e.template(), e.companyId());
             return;
         }
         var rendered = templates.render(e.template().name(), settings.system().defaultLanguage(), e.values());

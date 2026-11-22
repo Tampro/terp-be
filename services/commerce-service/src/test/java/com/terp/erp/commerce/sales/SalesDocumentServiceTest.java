@@ -65,6 +65,8 @@ class SalesDocumentServiceTest {
                 new BigDecimal("10"), new BigDecimal("100")));
         when(inventory.item(2L)).thenReturn(new InventoryClient.Item("2", "SERVICE", "Setup", "S-1", null, null,
                 new BigDecimal("50")));
+        when(inventory.warehouse(2L)).thenReturn(new InventoryClient.Warehouse("2", "Main", true));
+        when(inventory.warehouse(3L)).thenReturn(new InventoryClient.Warehouse("3", "Second", true));
     }
 
     @AfterEach
@@ -281,5 +283,93 @@ class SalesDocumentServiceTest {
         l.setQuantity(new BigDecimal(qty));
         l.setUnitPrice(new BigDecimal("100"));
         return l;
+    }
+
+    @Test
+    void postingJournalsTheInvoiceAfterValidatingAndKeepsTheCost() {
+        TestLogin.as(10L, "SALES_POST");
+        when(inventory.item(1L)).thenReturn(new InventoryClient.Item("1", "PRODUCT", "Test Widget", "W-1", "VAT 10",
+                new BigDecimal("10"), new BigDecimal("100"), new BigDecimal("60")));
+        SalesDocument d = doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.DRAFT);
+        d.setInvoiceType(EInvoiceType.PRODUCT);
+        d.setWarehouseId(3L);
+        SalesDocumentLine goods = line(1L, "PRODUCT", "2");
+        goods.setLineTotal(new BigDecimal("220"));
+        goods.setTaxAmount(new BigDecimal("20"));
+        SalesDocumentLine setup = line(2L, "SERVICE", "1");
+        setup.setLineTotal(new BigDecimal("100"));
+        d.getLines().add(goods);
+        d.getLines().add(setup);
+        d.setTaxTotal(new BigDecimal("20"));
+        d.setTotal(new BigDecimal("320"));
+        when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(d));
+
+        service.post(7L);
+
+        var order = org.mockito.Mockito.inOrder(accounting, inventory);
+        order.verify(accounting).journal(any(), eq(true));
+        order.verify(inventory).move(eq("SALES_INVOICE"), eq(7L), anyList());
+        var posting = org.mockito.ArgumentCaptor.forClass(AccountingClient.Posting.class);
+        order.verify(accounting).journal(posting.capture(), eq(false));
+        AccountingClient.Posting p = posting.getValue();
+        assertThat(p.sourceType()).isEqualTo("SALES_INVOICE");
+        assertThat(p.sourceId()).isEqualTo(7L);
+        assertThat(p.date()).isEqualTo(TODAY.minusDays(5));
+        assertThat(p.goodsAmount()).isEqualByComparingTo("200");
+        assertThat(p.serviceAmount()).isEqualByComparingTo("100");
+        assertThat(p.taxAmount()).isEqualByComparingTo("20");
+        // goods + service + tax = the invoice total accounting debits to 131
+        assertThat(p.goodsAmount().add(p.serviceAmount()).add(p.taxAmount())).isEqualByComparingTo(d.getTotal());
+        assertThat(p.costAmount()).isEqualByComparingTo("120");
+        assertThat(goods.getUnitCost()).isEqualByComparingTo("60");
+        assertThat(d.getStatus()).isEqualTo(EDocumentStatus.POSTED);
+    }
+
+    @Test
+    void closedYearKeepsTheInvoiceADraftAndMovesNoStock() {
+        TestLogin.as(10L, "SALES_POST");
+        SalesDocument d = doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.DRAFT);
+        d.setInvoiceType(EInvoiceType.PRODUCT);
+        d.setWarehouseId(3L);
+        SalesDocumentLine goods = line(1L, "PRODUCT", "2");
+        goods.setLineTotal(new BigDecimal("200"));
+        d.getLines().add(goods);
+        d.setTaxTotal(BigDecimal.ZERO);
+        when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(d));
+        var closed = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.BAD_REQUEST, "ACC_070",
+                "The books are closed up to 2025-12-31");
+        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+
+        assertThatThrownBy(() -> service.post(7L)).isSameAs(closed);
+        verify(inventory, never()).move(anyString(), anyLong(), anyList());
+        assertThat(d.getStatus()).isEqualTo(EDocumentStatus.DRAFT);
+    }
+
+    @Test
+    void aDraftInvoiceNeedsAnActiveWarehouseOfTheCompany() {
+        TestLogin.as(10L, "SALES_MANAGE");
+        when(inventory.warehouse(4L)).thenReturn(new InventoryClient.Warehouse("4", "Old", false));
+        assertThatThrownBy(() -> service.create(EDocumentKind.INVOICE, form(null, 4L, List.of(
+                new LineForm(1L, BigDecimal.ONE, null, null)))))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_024);
+        // another company's warehouse: inventory-service's own 404, relayed as is
+        var foreign = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.NOT_FOUND, "INV_010", "x");
+        when(inventory.warehouse(5L)).thenThrow(foreign);
+        assertThatThrownBy(() -> service.create(EDocumentKind.INVOICE, form(null, 5L, List.of(
+                new LineForm(1L, BigDecimal.ONE, null, null))))).isSameAs(foreign);
+        verify(documents, never()).save(any());
+    }
+
+    @Test
+    void aReturnLocksAPostedInvoiceOfTheCompany() {
+        TestLogin.as(10L, "SALES_MANAGE");
+        when(documents.lockById(7L)).thenReturn(Optional.of(doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.POSTED)));
+        assertThat(service.lockPostedInvoice(7L).getId()).isEqualTo(7L);
+        when(documents.lockById(8L)).thenReturn(Optional.of(doc(EDocumentKind.INVOICE, 20L, EDocumentStatus.POSTED)));
+        assertThatThrownBy(() -> service.lockPostedInvoice(8L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_001);
+        when(documents.lockById(9L)).thenReturn(Optional.of(doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.DRAFT)));
+        assertThatThrownBy(() -> service.lockPostedInvoice(9L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_010);
     }
 }

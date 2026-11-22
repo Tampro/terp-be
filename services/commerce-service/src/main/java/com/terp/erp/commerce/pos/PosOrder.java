@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.Setter;
 import com.terp.erp.commerce.common.BaseAuditableEntity;
@@ -70,6 +71,13 @@ public class PosOrder extends BaseAuditableEntity {
 
     @Column(name = "total", nullable = false, precision = 19, scale = 4)
     private BigDecimal total = BigDecimal.ZERO;
+
+    /**
+     * Cost of the stocked lines at checkout (item purchase price x quantity), sent to accounting for Dr 632 / Cr 156;
+     * not stored on the order.
+     */
+    @Transient
+    private BigDecimal costTotal = BigDecimal.ZERO;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "order_id", nullable = false)

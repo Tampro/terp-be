@@ -51,8 +51,8 @@ import java.util.stream.Collectors;
  * days off and the holidays of the employee's branch excluded); approving uses the balance and marks every working day
  * ON_LEAVE in the attendance calendar. The active policy of the leave type decides the days per application and
  * whether an approval is needed (none = approved at once). Pending days are reserved on the balance.
- * TODO(assumption): a leave stays within one calendar year (ATT_042); approved leaves cannot be edited or deleted
- * (ATT_048) — confirm with BA.
+ * TODO(assumption): a leave stays within one calendar year (ATT_042); only PENDING applications can be edited or
+ * deleted (ATT_020; ATT_048 is no longer raised) — confirm with BA.
  */
 @Service
 @RequiredArgsConstructor
@@ -137,13 +137,14 @@ public class LeaveApplicationService {
         return dto(a, e, t, true);
     }
 
-    /** Full replacement of a pending or rejected application; it goes back to PENDING. */
+    /**
+     * Full replacement of a PENDING application (ATT_020 once approved or rejected — manual §20; a rejected leave is
+     * applied for again as a new application). TODO(assumption): earlier a REJECTED application could be edited back to
+     * PENDING; confirm with BA that resubmitting means a new application.
+     */
     @Transactional
     public ApplicationDto update(Long id, ApplicationForm form) {
-        LeaveApplication a = require(id);
-        if (a.getStatus() == ERegularizationStatus.APPROVED) {
-            throw ApiException.badRequest(EAttendanceError.ATT_048);
-        }
+        LeaveApplication a = requirePending(id);
         Employee e = employees.get(form.employeeId());
         a.setStatus(ERegularizationStatus.PENDING);
         a.setManagerComments(null);
@@ -171,11 +172,7 @@ public class LeaveApplicationService {
 
     @Transactional
     public void delete(Long id) {
-        LeaveApplication a = require(id);
-        if (a.getStatus() == ERegularizationStatus.APPROVED) {
-            throw ApiException.badRequest(EAttendanceError.ATT_048);
-        }
-        applications.delete(a);
+        applications.delete(requirePending(id));
     }
 
     /** Validates the form for this employee and fills the application (days, policy, attachment). */

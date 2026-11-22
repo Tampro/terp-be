@@ -83,8 +83,8 @@ class ComplaintTest {
         var a = service.assign(9L, new AssignForm(3L, DAY.plusDays(7)));
         assertThat(a.status()).isEqualTo(EStatus.ASSIGNED);
         assertThat(a.assignment().assignedTo().id()).isEqualTo("3");
-        // the accused cannot become the handler through an edit either
-        assertCode(() -> service.update(9L, form(1L, 3L, false)), EEmployeeError.EMP_069);
+        // once assigned the complaint is no longer editable at all (so the accused cannot become the handler either)
+        assertCode(() -> service.update(9L, form(1L, 3L, false)), EEmployeeError.EMP_102);
 
         assertCode(() -> service.followUp(9L, new FollowUpForm("Check", DAY, null)), EEmployeeError.EMP_070);
         assertCode(() -> service.resolve(9L, new ResolveForm(6L, null, null, DAY.plusDays(2), null,
@@ -128,6 +128,20 @@ class ComplaintTest {
         assertCode(() -> service.assign(9L, new AssignForm(3L, null)), EEmployeeError.EMP_096);
         assertThat(service.resolve(9L, new ResolveForm(6L, "fix", null, DAY, null, null)).status())
                 .isEqualTo(EStatus.RESOLVED);
+    }
+
+    @Test
+    void editAndDeleteOnlyWhilePending() {
+        service.create(form(1L, 2L, false));
+        assertThat(service.update(9L, form(1L, 3L, false)).against().id()).isEqualTo("3");
+        service.changeStatus(9L, EStatus.IN_REVIEW);
+        service.resolve(9L, new ResolveForm(6L, null, null, DAY, null, null));
+        assertCode(() -> service.update(9L, form(1L, 2L, false)), EEmployeeError.EMP_102);
+        assertCode(() -> service.delete(9L), EEmployeeError.EMP_102);
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_PROGRESS), EEmployeeError.EMP_096);
+        service.create(form(1L, 2L, false));
+        service.delete(9L);
+        assertThat(repo.findByIdAndDeletedFalse(9L).orElseThrow().isDeleted()).isTrue();
     }
 
     @Test

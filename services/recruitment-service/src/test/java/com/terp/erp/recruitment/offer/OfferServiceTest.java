@@ -135,6 +135,28 @@ class OfferServiceTest {
     }
 
     @Test
+    void finalOrConvertedOfferIsLocked() {
+        Offer o = offer(Offer.EStatus.NEGOTIATING, null);
+        when(offers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(o));
+        // negotiating offers stay editable
+        assertThat(service.update(9L, form(null, null, null, null)).salary()).isEqualByComparingTo("25000000");
+        for (Offer.EStatus done : OfferService.FINAL) {
+            o.setStatus(done);
+            assertCode(() -> service.update(9L, form(null, null, null, null)), ERecruitmentError.REC_067);
+            assertCode(() -> service.delete(9L), ERecruitmentError.REC_067);
+            assertCode(() -> service.changeStatus(9L, Offer.EStatus.NEGOTIATING), ERecruitmentError.REC_067);
+            assertCode(() -> service.approve(9L, Offer.EApprovalStatus.PENDING), ERecruitmentError.REC_067);
+        }
+        assertThat(o.isDeleted()).isFalse();
+        o.setStatus(Offer.EStatus.DRAFT);
+        candidate.setEmployeeId(77L);
+        assertCode(() -> service.delete(9L), ERecruitmentError.REC_067);
+        candidate.setEmployeeId(null);
+        service.delete(9L);
+        assertThat(o.isDeleted()).isTrue();
+    }
+
+    @Test
     void otherCompanyCannotApprove() {
         Offer o = offer(Offer.EStatus.DRAFT, null);
         o.setCompanyId(11L);

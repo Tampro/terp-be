@@ -49,16 +49,46 @@ public class AccountingClient {
         return mapper.convertValue(data, BankAccount.class);
     }
 
-    /** Income into the account, idempotent on (sourceType, sourceId): a retry adds nothing twice. */
-    public void income(Long bankAccountId, String sourceType, Long sourceId, BigDecimal amount, LocalDate date,
-                       String description) {
+    /**
+     * Income into the account and its one journal entry (Dr bank total / Cr revenue total - tax / Cr output VAT tax,
+     * Dr COGS / Cr inventory cost), idempotent on (sourceType, sourceId): a retry adds nothing twice.
+     */
+    public void income(Long bankAccountId, String sourceType, Long sourceId, BigDecimal amount, BigDecimal tax,
+                       BigDecimal cost, LocalDate date, String description) {
         Map<String, Object> body = new HashMap<>();
         body.put("sourceType", sourceType);
         body.put("sourceId", sourceId);
         body.put("amount", amount);
+        body.put("taxAmount", tax);
+        body.put("costAmount", cost);
         body.put("date", date.toString());
         body.put("description", description);
         http.call(c -> c.post().uri("/api/v1/accounting/bank-accounts/{id}/income", bankAccountId).body(body));
+    }
+
+    /** Amounts of a commerce document by role; accounting-service picks the accounts from its mapping. */
+    public record Posting(String sourceType, Long sourceId, LocalDate date, String reference, String description,
+                          BigDecimal goodsAmount, BigDecimal serviceAmount, BigDecimal taxAmount,
+                          BigDecimal costAmount) {
+    }
+
+    /**
+     * The document's journal entry (POST /journal-postings), idempotent per (sourceType, sourceId). validateOnly =
+     * true checks mapping, closed year (ACC_070) and balance and writes nothing. Errors are relayed.
+     */
+    public void journal(Posting p, boolean validateOnly) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("sourceType", p.sourceType());
+        body.put("sourceId", p.sourceId());
+        body.put("date", p.date().toString());
+        body.put("reference", p.reference());
+        body.put("description", p.description());
+        body.put("goodsAmount", p.goodsAmount());
+        body.put("serviceAmount", p.serviceAmount());
+        body.put("taxAmount", p.taxAmount());
+        body.put("costAmount", p.costAmount());
+        body.put("validateOnly", validateOnly);
+        http.call(c -> c.post().uri("/api/v1/accounting/journal-postings").body(body));
     }
 
     public Vendor vendor(Long id) {

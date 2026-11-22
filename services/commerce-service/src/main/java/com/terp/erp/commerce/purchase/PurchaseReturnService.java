@@ -11,10 +11,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 
@@ -44,6 +46,7 @@ public class PurchaseReturnService {
     private final PurchaseInvoiceService invoices;
     private final Numbering numbering;
     private final InventoryClient inventory;
+    private final AccountingClient accounting;
     private final Clock clock;
 
     public record LineForm(
@@ -135,7 +138,7 @@ public class PurchaseReturnService {
 
     @Transactional
     public ReturnDetail create(ReturnForm f) {
-        PurchaseInvoice inv = invoices.requirePosted(f.invoiceId());
+        PurchaseInvoice inv = invoices.lockPosted(f.invoiceId());
         PurchaseReturn r = new PurchaseReturn();
         r.setCompanyId(inv.getCompanyId());
         apply(r, inv, f, null);
@@ -147,7 +150,7 @@ public class PurchaseReturnService {
     @Transactional
     public ReturnDetail update(Long id, ReturnForm f) {
         PurchaseReturn r = requireDraft(id);
-        PurchaseInvoice inv = invoices.requirePosted(f.invoiceId());
+        PurchaseInvoice inv = invoices.lockPosted(f.invoiceId());
         apply(r, inv, f, r.getId());
         return ReturnDetail.of(r);
     }
@@ -164,7 +167,12 @@ public class PurchaseReturnService {
         return ReturnDetail.of(r);
     }
 
-    /** APPROVED → COMPLETED once the goods have left: stocked lines go out of the sending warehouse. */
+    /**
+     * APPROVED → COMPLETED once the goods have left: stocked lines go out of the sending warehouse and the return is
+     * journalled (Dr 331 total / Cr 156 goods, Cr 6428 services, Cr 1331 VAT), in the order of {@link Postings}; a
+     * closed year (ACC_070) is relayed, the return stays APPROVED.
+     * TODO(assumption): goods leave inventory at the purchase price of the invoice line (net of discount).
+     */
     @Transactional
     public ReturnDetail complete(Long id) {
         PurchaseReturn r = require(id);
@@ -174,12 +182,22 @@ public class PurchaseReturnService {
         List<InventoryClient.MoveLine> moves = r.getLines().stream().filter(PurchaseReturn.Line::stocked)
                 .map(l -> new InventoryClient.MoveLine(l.getItemId(), r.getWarehouseId(), l.getQuantity().negate()))
                 .toList();
-        if (!moves.isEmpty()) {
-            if (r.getWarehouseId() == null) {
-                throw ApiException.badRequest(EPurchaseError.PUR_005);
-            }
-            inventory.move(STOCK_SOURCE, r.getId(), moves);
+        if (!moves.isEmpty() && r.getWarehouseId() == null) {
+            throw ApiException.badRequest(EPurchaseError.PUR_005);
         }
+        BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO;
+        for (PurchaseReturn.Line l : r.getLines()) {
+            BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
+            if (l.stocked()) {
+                goods = goods.add(net);
+            } else {
+                service = service.add(net);
+            }
+        }
+        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(),
+                r.getNumber(), "Purchase return " + r.getNumber() + " - " + r.getVendorName(), goods, service,
+                r.getTaxTotal(), null);
+        Postings.run(accounting, posting, () -> inventory.move(STOCK_SOURCE, r.getId(), moves));
         r.setStatus(PurchaseReturn.EStatus.COMPLETED);
         r.setCompletedAt(Instant.now(clock));
         return ReturnDetail.of(r);

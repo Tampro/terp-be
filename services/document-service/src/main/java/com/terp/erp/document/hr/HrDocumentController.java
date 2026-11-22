@@ -144,10 +144,10 @@ public class HrDocumentController {
         return ApiMessageDto.ok(documents.create(companyId, form));
     }
 
-    @Operation(summary = "Edit a document", description = "Full replacement of the details; Requires Acknowledgement "
-            + "omitted = kept; the status changes through Update Status.")
+    @Operation(summary = "Edit a document", description = "Full replacement of the details, only while DRAFT, "
+            + "PENDING or REJECTED; Requires Acknowledgement omitted = kept; the status changes through Update Status.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = FORM_ERRORS),
+            @ApiResponse(responseCode = "400", description = FORM_ERRORS + ", not editable in its status (DOC_027)"),
             @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
     @PutMapping("/documents/{id}")
@@ -177,17 +177,24 @@ public class HrDocumentController {
         return ApiMessageDto.ok(documents.reject(id, form));
     }
 
-    @Operation(summary = "Update Status", description = "DRAFT, PENDING, UNDER_REVIEW, APPROVED, REJECTED, PUBLISHED, "
-            + "ARCHIVED or EXPIRED. Prefer approve / reject, which record who decided.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = DOC_NOT_FOUND))
+    @Operation(summary = "Update Status", description = "Allowed: DRAFT -> PENDING | ARCHIVED; PENDING -> UNDER_REVIEW "
+            + "| DRAFT; UNDER_REVIEW -> PENDING; REJECTED -> DRAFT | PENDING | ARCHIVED; APPROVED -> PUBLISHED | "
+            + "ARCHIVED; PUBLISHED -> EXPIRED | ARCHIVED; EXPIRED -> ARCHIVED; ARCHIVED is final. APPROVED and REJECTED "
+            + "are set by approve / reject only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Move not allowed (DOC_028)"),
+            @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
     @PutMapping("/documents/{id}/status")
     public ApiMessageDto<DocumentDto> documentStatus(@PathVariable Long id, @Valid @RequestBody StatusForm form) {
         return ApiMessageDto.ok(documents.changeStatus(id, form.status()));
     }
 
-    @Operation(summary = "Delete a document", description = "Its acknowledgments disappear with it.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = DOC_NOT_FOUND))
+    @Operation(summary = "Delete a document", description = "Only while DRAFT, PENDING or REJECTED (archive an approved "
+            + "or published one); its acknowledgments disappear with it.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not deletable in its status (DOC_027)"),
+            @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
     @DeleteMapping("/documents/{id}")
     public ApiMessageDto<Void> deleteDocument(@PathVariable Long id) {

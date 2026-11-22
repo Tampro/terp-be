@@ -112,9 +112,10 @@ public class EmployeeContractController {
         return ApiMessageDto.ok(service.create(companyId, form));
     }
 
-    @Operation(summary = "Edit a contract", description = "Full replacement of the details; number and status kept.")
+    @Operation(summary = "Edit a contract", description = "Full replacement of the details, only while DRAFT or "
+            + "PENDING; number and status kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = FORM_ERRORS),
+            @ApiResponse(responseCode = "400", description = FORM_ERRORS + ", not editable in its status (DOC_027)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('CONTRACT_MANAGE')")
     @PutMapping("/{id}")
@@ -122,17 +123,22 @@ public class EmployeeContractController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Update Contract Status", description = "DRAFT, PENDING (Pending Approval), ACTIVE, EXPIRED, "
-            + "TERMINATED or RENEWED.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @Operation(summary = "Update Contract Status", description = "Allowed: DRAFT -> PENDING | ACTIVE; PENDING (Pending "
+            + "Approval) -> DRAFT | ACTIVE; ACTIVE -> EXPIRED | TERMINATED | RENEWED; EXPIRED -> RENEWED; TERMINATED "
+            + "and RENEWED are final.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Move not allowed (DOC_028)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('CONTRACT_MANAGE')")
     @PutMapping("/{id}/status")
     public ApiMessageDto<ContractDto> status(@PathVariable Long id, @Valid @RequestBody StatusForm form) {
         return ApiMessageDto.ok(service.changeStatus(id, form.status()));
     }
 
-    @Operation(summary = "Delete a contract")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @Operation(summary = "Delete a contract", description = "Only while DRAFT or PENDING.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not deletable in its status (DOC_027)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('CONTRACT_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

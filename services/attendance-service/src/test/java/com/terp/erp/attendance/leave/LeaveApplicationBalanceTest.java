@@ -128,8 +128,20 @@ class LeaveApplicationBalanceTest {
         a.setCompanyId(10L);
         a.setStatus(ERegularizationStatus.APPROVED);
         when(applications.findById(5L)).thenReturn(Optional.of(a));
-        assertError(() -> service.delete(5L), EAttendanceError.ATT_048);
+        assertError(() -> service.delete(5L), EAttendanceError.ATT_020);
+        assertError(() -> service.update(5L, form(LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 1))),
+                EAttendanceError.ATT_020);
         assertError(() -> service.approve(5L, null), EAttendanceError.ATT_020);
+        // a rejected application is final too (manual §20): no edit back to PENDING, no delete, no approval
+        a.setStatus(ERegularizationStatus.REJECTED);
+        assertError(() -> service.delete(5L), EAttendanceError.ATT_020);
+        assertError(() -> service.update(5L, form(LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 1))),
+                EAttendanceError.ATT_020);
+        assertError(() -> service.approve(5L, null), EAttendanceError.ATT_020);
+        verify(applications, never()).delete(any());
+        a.setStatus(ERegularizationStatus.PENDING);
+        service.delete(5L);
+        verify(applications).delete(a);
         TestLogin.as(11L, "LEAVE_MANAGE");
         assertError(() -> service.get(5L), EAttendanceError.ATT_039);
         verify(records, never()).markOnLeave(anyLong(), anyLong(), any());

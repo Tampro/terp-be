@@ -48,7 +48,7 @@ class PurchaseServiceTest {
     private final PurchaseInvoiceService invoices = new PurchaseInvoiceService(invoiceRepo, numbering, inventory,
             accounting, clock);
     private final PurchaseReturnService returns = new PurchaseReturnService(returnRepo, invoices, numbering, inventory,
-            clock);
+            accounting, clock);
 
     @BeforeEach
     void setUp() {
@@ -96,6 +96,15 @@ class PurchaseServiceTest {
         assertThat(posted.invoice().balance()).isEqualByComparingTo("350");
         verify(inventory).move(eq("PURCHASE_INVOICE"), eq(40L), argThat(lines -> lines.size() == 1
                 && lines.get(0).quantity().compareTo(new BigDecimal("5")) == 0 && lines.get(0).warehouseId() == 2L));
+        // Dr 156 300 + Dr 6428 20 + Dr 1331 30 = Cr 331 350, validated before the stock move
+        var order = org.mockito.Mockito.inOrder(accounting, inventory);
+        order.verify(accounting).journal(any(), eq(true));
+        order.verify(inventory).move(eq("PURCHASE_INVOICE"), eq(40L), anyList());
+        order.verify(accounting).journal(argThat(p -> p.sourceType().equals("PURCHASE_INVOICE") && p.sourceId() == 40L
+                && p.goodsAmount().compareTo(new BigDecimal("300")) == 0
+                && p.serviceAmount().compareTo(new BigDecimal("20")) == 0
+                && p.taxAmount().compareTo(new BigDecimal("30")) == 0 && p.costAmount() == null
+                && p.date().equals(TODAY)), eq(false));
         assertThatThrownBy(() -> invoices.post(40L))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_002);
         assertThat(saved.getStatus()).isEqualTo(PurchaseInvoice.EStatus.POSTED);
@@ -153,6 +162,12 @@ class PurchaseServiceTest {
         assertThat(saved.getStatus()).isEqualTo(PurchaseReturn.EStatus.COMPLETED);
         verify(inventory).move(eq("PURCHASE_RETURN"), eq(70L), argThat(lines -> lines.size() == 1
                 && lines.get(0).quantity().compareTo(new BigDecimal("-2")) == 0));
+        // Dr 331 132 / Cr 156 120 + Cr 1331 12
+        verify(accounting).journal(argThat(p -> p.sourceType().equals("PURCHASE_RETURN") && p.sourceId() == 70L
+                && p.goodsAmount().compareTo(new BigDecimal("120")) == 0 && p.serviceAmount().signum() == 0
+                && p.taxAmount().compareTo(new BigDecimal("12")) == 0), eq(false));
+        // the returnable quantity was checked with the invoice row locked
+        verify(invoiceRepo, org.mockito.Mockito.atLeastOnce()).lockById(40L);
     }
 
     @Test
@@ -171,6 +186,7 @@ class PurchaseServiceTest {
         verify(invoiceRepo, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
         PurchaseInvoice d = captor.getValue();
         when(invoiceRepo.findByIdAndDeletedFalse(40L)).thenReturn(Optional.of(d));
+        when(invoiceRepo.lockById(40L)).thenReturn(Optional.of(d));
         return d;
     }
 
@@ -211,5 +227,18 @@ class PurchaseServiceTest {
     private static ReturnForm returnForm(BigDecimal qty) {
         return new ReturnForm(40L, null, TODAY, "Wrong model", null,
                 List.of(new PurchaseReturnService.LineForm(500L, qty, null)));
+    }
+
+    @Test
+    void closedYearKeepsThePurchaseInvoiceADraftAndAddsNoStock() {
+        TestLogin.as(10L, "PURCHASE_MANAGE", "PURCHASE_POST");
+        invoices.create(form(2L, List.of(new LineForm(1L, new BigDecimal("5"), null, null))));
+        PurchaseInvoice saved = stored();
+        var closed = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.BAD_REQUEST, "ACC_070", "closed");
+        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+
+        assertThatThrownBy(() -> invoices.post(40L)).isSameAs(closed);
+        verify(inventory, never()).move(anyString(), anyLong(), anyList());
+        assertThat(saved.getStatus()).isEqualTo(PurchaseInvoice.EStatus.DRAFT);
     }
 }

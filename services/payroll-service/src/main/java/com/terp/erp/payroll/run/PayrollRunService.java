@@ -304,7 +304,10 @@ public class PayrollRunService {
     /**
      * Pays a COMPLETED (PAY_036), UNPAID (PAY_037) run: one call to accounting-service for the run's total net pay,
      * idempotent there on the run id, then the run is PAID. A failed call leaves the run UNPAID (PAY_041, or the
-     * accounting error relayed); a retry never books twice.
+     * accounting error relayed); a retry never books twice. accounting-service books the salary expense accrual
+     * (Dr 6421 / Cr 334) dated the period end in the same call, so 334 nets to zero.
+     * TODO(assumption): the accrual waits for the payment because a COMPLETED run's totals still change (entry
+     *  removed, run cancelled) until it is paid; confirm with the chief accountant whether it belongs at processing.
      * TODO(assumption): one bank debit for the run total, not one per employee.
      */
     @Transactional
@@ -325,7 +328,7 @@ public class PayrollRunService {
         }
         LocalDate date = form != null && form.paymentDate() != null ? form.paymentDate() : r.getPayDate();
         accounting.payrollPosting(r.getCompanyId(), r.getId(), bankId, r.getNetPay(), date, "PAYROLL-" + r.getId(),
-                "Salaries " + r.getTitle());
+                "Salaries " + r.getTitle(), r.getPeriodEnd());
         r.setBankAccountId(bankId);
         r.setPaymentStatus(EPaymentStatus.PAID);
         r.setPaidAt(clock.instant());
