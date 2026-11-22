@@ -3,7 +3,12 @@ package com.terp.erp.accounting.bank;
 import com.terp.erp.accounting.TestLogin;
 import com.terp.erp.accounting.bank.BankAccountService.BankAccountForm;
 import com.terp.erp.accounting.bank.BankAccountService.IncomeForm;
+import com.terp.erp.accounting.coa.ChartAccount;
+import com.terp.erp.accounting.coa.ChartAccountRepository;
 import com.terp.erp.accounting.common.EAccountingError;
+import com.terp.erp.accounting.ledger.AccountMapping;
+import com.terp.erp.accounting.ledger.ESystemAccount;
+import com.terp.erp.accounting.ledger.JournalService;
 import com.terp.erp.exception.ApiException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +38,11 @@ class BankAccountServiceTest {
     private final BankAccountRepository accounts = mock(BankAccountRepository.class);
     private final BankTransactionRepository transactions = mock(BankTransactionRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-22T10:00:00Z"), ZoneOffset.UTC);
-    private final BankAccountService service = new BankAccountService(accounts, transactions, clock);
+    private final ChartAccountRepository chartAccounts = mock(ChartAccountRepository.class);
+    private final AccountMapping mapping = mock(AccountMapping.class);
+    private final JournalService journal = mock(JournalService.class);
+    private final BankAccountService service = new BankAccountService(accounts, transactions, chartAccounts, mapping,
+            journal, clock);
     private final BankAccount account = new BankAccount();
 
     @BeforeEach
@@ -47,6 +57,12 @@ class BankAccountServiceTest {
         account.setBalance(new BigDecimal("100"));
         when(accounts.findByIdAndDeletedFalse(3L)).thenReturn(Optional.of(account));
         when(accounts.lockById(3L)).thenReturn(Optional.of(account));
+        ChartAccount gl = new ChartAccount();
+        gl.setId(2L);
+        gl.setCompanyId(10L);
+        when(chartAccounts.findById(2L)).thenReturn(Optional.of(gl));
+        when(mapping.require(10L, ESystemAccount.BANK)).thenReturn(2L);
+        when(mapping.require(10L, ESystemAccount.SALES_REVENUE)).thenReturn(40L);
         when(transactions.save(any())).thenAnswer(i -> {
             BankTransaction t = i.getArgument(0);
             t.setId(9L);
@@ -83,7 +99,7 @@ class BankAccountServiceTest {
         saved.setId(9L);
         saved.setCompanyId(10L);
         saved.setBankAccountId(3L);
-        saved.setType(ETransactionType.INCOME);
+        saved.setType(ETransactionType.CREDIT);
         saved.setAmount(new BigDecimal("50"));
         saved.setSourceType("POS_ORDER");
         saved.setSourceId(42L);
@@ -93,6 +109,40 @@ class BankAccountServiceTest {
         assertThat(second.id()).isEqualTo(first.id());
         assertThat(account.getBalance()).isEqualByComparingTo("150");
         verify(transactions, times(1)).save(any());
+        assertThat(first.type()).isEqualTo(ETransactionType.CREDIT);
+        assertThat(first.runningBalance()).isEqualByComparingTo("150");
+        verify(journal, times(1)).post(eq(10L), eq(LocalDate.of(2026, 11, 22)), eq("POS_ORDER"), eq(42L), any(),
+                any(), eq(List.of(new JournalService.Line(2L, new BigDecimal("50"), null, null),
+                        new JournalService.Line(40L, null, new BigDecimal("50"), null))));
+    }
+
+    @Test
+    void reconcileOnlyFromCleared() {
+        BankTransaction t = new BankTransaction();
+        t.setId(9L);
+        t.setCompanyId(10L);
+        t.setBankAccountId(3L);
+        t.setSourceId(1L);
+        t.setStatus(ETransactionStatus.CLEARED);
+        when(transactions.findById(9L)).thenReturn(Optional.of(t));
+        assertThat(service.reconcile(9L).status()).isEqualTo(ETransactionStatus.RECONCILED);
+        assertCode(() -> service.reconcile(9L), EAccountingError.ACC_023);
+        t.setCompanyId(11L);
+        assertCode(() -> service.reconcile(9L), EAccountingError.ACC_022);
+    }
+
+    @Test
+    void recordDebitSubtractsAndRefusesOtherCompany() {
+        when(transactions.findByCompanyIdAndSourceTypeAndSourceId(10L, "EXPENSE", 7L)).thenReturn(Optional.empty());
+        var t = service.record(10L, 3L, ETransactionType.DEBIT, new BigDecimal("30"), LocalDate.of(2026, 11, 22),
+                "EXPENSE", 7L, "EXP-1", null);
+        assertThat(account.getBalance()).isEqualByComparingTo("70");
+        assertThat(t.runningBalance()).isEqualByComparingTo("70");
+        assertThat(t.status()).isEqualTo(ETransactionStatus.CLEARED);
+        assertThatThrownBy(() -> service.record(11L, 3L, ETransactionType.CREDIT, BigDecimal.ONE,
+                LocalDate.of(2026, 11, 22), "EXPENSE", 8L, null, null))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(404));
     }
 
     @Test
@@ -116,13 +166,14 @@ class BankAccountServiceTest {
     void openingBalanceChangeMovesBalanceByDifference() {
         account.setBalance(new BigDecimal("180"));
         service.update(3L, new BankAccountForm("Test Holder", "Example Bank", "0000000001",
-                new BigDecimal("120"), true));
+                new BigDecimal("120"), true, null, null, 2L, null, null, null, null));
         assertThat(account.getBalance()).isEqualByComparingTo("200");
         assertThat(account.getOpeningBalance()).isEqualByComparingTo("120");
     }
 
     private static BankAccountForm form(String number) {
-        return new BankAccountForm("Test Holder", "Example Bank", number, BigDecimal.ZERO, true);
+        return new BankAccountForm("Test Holder", "Example Bank", number, BigDecimal.ZERO, true, null, null, 2L, null,
+                null, null, null);
     }
 
     private static IncomeForm income() {

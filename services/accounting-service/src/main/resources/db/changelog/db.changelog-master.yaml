@@ -7,3 +7,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261121600000_vendor_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122200000_bank_account_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122400000_ledger_banking_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122410000_payment_note_changelog.mysql.sql

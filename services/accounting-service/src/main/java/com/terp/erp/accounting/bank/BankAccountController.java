@@ -65,9 +65,11 @@ public class BankAccountController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Add a bank account", description = "balance starts at openingBalance (null = 0).")
+    @Operation(summary = "Add a bank account", description = "balance starts at openingBalance (null = 0); "
+            + "glAccountId null = the company's BANK mapping (seeds the VAS chart on first use).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Account number already used in the company "
-            + "(ACC_007), super admin without companyId (ACC_001), invalid field (COMMON)"))
+            + "(ACC_007), GL account unusable (ACC_020), BANK unmapped (ACC_017), super admin without companyId "
+            + "(ACC_001), invalid field (COMMON)"))
     @PreAuthorize(MANAGE)
     @PostMapping
     public ApiMessageDto<BankAccountDto> create(

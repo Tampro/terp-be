@@ -40,6 +40,17 @@ public class BankTransaction extends BaseAuditableEntity {
     @Column(name = "source_id", nullable = false)
     private Long sourceId;
 
+    @Column(name = "reference", length = 100)
+    private String reference;
+
+    /** Account balance right after this movement; null on rows older than the ledger. */
+    @Column(name = "running_balance", precision = 19, scale = 4)
+    private BigDecimal runningBalance;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private ETransactionStatus status = ETransactionStatus.CLEARED;
+
     @Column(name = "description", length = 500)
     private String description;
 }
