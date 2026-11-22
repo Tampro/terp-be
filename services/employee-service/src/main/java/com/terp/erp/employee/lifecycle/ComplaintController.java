@@ -101,11 +101,11 @@ public class ComplaintController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a complaint", description = "Full replacement of the form; status, assignment, "
-            + "resolution and follow-up are kept.")
+    @Operation(summary = "Edit a complaint", description = "Full replacement of the form, only while PENDING; status, "
+            + "assignment, resolution and follow-up are kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "EMP_068, EMP_050, EMP_054, EMP_012; the handler "
-                    + "would become the accused (EMP_069)"),
+            @ApiResponse(responseCode = "400", description = "No longer PENDING (EMP_102), EMP_068, EMP_050, EMP_054, "
+                    + "EMP_012; the handler would become the accused (EMP_069)"),
             @ApiResponse(responseCode = "404", description = "No such complaint (EMP_067) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}")
@@ -161,8 +161,10 @@ public class ComplaintController {
         return ApiMessageDto.ok(service.followUp(id, form));
     }
 
-    @Operation(summary = "Delete a complaint")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @Operation(summary = "Delete a complaint", description = "Only while PENDING.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "No longer PENDING (EMP_102)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

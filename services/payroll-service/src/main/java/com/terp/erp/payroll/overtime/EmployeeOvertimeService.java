@@ -25,8 +25,10 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 /**
- * Manual overtime of an employee (manual 15 Set salary → Overtimes). Overtime a run has paid cannot be changed or
- * deleted (PAY_034) until that run is cancelled.
+ * Manual overtime of an employee (manual 15 Set salary → Overtimes). It starts PENDING and is decided once:
+ * PENDING → APPROVED | REJECTED; edit and delete only while PENDING (PAY_043, manual §20). Overtime a run has paid
+ * answers PAY_034 first. TODO(assumption): an approved or rejected overtime is final (before: editable and re-decidable
+ * until paid); a wrong approved line is corrected by a new line, not an edit — confirm with BA.
  */
 @Service
 @RequiredArgsConstructor
@@ -92,24 +94,25 @@ public class EmployeeOvertimeService {
         return dto(overtimes.save(o));
     }
 
-    /** Full replacement; status omitted = kept. */
+    /** Full replacement while PENDING; status omitted = kept (APPROVED / REJECTED here decides it). */
     @Transactional
     public OvertimeDto update(Long id, OvertimeForm form) {
-        EmployeeOvertime o = requireUnpaid(id);
+        EmployeeOvertime o = requirePending(id);
         apply(o, form);
         return dto(o);
     }
 
+    /** PENDING → APPROVED | REJECTED (PENDING → PENDING changes nothing); a decided overtime answers PAY_043. */
     @Transactional
     public OvertimeDto changeStatus(Long id, EStatus status) {
-        EmployeeOvertime o = requireUnpaid(id);
+        EmployeeOvertime o = requirePending(id);
         o.setStatus(status);
         return dto(o);
     }
 
     @Transactional
     public void delete(Long id) {
-        requireUnpaid(id).setDeleted(true);
+        requirePending(id).setDeleted(true);
     }
 
     public EmployeeOvertime require(Long id) {
@@ -123,6 +126,14 @@ public class EmployeeOvertimeService {
         EmployeeOvertime o = require(id);
         if (o.getPaidRunId() != null) {
             throw ApiException.badRequest(EPayrollError.PAY_034);
+        }
+        return o;
+    }
+
+    private EmployeeOvertime requirePending(Long id) {
+        EmployeeOvertime o = requireUnpaid(id);
+        if (o.getStatus() != EStatus.PENDING) {
+            throw ApiException.badRequest(EPayrollError.PAY_043);
         }
         return o;
     }

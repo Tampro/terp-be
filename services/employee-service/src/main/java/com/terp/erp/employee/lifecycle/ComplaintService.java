@@ -165,10 +165,13 @@ public class ComplaintService {
         return detail(complaints.save(c));
     }
 
-    /** Full replacement of the form; status, assignment, resolution and follow-up are kept. */
+    /**
+     * Full replacement of the form while PENDING (EMP_102 afterwards); status, assignment, resolution and follow-up
+     * are kept. TODO(assumption): once under review the complainant's text is evidence and is frozen — confirm with BA.
+     */
     @Transactional
     public ComplaintDto update(Long id, ComplaintForm form) {
-        EmployeeComplaint c = require(id);
+        EmployeeComplaint c = requirePending(id);
         apply(c, form);
         if (c.getAssignedToId() != null && c.getAssignedToId().equals(c.getAgainstId())) {
             throw ApiException.badRequest(EEmployeeError.EMP_069);
@@ -239,9 +242,18 @@ public class ComplaintService {
         return detail(c);
     }
 
+    /** Only while PENDING (manual §20). */
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requirePending(id).setDeleted(true);
+    }
+
+    private EmployeeComplaint requirePending(Long id) {
+        EmployeeComplaint c = require(id);
+        if (c.getStatus() != EStatus.PENDING) {
+            throw ApiException.badRequest(EEmployeeError.EMP_102, c.getStatus().name());
+        }
+        return c;
     }
 
     private static void checkFollowUp(LocalDate followUp, LocalDate resolution) {

@@ -160,7 +160,10 @@ public class PosService {
 
     /**
      * Pay: stock leaves the warehouse (all-or-nothing, never below zero), then the total is recorded as income in
-     * the bank account. If the income fails after the stock left, the stock is put back and the sale is refused.
+     * the bank account with one journal entry (Dr bank total / Cr 5111 total - VAT / Cr 33311 VAT; Dr 632 / Cr 156 at
+     * cost). If the income fails after the stock left (closed year ACC_070 included), the stock is put back and the
+     * sale is refused.
+     * TODO(assumption): cost = item purchase price x quantity (costing method is an open ARQ question).
      */
     @Transactional
     public OrderDetail checkout(CartForm f) {
@@ -186,7 +189,7 @@ public class PosService {
         if (saved.getTotal().signum() > 0) {
             try {
                 accounting.income(saved.getBankAccountId(), INCOME_SOURCE, saved.getId(), saved.getTotal(),
-                        saved.getOrderDate(), "POS sale " + saved.getNumber());
+                        saved.getTaxTotal(), o.getCostTotal(), saved.getOrderDate(), "POS sale " + saved.getNumber());
             } catch (RuntimeException e) {
                 undoStock(saved);
                 throw e;
@@ -237,6 +240,7 @@ public class PosService {
         }
         BigDecimal subtotal = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO;
+        BigDecimal cost = BigDecimal.ZERO;
         int position = 0;
         for (Map.Entry<Long, BigDecimal> e : qty.entrySet()) {
             InventoryClient.Item item = inventory.item(e.getKey());
@@ -256,6 +260,9 @@ public class PosService {
             o.getLines().add(l);
             subtotal = subtotal.add(m.base());
             tax = tax.add(m.tax());
+            if (l.stocked()) {
+                cost = cost.add(Money.round(Money.nz(item.purchasePrice()).multiply(e.getValue())));
+            }
         }
         BigDecimal discount = Money.round(Money.nz(f.discount()));
         // TODO(assumption): the order discount is an amount taken off after taxes (taxes stay on the full price).
@@ -264,6 +271,7 @@ public class PosService {
         }
         o.setSubtotal(subtotal);
         o.setTaxTotal(tax);
+        o.setCostTotal(cost);
         o.setDiscount(discount);
         o.setTotal(subtotal.add(tax).subtract(discount));
         return o;

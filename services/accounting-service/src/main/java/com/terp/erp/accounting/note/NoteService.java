@@ -148,7 +148,13 @@ public class NoteService {
                         text));
             }
         }
-        journal.post(c, n.getNoteDate(), kind.sourceType(), n.getId(), n.getNumber(), text, lines);
+        // A return completed since commerce journals returns (SALES_RETURN / PURCHASE_RETURN) already reversed the
+        // revenue / inventory, receivable / payable and VAT: the note then only settles balances, or the books
+        // would count the return twice. Returns completed before that still get their entry from the note.
+        String returnSource = kind == ENoteKind.CREDIT ? "SALES_RETURN" : "PURCHASE_RETURN";
+        if (!journal.isJournalled(c, returnSource, n.getReturnId())) {
+            journal.post(c, n.getNoteDate(), kind.sourceType(), n.getId(), n.getNumber(), text, lines);
+        }
         n.setStatus(ENoteStatus.APPROVED);
         n.setApprovedBy(CurrentUser.find().map(ErpPrincipal::keycloakId).orElse(null));
         n.setApprovedAt(Instant.now(clock));

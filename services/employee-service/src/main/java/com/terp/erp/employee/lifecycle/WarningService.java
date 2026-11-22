@@ -152,10 +152,13 @@ public class WarningService {
         return detail(warnings.save(w));
     }
 
-    /** Full replacement of the form; status, acknowledgment and plan progress are kept. */
+    /**
+     * Full replacement of the form while PENDING (EMP_102 once decided); status, acknowledgment and plan progress are
+     * kept.
+     */
     @Transactional
     public WarningDto update(Long id, WarningForm form) {
-        EmployeeWarning w = require(id);
+        EmployeeWarning w = requirePending(id);
         apply(w, form);
         return detail(w);
     }
@@ -219,9 +222,18 @@ public class WarningService {
         return detail(w);
     }
 
+    /** Only while PENDING (manual §20): a decided warning stays on the employee's record. */
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requirePending(id).setDeleted(true);
+    }
+
+    private EmployeeWarning requirePending(Long id) {
+        EmployeeWarning w = require(id);
+        if (w.getStatus() != EStatus.PENDING) {
+            throw ApiException.badRequest(EEmployeeError.EMP_102, w.getStatus().name());
+        }
+        return w;
     }
 
     private void apply(EmployeeWarning w, WarningForm f) {

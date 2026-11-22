@@ -61,6 +61,13 @@ public class SalesDocumentLine {
     @Column(name = "line_total", nullable = false, precision = 19, scale = 4)
     private BigDecimal lineTotal = BigDecimal.ZERO;
 
+    /**
+     * Cost per unit taken when the invoice is posted (the item's purchase price then); the COGS of the invoice and of
+     * its returns. null on drafts and on invoices posted before costs were kept.
+     */
+    @Column(name = "unit_cost", precision = 19, scale = 4)
+    private BigDecimal unitCost;
+
     public boolean stocked() {
         return !"SERVICE".equals(itemType);
     }

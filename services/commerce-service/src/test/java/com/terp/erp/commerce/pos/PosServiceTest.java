@@ -83,7 +83,9 @@ class PosServiceTest {
         assertThat(d.taxes()).singleElement().satisfies(t -> assertThat(t.amount()).isEqualByComparingTo("30"));
         verify(inventory).move(eq("POS_ORDER"), eq(60L), argThat(l -> l.size() == 1
                 && l.get(0).quantity().compareTo(new BigDecimal("-3")) == 0 && l.get(0).warehouseId() == 2L));
+        // one journal entry: Dr bank 350 / Cr revenue 320 / Cr VAT 30; cost 3 widgets x 60 = 180 (service: none)
         verify(accounting).income(eq(7L), eq("POS_ORDER"), eq(60L), argThat(a -> a.compareTo(new BigDecimal("350")) == 0),
+                argThat(t -> t.compareTo(new BigDecimal("30")) == 0), argThat(c -> c.compareTo(new BigDecimal("180")) == 0),
                 eq(TODAY), anyString());
     }
 
@@ -112,7 +114,8 @@ class PosServiceTest {
     void incomeFailureAfterTheStockLeftPutsTheStockBack() {
         TestLogin.as(10L, "POS_SELL");
         ApiException down = new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EPosError.POS_004);
-        doThrow(down).when(accounting).income(anyLong(), anyString(), anyLong(), any(), any(), anyString());
+        doThrow(down).when(accounting).income(anyLong(), anyString(), anyLong(), any(), any(), any(), any(),
+                anyString());
         assertThatThrownBy(() -> service.checkout(cart(7L, null, List.of(new CartLine(1L, BigDecimal.ONE)))))
                 .isSameAs(down);
         verify(inventory).move(eq("POS_ORDER_VOID"), eq(60L), argThat(l -> l.size() == 1
@@ -138,5 +141,17 @@ class PosServiceTest {
 
     private static void assertCode(Runnable r, EPosError code) {
         assertThatThrownBy(r::run).extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(code);
+    }
+
+    @Test
+    void closedYearFromAccountingRefusesTheSaleAndPutsTheStockBack() {
+        TestLogin.as(10L, "POS_SELL");
+        var closed = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.BAD_REQUEST, "ACC_070",
+                "The books are closed up to 2025-12-31");
+        doThrow(closed).when(accounting).income(anyLong(), anyString(), anyLong(), any(), any(), any(), any(),
+                anyString());
+        assertThatThrownBy(() -> service.checkout(cart(7L, null, List.of(new CartLine(1L, BigDecimal.ONE)))))
+                .isSameAs(closed);
+        verify(inventory).move(eq("POS_ORDER_VOID"), eq(60L), anyList());
     }
 }

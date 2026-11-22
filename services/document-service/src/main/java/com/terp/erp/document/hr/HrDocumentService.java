@@ -42,6 +42,25 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class HrDocumentService {
+    /**
+     * Details can be edited and the document deleted only before it is decided or after a rejection (DOC_027, manual
+     * section 20); an approved / published document never changes silently, it is archived instead.
+     * TODO(assumption): editable statuses and the move table are ours (the manual lists the statuses only) - confirm
+     * with BA.
+     */
+    static final java.util.Set<HrDocument.EStatus> EDITABLE = java.util.EnumSet.of(HrDocument.EStatus.DRAFT,
+            HrDocument.EStatus.PENDING, HrDocument.EStatus.REJECTED);
+    /** Update Status; APPROVED / REJECTED are set only by approve / reject (from PENDING, DOC_024). */
+    static final Map<HrDocument.EStatus, java.util.Set<HrDocument.EStatus>> MOVES = Map.of(
+            HrDocument.EStatus.DRAFT, java.util.EnumSet.of(HrDocument.EStatus.PENDING, HrDocument.EStatus.ARCHIVED),
+            HrDocument.EStatus.PENDING, java.util.EnumSet.of(HrDocument.EStatus.UNDER_REVIEW, HrDocument.EStatus.DRAFT),
+            HrDocument.EStatus.UNDER_REVIEW, java.util.EnumSet.of(HrDocument.EStatus.PENDING),
+            HrDocument.EStatus.REJECTED, java.util.EnumSet.of(HrDocument.EStatus.DRAFT, HrDocument.EStatus.PENDING,
+                    HrDocument.EStatus.ARCHIVED),
+            HrDocument.EStatus.APPROVED, java.util.EnumSet.of(HrDocument.EStatus.PUBLISHED, HrDocument.EStatus.ARCHIVED),
+            HrDocument.EStatus.PUBLISHED, java.util.EnumSet.of(HrDocument.EStatus.EXPIRED, HrDocument.EStatus.ARCHIVED),
+            HrDocument.EStatus.EXPIRED, java.util.EnumSet.of(HrDocument.EStatus.ARCHIVED));
+
     static final int EXPIRING_DAYS = 30;
     /** Managers may download a document in any stage (to review it before approving). */
     static final String MANAGE = "DOCUMENT_MANAGE";
@@ -212,25 +231,36 @@ public class HrDocumentService {
         return detail(documents.save(d));
     }
 
-    /** Full replacement of the details; status changes through Update Status. */
+    /** Full replacement of the details while DRAFT / PENDING / REJECTED; status changes through Update Status. */
     @Transactional
     public DocumentDto update(Long id, DocumentForm form) {
-        HrDocument d = require(id);
+        HrDocument d = requireEditable(id);
         apply(d, form);
         return detail(d);
     }
 
-    /** Update Status (any stage; EXPIRED can also be set by hand). */
+    /** Update Status along {@link #MOVES} (DOC_028); EXPIRED can also be set by hand once published. */
     @Transactional
     public DocumentDto changeStatus(Long id, HrDocument.EStatus status) {
         HrDocument d = require(id);
+        if (!MOVES.getOrDefault(d.getStatus(), java.util.Set.of()).contains(status)) {
+            throw ApiException.badRequest(EDocumentError.DOC_028, d.getStatus().name(), status.name());
+        }
         d.setStatus(status);
         return detail(d);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireEditable(id).setDeleted(true);
+    }
+
+    private HrDocument requireEditable(Long id) {
+        HrDocument d = require(id);
+        if (!EDITABLE.contains(d.getStatus())) {
+            throw ApiException.badRequest(EDocumentError.DOC_027, d.getStatus().name());
+        }
+        return d;
     }
 
     private void apply(HrDocument d, DocumentForm f) {

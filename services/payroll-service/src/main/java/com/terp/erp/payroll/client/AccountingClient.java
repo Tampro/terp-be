@@ -34,11 +34,12 @@ public class AccountingClient {
     }
 
     /**
-     * One bank DEBIT and its journal entry for the run; idempotent per runId on the accounting side, so a retry
-     * after a lost answer books nothing twice.
+     * The salary expense accrual (Dr 6421 / Cr 334, dated accrualDate), then one bank DEBIT and its journal entry
+     * (Dr 334 / Cr bank) for the run; idempotent per runId on the accounting side, so a retry after a lost answer
+     * books nothing twice.
      */
     public void payrollPosting(Long companyId, Long runId, Long bankAccountId, BigDecimal amount, LocalDate date,
-                               String reference, String description) {
+                               String reference, String description, LocalDate accrualDate) {
         Map<String, Object> body = new HashMap<>();
         body.put("runId", runId);
         body.put("bankAccountId", bankAccountId);
@@ -46,6 +47,7 @@ public class AccountingClient {
         body.put("date", date.toString());
         body.put("reference", reference);
         body.put("description", description);
+        body.put("accrualDate", accrualDate == null ? null : accrualDate.toString());
         http.call(c -> c.post().uri(u -> u.path("/api/v1/accounting/payroll-postings")
                 .queryParam("companyId", companyId).build()).body(body));
     }

@@ -192,4 +192,19 @@ class NoteServiceTest {
         fails(() -> service.approve(ENoteKind.CREDIT, 3L), HttpStatus.NOT_FOUND, EAccountingError.ACC_061);
         verify(journal, never()).post(anyLong(), any(), anyString(), anyLong(), anyString(), anyString(), any());
     }
+
+    @Test
+    void aReturnAlreadyJournalledByCommerceIsNotJournalledAgainByItsNote() {
+        TestLogin.as(10L, "NOTE_APPROVE");
+        AccountNote n = draft(10L);
+        when(mapping.require(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(1L);
+        when(journal.isJournalled(10L, "SALES_RETURN", n.getReturnId())).thenReturn(true);
+
+        service.approve(ENoteKind.CREDIT, 3L);
+
+        assertThat(n.getStatus()).isEqualTo(ENoteStatus.APPROVED);
+        verify(journal, org.mockito.Mockito.never()).post(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyList());
+    }
 }

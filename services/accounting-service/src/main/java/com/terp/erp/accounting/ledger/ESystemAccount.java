@@ -24,7 +24,15 @@ public enum ESystemAccount {
      * Payroll payments debit it (Dr 334 / Cr bank). Added after companies were seeded: AccountMapping maps it lazily
      * to the company's 334 account the first time it is missing.
      */
-    SALARY_PAYABLE("334");
+    SALARY_PAYABLE("334"),
+    /**
+     * Commerce postings (sales invoice / return, purchase, payroll accrual), added after companies were seeded like
+     * SALARY_PAYABLE: mapped lazily, and backfilled by changeset ERP-ACCOUNTING:20261122700000.
+     * TODO(assumption): 5113 for service lines, 5213 for sales returns, 6421 for salaries - chief accountant to confirm.
+     */
+    SERVICE_REVENUE("5113"),
+    SALES_RETURNS("5213"),
+    SALARY_EXPENSE("6421");
 
     /** Account code the default chart maps this key to. */
     private final String defaultCode;

@@ -96,6 +96,20 @@ class RegularizationServiceTest {
     }
 
     @Test
+    void onlyAPendingRequestCanBeDeleted() {
+        TestLogin.as(10L, "ATTENDANCE_MANAGE");
+        Regularization decided = request(ERegularizationStatus.APPROVED);
+        when(requests.findById(1L)).thenReturn(Optional.of(decided));
+        assertError(() -> service.delete(1L), EAttendanceError.ATT_020);
+        decided.setStatus(ERegularizationStatus.REJECTED);
+        assertError(() -> service.delete(1L), EAttendanceError.ATT_020);
+        verify(requests, never()).delete(any());
+        decided.setStatus(ERegularizationStatus.PENDING);
+        service.delete(1L);
+        verify(requests).delete(decided);
+    }
+
+    @Test
     void rejectLeavesTheRecordUnchanged() {
         TestLogin.as(10L, "ATTENDANCE_MANAGE");
         when(requests.findById(1L)).thenReturn(Optional.of(request(ERegularizationStatus.PENDING)));

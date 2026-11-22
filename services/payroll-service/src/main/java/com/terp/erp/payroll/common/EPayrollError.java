@@ -49,7 +49,8 @@ public enum EPayrollError implements ErrorCode {
     PAY_039("The bank account is inactive."),
     PAY_040("The payroll run has no net pay to pay."),
     PAY_041("The accounting service is unavailable. Please try again."),
-    PAY_042("A paid payroll run can no longer be changed.");
+    PAY_042("A paid payroll run can no longer be changed."),
+    PAY_043("Only a pending overtime can be edited, deleted, approved or rejected.");
 
     private final String message;
 }

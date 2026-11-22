@@ -73,7 +73,8 @@ public enum ERecruitmentError implements ErrorCode {
     REC_063("A {0} question has no options."),
     REC_064("The answer to \"{0}\" must be a number."),
     REC_065("The answer to \"{0}\" must be a date (yyyy-MM-dd)."),
-    REC_066("The answer to \"{0}\" is not one of its options.");
+    REC_066("The answer to \"{0}\" is not one of its options."),
+    REC_067("The offer is {0} and can no longer be changed or deleted.");
 
     private final String message;
 }

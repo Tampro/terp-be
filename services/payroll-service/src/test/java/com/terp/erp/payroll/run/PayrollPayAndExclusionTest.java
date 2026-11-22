@@ -123,7 +123,7 @@ class PayrollPayAndExclusionTest {
         run.setBankAccountId(3L);
         run.setNetPay(new BigDecimal("9500000"));
         assertCode(() -> service.pay(5L, null), EPayrollError.PAY_036);
-        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
 
         run.setStatus(EStatus.COMPLETED);
         var dto = service.pay(5L, null);
@@ -134,7 +134,7 @@ class PayrollPayAndExclusionTest {
         assertCode(() -> service.pay(5L, null), EPayrollError.PAY_037);
         assertCode(() -> service.cancel(5L), EPayrollError.PAY_042);
         verify(accounting, times(1)).payrollPosting(eq(10L), eq(5L), eq(3L),
-                eq(new BigDecimal("9500000")), eq(PAY_DATE), eq("PAYROLL-5"), any());
+                eq(new BigDecimal("9500000")), eq(PAY_DATE), eq("PAYROLL-5"), any(), eq(LocalDate.of(2026, 11, 30)));
     }
 
     @Test
@@ -144,7 +144,7 @@ class PayrollPayAndExclusionTest {
         assertCode(() -> service.pay(5L, null), EPayrollError.PAY_038);
         run.setNetPay(BigDecimal.ZERO);
         assertCode(() -> service.pay(5L, new PayForm(3L, null)), EPayrollError.PAY_040);
-        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -154,7 +154,7 @@ class PayrollPayAndExclusionTest {
         assertCode(() -> service.pay(5L, new PayForm(3L, null)), EPayrollError.PAY_012);
         assertCode(() -> service.exclude(5L, 7L), EPayrollError.PAY_012);
         assertCode(() -> service.exclusions(5L), EPayrollError.PAY_012);
-        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+        verify(accounting, never()).payrollPosting(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
     }
 
     @Test

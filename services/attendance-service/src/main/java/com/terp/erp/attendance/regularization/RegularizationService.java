@@ -38,8 +38,8 @@ import java.util.stream.Collectors;
  * Attendance Regularizations page (docs/analysis/06 §6.4.4). Admin/HR enter, approve and reject requests for now
  * (PO, 2026-11-19: employee self-service later). Approving writes the requested times into the record and computes its
  * flags again; rejecting leaves it unchanged. One pending request per record.
- * TODO(assumption): only pending requests can be edited, approved or rejected; delete is allowed in every status and
- * does not undo an approval — confirm with BA.
+ * Only pending requests can be edited, approved, rejected or deleted (ATT_020; manual §20: edit/delete limited by
+ * status) — a decided request stays as the audit trail of the record's change.
  */
 @Service
 @RequiredArgsConstructor
@@ -127,7 +127,7 @@ public class RegularizationService {
 
     @Transactional
     public void delete(Long id) {
-        requests.delete(require(id));
+        requests.delete(requirePending(id));
     }
 
     private void apply(Regularization g, RegularizationForm f) {

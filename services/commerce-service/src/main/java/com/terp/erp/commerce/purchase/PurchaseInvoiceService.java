@@ -17,6 +17,7 @@ import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 
@@ -178,18 +179,32 @@ public class PurchaseInvoiceService {
         requireDraft(id).setDeleted(true);
     }
 
-    /** DRAFT → POSTED; stocked lines go into the receiving warehouse first. */
+    /**
+     * DRAFT → POSTED: stocked lines go into the receiving warehouse and the invoice is journalled in
+     * accounting-service (Dr 156 goods, Dr 6428 services, Dr 1331 VAT / Cr 331 total), in the order of
+     * {@link Postings}; a closed year (ACC_070) is relayed and the invoice stays a draft.
+     */
     @Transactional
     public InvoiceDetail post(Long id) {
         PurchaseInvoice d = requireDraft(id);
         List<InventoryClient.MoveLine> moves = d.getLines().stream().filter(PurchaseInvoice.Line::stocked)
                 .map(l -> new InventoryClient.MoveLine(l.getItemId(), d.getWarehouseId(), l.getQuantity())).toList();
-        if (!moves.isEmpty()) {
-            if (d.getWarehouseId() == null) {
-                throw ApiException.badRequest(EPurchaseError.PUR_005);
-            }
-            inventory.move(STOCK_SOURCE, d.getId(), moves);
+        if (!moves.isEmpty() && d.getWarehouseId() == null) {
+            throw ApiException.badRequest(EPurchaseError.PUR_005);
         }
+        BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO;
+        for (PurchaseInvoice.Line l : d.getLines()) {
+            BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
+            if (l.stocked()) {
+                goods = goods.add(net);
+            } else {
+                service = service.add(net);
+            }
+        }
+        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, d.getId(), d.getInvoiceDate(),
+                d.getNumber(), "Purchase invoice " + d.getNumber() + " - " + d.getVendorName(), goods, service,
+                d.getTaxTotal(), null);
+        Postings.run(accounting, posting, () -> inventory.move(STOCK_SOURCE, d.getId(), moves));
         d.setStatus(PurchaseInvoice.EStatus.POSTED);
         d.setPostedAt(Instant.now(clock));
         d.setBalance(d.getTotal().subtract(d.getPaidAmount()));
@@ -200,6 +215,20 @@ public class PurchaseInvoiceService {
     @Transactional(readOnly = true)
     public PurchaseInvoice requirePosted(Long id) {
         PurchaseInvoice d = require(id);
+        if (d.getStatus() == PurchaseInvoice.EStatus.DRAFT) {
+            throw ApiException.badRequest(EPurchaseError.PUR_006);
+        }
+        return d;
+    }
+
+    /**
+     * For return create / edit: the posted invoice row locked until the transaction ends, so two returns of one
+     * invoice are validated one after the other and cannot both take the last returnable quantity.
+     */
+    @Transactional
+    public PurchaseInvoice lockPosted(Long id) {
+        PurchaseInvoice d = invoices.lockById(id).orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_001));
+        TenantGuard.assertSameCompany(d.getCompanyId(), EPurchaseError.PUR_001);
         if (d.getStatus() == PurchaseInvoice.EStatus.DRAFT) {
             throw ApiException.badRequest(EPurchaseError.PUR_006);
         }

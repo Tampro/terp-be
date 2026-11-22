@@ -184,4 +184,21 @@ class BankAccountServiceTest {
         assertThatThrownBy(call).isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
     }
+
+    @Test
+    void posIncomeSplitsVatAndBooksTheCostInTheSameEntry() {
+        when(mapping.require(10L, ESystemAccount.OUTPUT_VAT)).thenReturn(33311L);
+        when(mapping.require(10L, ESystemAccount.COGS)).thenReturn(632L);
+        when(mapping.require(10L, ESystemAccount.INVENTORY)).thenReturn(156L);
+        var lines = service.incomeLines(account, new IncomeForm("POS_ORDER", 42L, new BigDecimal("350"), null,
+                "POS sale", new BigDecimal("30"), new BigDecimal("180")));
+        assertThat(lines).extracting(JournalService.Line::accountId).containsExactly(2L, 40L, 33311L, 632L, 156L);
+        assertThat(lines.get(0).debit()).isEqualByComparingTo("350");
+        assertThat(lines.get(1).credit()).isEqualByComparingTo("320");
+        assertThat(lines.get(2).credit()).isEqualByComparingTo("30");
+        assertThat(lines.get(3).debit()).isEqualByComparingTo("180");
+        assertThat(lines.get(4).credit()).isEqualByComparingTo("180");
+        assertCode(() -> service.incomeLines(account, new IncomeForm("POS_ORDER", 42L, new BigDecimal("30"), null,
+                null, new BigDecimal("30"), null)), EAccountingError.ACC_019);
+    }
 }

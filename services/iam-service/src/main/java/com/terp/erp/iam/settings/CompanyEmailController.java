@@ -34,7 +34,8 @@ public class CompanyEmailController {
     private final CompanyEmailService service;
 
     @Operation(summary = "The company's email settings", description = "configured = it has its own SMTP; "
-            + "usingPlatform = the platform SMTP sends its emails. The password is never returned (passwordSet).")
+            + "usingPlatform = the platform SMTP sends its emails; smtpConfigured = false means no SMTP can send them and "
+            + "event emails (welcome, password reset, …) are skipped. The password is never returned (passwordSet).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = NO_COMPANY))
     @PreAuthorize("@PermissionChecker.has('IAM_SETTINGS_MANAGE')")
     @GetMapping

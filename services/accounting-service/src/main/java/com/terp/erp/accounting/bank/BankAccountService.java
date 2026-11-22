@@ -74,7 +74,16 @@ public class BankAccountService {
             @Schema(example = "150000", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull
             @DecimalMin(value = "0", inclusive = false) @Digits(integer = 15, fraction = 4) BigDecimal amount,
             @Schema(description = "null = today (UTC)", example = "2026-11-22") LocalDate date,
-            @Schema(example = "POS sale") @Size(max = 500) String description) {
+            @Schema(example = "POS sale") @Size(max = 500) String description,
+            @Schema(description = "Output VAT included in amount; credited to OUTPUT_VAT (33311), the rest to "
+                    + "SALES_REVENUE. null = 0", example = "13636")
+            @DecimalMin("0") @Digits(integer = 15, fraction = 4) BigDecimal taxAmount,
+            @Schema(description = "Cost of the goods sold: Dr COGS (632) / Cr INVENTORY (156). null = 0",
+                    example = "90000") @DecimalMin("0") @Digits(integer = 15, fraction = 4) BigDecimal costAmount) {
+        /** Gross income without VAT split or cost (callers written before the POS split). */
+        public IncomeForm(String sourceType, Long sourceId, BigDecimal amount, LocalDate date, String description) {
+            this(sourceType, sourceId, amount, date, description, null, null);
+        }
     }
 
     public record BankAccountDto(String id, String companyId, String holderName, String bankName,
@@ -170,14 +179,36 @@ public class BankAccountService {
         LocalDate date = form.date() == null ? LocalDate.now(clock) : form.date();
         BankTransactionDto t = record(a.getCompanyId(), a.getId(), ETransactionType.CREDIT, form.amount(), date,
                 form.sourceType(), form.sourceId(), null, form.description());
-        // TODO(assumption): POS does not send the VAT split, so the gross amount goes to sales revenue; output VAT
-        // is not separated until POS sends net + VAT.
         journal.post(a.getCompanyId(), date, form.sourceType(), form.sourceId(), null,
-                form.description() == null ? "POS income" : form.description(), List.of(
-                        new JournalService.Line(glAccountOf(a), form.amount(), null, null),
-                        new JournalService.Line(mapping.require(a.getCompanyId(), ESystemAccount.SALES_REVENUE),
-                                null, form.amount(), null)));
+                form.description() == null ? "POS income" : form.description(), incomeLines(a, form));
         return t;
+    }
+
+    /**
+     * Dr bank (amount) / Cr SALES_REVENUE (amount - tax) / Cr OUTPUT_VAT (tax); with a cost also Dr COGS / Cr
+     * INVENTORY. 400 ACC_019 when the tax is not below the amount.
+     * TODO(assumption): the POS order discount reduces revenue, not VAT (VAT stays on the full price, as the POS
+     *  order computes it); accounts to be confirmed by the chief accountant.
+     */
+    List<JournalService.Line> incomeLines(BankAccount a, IncomeForm form) {
+        Long c = a.getCompanyId();
+        BigDecimal tax = form.taxAmount() == null ? BigDecimal.ZERO : form.taxAmount();
+        BigDecimal cost = form.costAmount() == null ? BigDecimal.ZERO : form.costAmount();
+        BigDecimal revenue = form.amount().subtract(tax);
+        if (revenue.signum() <= 0) {
+            throw ApiException.badRequest(EAccountingError.ACC_019);
+        }
+        List<JournalService.Line> lines = new java.util.ArrayList<>();
+        lines.add(new JournalService.Line(glAccountOf(a), form.amount(), null, null));
+        lines.add(new JournalService.Line(mapping.require(c, ESystemAccount.SALES_REVENUE), null, revenue, null));
+        if (tax.signum() > 0) {
+            lines.add(new JournalService.Line(mapping.require(c, ESystemAccount.OUTPUT_VAT), null, tax, null));
+        }
+        if (cost.signum() > 0) {
+            lines.add(new JournalService.Line(mapping.require(c, ESystemAccount.COGS), cost, null, null));
+            lines.add(new JournalService.Line(mapping.require(c, ESystemAccount.INVENTORY), null, cost, null));
+        }
+        return lines;
     }
 
     /**

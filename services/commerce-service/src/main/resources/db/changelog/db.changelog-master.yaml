@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122210000_pos_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122420000_invoice_payment_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122700000_sales_line_cost_changelog.mysql.sql

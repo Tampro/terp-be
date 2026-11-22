@@ -108,7 +108,8 @@ public enum EEmployeeError implements ErrorCode {
     EMP_098("The new designation must differ from the current one."),
     EMP_099("OVERDUE is derived from the end date and cannot be set."),
     EMP_100("The trainer does not exist."),
-    EMP_101("The trainer is not in the company's list or is inactive.");
+    EMP_101("The trainer is not in the company's list or is inactive."),
+    EMP_102("The record is {0} and can no longer be edited or deleted.");
 
     private final String message;
 }

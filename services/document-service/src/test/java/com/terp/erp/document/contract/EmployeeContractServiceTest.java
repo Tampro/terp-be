@@ -106,6 +106,31 @@ class EmployeeContractServiceTest {
         assertCode(() -> service.create(null, form(LocalDate.of(2026, 12, 1), null)), EDocumentError.DOC_005);
     }
 
+    @Test
+    void signedContractIsLockedAndMovesFollowTheTable() {
+        EmployeeContract c = new EmployeeContract();
+        c.setId(5L);
+        c.setCompanyId(10L);
+        c.setContractTypeId(3L);
+        c.setEmployeeId(12L);
+        c.setStartDate(LocalDate.of(2026, 12, 1));
+        c.setStatus(EmployeeContract.EStatus.DRAFT);
+        when(contracts.findByIdAndDeletedFalse(5L)).thenReturn(Optional.of(c));
+        service.update(5L, form(LocalDate.of(2026, 12, 1), null));
+        assertCode(() -> service.changeStatus(5L, EmployeeContract.EStatus.RENEWED), EDocumentError.DOC_028);
+        service.changeStatus(5L, EmployeeContract.EStatus.ACTIVE);
+        assertCode(() -> service.update(5L, form(LocalDate.of(2026, 12, 1), null)), EDocumentError.DOC_027);
+        assertCode(() -> service.delete(5L), EDocumentError.DOC_027);
+        assertCode(() -> service.changeStatus(5L, EmployeeContract.EStatus.DRAFT), EDocumentError.DOC_028);
+        service.changeStatus(5L, EmployeeContract.EStatus.TERMINATED);
+        assertCode(() -> service.changeStatus(5L, EmployeeContract.EStatus.ACTIVE), EDocumentError.DOC_028);
+        assertCode(() -> service.delete(5L), EDocumentError.DOC_027);
+        assertThat(c.isDeleted()).isFalse();
+        c.setStatus(EmployeeContract.EStatus.PENDING);
+        service.delete(5L);
+        assertThat(c.isDeleted()).isTrue();
+    }
+
     private static ContractForm form(LocalDate start, LocalDate end) {
         return new ContractForm(12L, 3L, start, end, new BigDecimal("15000000"), "Terms");
     }

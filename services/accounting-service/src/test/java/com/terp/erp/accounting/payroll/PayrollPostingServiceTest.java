@@ -103,4 +103,25 @@ class PayrollPostingServiceTest {
     private static PayrollPostingForm form() {
         return new PayrollPostingForm(12L, 3L, new BigDecimal("9500000"), DAY, "PAYROLL-12", "Salaries November");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void accruesTheSalaryExpenseSoSalaryPayableNetsToZero() {
+        when(mapping.require(10L, ESystemAccount.SALARY_EXPENSE)).thenReturn(6421L);
+        service.post(null, new PayrollPostingForm(12L, 3L, new BigDecimal("9500000"), DAY, "PAYROLL-12",
+                "Salaries November", LocalDate.of(2026, 11, 30)));
+
+        ArgumentCaptor<List<JournalService.Line>> accrual = ArgumentCaptor.forClass(List.class);
+        verify(journal).post(eq(10L), eq(LocalDate.of(2026, 11, 30)), eq("PAYROLL_ACCRUAL"), eq(12L),
+                eq("PAYROLL-12"), any(), accrual.capture());
+        ArgumentCaptor<List<JournalService.Line>> payment = ArgumentCaptor.forClass(List.class);
+        verify(journal).post(eq(10L), eq(DAY), eq("PAYROLL_RUN"), eq(12L), any(), any(), payment.capture());
+        assertThat(accrual.getValue().get(0).accountId()).isEqualTo(6421L);
+        assertThat(accrual.getValue().get(0).debit()).isEqualByComparingTo("9500000");
+        assertThat(accrual.getValue().get(1).accountId()).isEqualTo(334L);
+        assertThat(accrual.getValue().get(1).credit()).isEqualByComparingTo("9500000");
+        // 334: credit 9.5M (accrual) - debit 9.5M (payment) = 0
+        assertThat(payment.getValue().get(0).accountId()).isEqualTo(334L);
+        assertThat(payment.getValue().get(0).debit()).isEqualByComparingTo(accrual.getValue().get(1).credit());
+    }
 }

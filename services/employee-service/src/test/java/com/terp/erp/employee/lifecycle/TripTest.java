@@ -115,6 +115,24 @@ class TripTest {
     }
 
     @Test
+    void editDeleteOnlyWhilePlannedAndMovesFollowTable() {
+        trips.update(9L, form(START.plusDays(4), null));
+        assertCode(() -> trips.changeStatus(9L, EStatus.COMPLETED), EEmployeeError.EMP_096);
+        trips.changeStatus(9L, EStatus.ONGOING);
+        assertCode(() -> trips.update(9L, form(START.plusDays(4), null)), EEmployeeError.EMP_102);
+        assertCode(() -> trips.delete(9L), EEmployeeError.EMP_102);
+        assertCode(() -> trips.changeStatus(9L, EStatus.PLANNED), EEmployeeError.EMP_096);
+        trips.changeStatus(9L, EStatus.COMPLETED);
+        assertCode(() -> trips.update(9L, form(START.plusDays(4), null)), EEmployeeError.EMP_102);
+        assertCode(() -> trips.delete(9L), EEmployeeError.EMP_102);
+        assertCode(() -> trips.changeStatus(9L, EStatus.CANCELLED), EEmployeeError.EMP_096);
+        assertThat(trip.isDeleted()).isFalse();
+        trip.setStatus(EStatus.PLANNED);
+        trips.delete(9L);
+        assertThat(trip.isDeleted()).isTrue();
+    }
+
+    @Test
     void expensesDriveTotalsAndSummary() {
         trip.setAdvanceAmount(new BigDecimal("300"));
         trip.setAdvanceStatus(EAdvanceStatus.PAID);

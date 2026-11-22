@@ -50,7 +50,10 @@ import java.util.stream.Collectors;
  * Approved By an employee (name copied). Creating an offer moves a NEW / SCREENING / INTERVIEW candidate to OFFER and
  * refuses a HIRED / REJECTED one (REC_036); ACCEPTED makes the candidate HIRED; other statuses leave them. An offer past
  * its expiration date is flagged (expired) while still open, and a nightly job sets EXPIRED (PO 2026-11-21).
- * Status moves freely.
+ * Status moves freely between DRAFT, SENT and NEGOTIATING; ACCEPTED, DECLINED and EXPIRED are final: no edit, delete,
+ * status move or approval change any more (REC_067, manual §20), nor once the candidate was converted to an employee.
+ * TODO(assumption): SENT and NEGOTIATING offers stay editable because negotiating changes the terms (the edit sends
+ * the approval back to PENDING); an EXPIRED offer is not reopened — a new offer is made — confirm with BA.
  */
 @Service
 @RequiredArgsConstructor
@@ -170,7 +173,7 @@ public class OfferService {
      */
     @Transactional
     public OfferDto update(Long id, OfferForm form) {
-        Offer o = require(id);
+        Offer o = requireOpen(id);
         apply(o, form);
         decide(o, Offer.EApprovalStatus.PENDING);
         return dto(o, lookups(List.of(o)));
@@ -179,7 +182,7 @@ public class OfferService {
     /** Update Status / kanban drag and drop; ACCEPTED makes the candidate HIRED. */
     @Transactional
     public OfferDto changeStatus(Long id, Offer.EStatus status) {
-        Offer o = require(id);
+        Offer o = requireOpen(id);
         // TODO(assumption): an offer is approved before it is sent (REC_058); other moves are not gated — confirm with BA
         if (status == Offer.EStatus.SENT && o.getStatus() != Offer.EStatus.SENT
                 && o.getApprovalStatus() != Offer.EApprovalStatus.APPROVED) {
@@ -195,7 +198,7 @@ public class OfferService {
     /** Approve / reject (or back to PENDING); records who decided and when. */
     @Transactional
     public OfferDto approve(Long id, Offer.EApprovalStatus approval) {
-        Offer o = require(id);
+        Offer o = requireOpen(id);
         decide(o, approval);
         return dto(o, lookups(List.of(o)));
     }
@@ -214,7 +217,21 @@ public class OfferService {
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireOpen(id).setDeleted(true);
+    }
+
+    static final Set<Offer.EStatus> FINAL = EnumSet.of(Offer.EStatus.ACCEPTED, Offer.EStatus.DECLINED,
+            Offer.EStatus.EXPIRED);
+
+    /** Not final and its candidate not converted to an employee (REC_067). */
+    private Offer requireOpen(Long id) {
+        Offer o = require(id);
+        boolean converted = candidates.findById(o.getCandidateId()).map(c -> c.getEmployeeId() != null)
+                .orElse(false);
+        if (FINAL.contains(o.getStatus()) || converted) {
+            throw ApiException.badRequest(ERecruitmentError.REC_067, o.getStatus().name());
+        }
+        return o;
     }
 
     private void apply(Offer o, OfferForm f) {

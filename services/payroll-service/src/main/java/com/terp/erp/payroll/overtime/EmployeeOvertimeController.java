@@ -38,6 +38,7 @@ import static com.terp.erp.payroll.common.Texts.COMPANY;
 public class EmployeeOvertimeController {
     private static final String NOT_FOUND = "No such overtime in your company (PAY_033)";
     private static final String PAID = "Already paid by a payroll run (PAY_034)";
+    private static final String DECIDED = "Already approved or rejected (PAY_043)";
 
     private final EmployeeOvertimeService service;
 
@@ -78,9 +79,10 @@ public class EmployeeOvertimeController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Edit manual overtime", description = "Full replacement; status omitted = kept.")
+    @Operation(summary = "Edit manual overtime", description = "Full replacement, only while PENDING; status omitted "
+            + "= kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "End before start (PAY_031), " + PAID),
+            @ApiResponse(responseCode = "400", description = "End before start (PAY_031), " + PAID + ", " + DECIDED),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @PutMapping("/overtimes/{id}")
@@ -88,9 +90,9 @@ public class EmployeeOvertimeController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Approve / reject overtime")
+    @Operation(summary = "Approve / reject overtime", description = "Allowed: PENDING -> APPROVED | REJECTED, once.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = PAID),
+            @ApiResponse(responseCode = "400", description = PAID + ", " + DECIDED),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @PutMapping("/overtimes/{id}/status")
@@ -98,9 +100,9 @@ public class EmployeeOvertimeController {
         return ApiMessageDto.ok(service.changeStatus(id, form.status()));
     }
 
-    @Operation(summary = "Delete manual overtime")
+    @Operation(summary = "Delete manual overtime", description = "Only while PENDING.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = PAID),
+            @ApiResponse(responseCode = "400", description = PAID + ", " + DECIDED),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @DeleteMapping("/overtimes/{id}")

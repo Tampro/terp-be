@@ -39,6 +39,22 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class EmployeeContractService {
+    /**
+     * TODO(assumption): a contract is edited or deleted only while DRAFT / PENDING (DOC_027, manual section 20); once
+     * ACTIVE it is signed: it ends by TERMINATED / EXPIRED or is replaced (RENEWED). The move table is ours - confirm
+     * with BA.
+     */
+    static final java.util.Set<EmployeeContract.EStatus> EDITABLE = java.util.EnumSet.of(
+            EmployeeContract.EStatus.DRAFT, EmployeeContract.EStatus.PENDING);
+    static final Map<EmployeeContract.EStatus, java.util.Set<EmployeeContract.EStatus>> MOVES = Map.of(
+            EmployeeContract.EStatus.DRAFT, java.util.EnumSet.of(EmployeeContract.EStatus.PENDING,
+                    EmployeeContract.EStatus.ACTIVE),
+            EmployeeContract.EStatus.PENDING, java.util.EnumSet.of(EmployeeContract.EStatus.DRAFT,
+                    EmployeeContract.EStatus.ACTIVE),
+            EmployeeContract.EStatus.ACTIVE, java.util.EnumSet.of(EmployeeContract.EStatus.EXPIRED,
+                    EmployeeContract.EStatus.TERMINATED, EmployeeContract.EStatus.RENEWED),
+            EmployeeContract.EStatus.EXPIRED, java.util.EnumSet.of(EmployeeContract.EStatus.RENEWED));
+
     static final int NEAR_EXPIRE_DAYS = 30;
 
     private final EmployeeContractRepository contracts;
@@ -130,25 +146,36 @@ public class EmployeeContractService {
         return detail(c);
     }
 
-    /** Full replacement of the details; the number and status stay. */
+    /** Full replacement of the details while DRAFT / PENDING; the number and status stay. */
     @Transactional
     public ContractDto update(Long id, ContractForm form) {
-        EmployeeContract c = require(id);
+        EmployeeContract c = requireEditable(id);
         apply(c, form);
         return detail(c);
     }
 
-    /** Update Contract Status. */
+    /** Update Contract Status along {@link #MOVES} (DOC_028); the stored status is what moves. */
     @Transactional
     public ContractDto changeStatus(Long id, EmployeeContract.EStatus status) {
         EmployeeContract c = require(id);
+        if (!MOVES.getOrDefault(c.getStatus(), java.util.Set.of()).contains(status)) {
+            throw ApiException.badRequest(EDocumentError.DOC_028, c.getStatus().name(), status.name());
+        }
         c.setStatus(status);
         return detail(c);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireEditable(id).setDeleted(true);
+    }
+
+    private EmployeeContract requireEditable(Long id) {
+        EmployeeContract c = require(id);
+        if (!EDITABLE.contains(c.getStatus())) {
+            throw ApiException.badRequest(EDocumentError.DOC_027, c.getStatus().name());
+        }
+        return c;
     }
 
     private void apply(EmployeeContract c, ContractForm f) {

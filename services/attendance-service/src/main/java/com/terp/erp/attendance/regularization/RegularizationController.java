@@ -143,8 +143,10 @@ public class RegularizationController {
         return ApiMessageDto.ok(service.reject(id, form == null ? null : form.comments()));
     }
 
-    @Operation(summary = "Delete a request permanently", description = "An approved change stays in the record.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such request in your company (ATT_018)"))
+    @Operation(summary = "Delete a pending request permanently", description = "Decided requests stay.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Already decided (ATT_020)"),
+            @ApiResponse(responseCode = "404", description = "No such request in your company (ATT_018)")})
     @PreAuthorize("@PermissionChecker.has('ATTENDANCE_MANAGE')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {

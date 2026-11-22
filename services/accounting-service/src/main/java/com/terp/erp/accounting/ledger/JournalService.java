@@ -98,6 +98,12 @@ public class JournalService {
         return dto(entries.save(e), true);
     }
 
+    /** Whether a source document already has its automatic entry. */
+    @Transactional(readOnly = true)
+    public boolean isJournalled(Long companyId, String sourceType, Long sourceId) {
+        return entries.findByCompanyIdAndSourceTypeAndSourceId(companyId, sourceType, sourceId).isPresent();
+    }
+
     @Transactional(readOnly = true)
     public Page<JournalEntryDto> search(Long requestedCompanyId, String sourceType, EJournalType type,
                                         EJournalStatus status, LocalDate from, LocalDate to, Pageable pageable) {
