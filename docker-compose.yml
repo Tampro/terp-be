@@ -38,6 +38,8 @@ services:
       CRM_DB_PASSWORD: ${CRM_DB_PASSWORD:?set in .env}
       PROJECT_DB_USERNAME: ${PROJECT_DB_USERNAME:-erp_project}
       PROJECT_DB_PASSWORD: ${PROJECT_DB_PASSWORD:?set in .env}
+      SUPPORT_DB_USERNAME: ${SUPPORT_DB_USERNAME:-erp_support}
+      SUPPORT_DB_PASSWORD: ${SUPPORT_DB_PASSWORD:?set in .env}
     ports:
       - "13316:3306"
     volumes:
@@ -411,6 +413,25 @@ services:
       keycloak:
         condition: service_healthy
 
+  support-service:
+    build: ./services/support-service
+    mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
+    environment:
+      SUPPORT_DB_URL: jdbc:mysql://mysql:3306/erp_support?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SUPPORT_DB_USERNAME: ${SUPPORT_DB_USERNAME:-erp_support}
+      SUPPORT_DB_PASSWORD: ${SUPPORT_DB_PASSWORD}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
+      IAM_SERVICE_URL: http://iam-service:8081
+      MEDIA_SERVICE_URL: http://media-service:8082
+    ports:
+      - "18096:8096"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
   gateway-server:
     build: ./services/gateway-server
     mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
@@ -432,6 +453,7 @@ services:
       ACCOUNTING_SERVICE_URL: http://accounting-service:8093
       CRM_SERVICE_URL: http://crm-service:8094
       PROJECT_SERVICE_URL: http://project-service:8095
+      SUPPORT_SERVICE_URL: http://support-service:8096
     ports:
       - "18080:8080"
     depends_on:

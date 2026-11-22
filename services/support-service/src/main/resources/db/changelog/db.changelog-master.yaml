@@ -1,0 +1,5 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/20261122810000_support_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122820000_messenger_changelog.mysql.sql

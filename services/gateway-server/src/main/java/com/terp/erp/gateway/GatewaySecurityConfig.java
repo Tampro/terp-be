@@ -58,6 +58,11 @@ public class GatewaySecurityConfig {
                         // (PublicFormRateLimitFilter); project-service checks the form token and that it is active.
                         .pathMatchers(HttpMethod.GET, "/api/v1/public/forms/*").permitAll()
                         .pathMatchers(HttpMethod.POST, PublicFormRateLimitFilter.APPLY).permitAll()
+                        // Public support portal: reads, and exactly four writes (create / track / reply to a ticket,
+                        // contact form), limited per IP (PublicSupportRateLimitFilter); support-service checks the
+                        // slug, that the portal is enabled, and ticket number + email or the tracking token.
+                        .pathMatchers(HttpMethod.GET, "/api/v1/public/support/**").permitAll()
+                        .pathMatchers(HttpMethod.POST, PublicSupportRateLimitFilter.WRITES).permitAll()
                         .pathMatchers("/actuator/health/**").permitAll()
                         // API docs only (no data); the endpoints they describe still need a token.
                         .pathMatchers(HttpMethod.GET, swaggerEnabled ? SWAGGER_PATHS : new String[0]).permitAll()
