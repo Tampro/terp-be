@@ -85,7 +85,7 @@ public class TicketController {
     @Operation(summary = "Create a ticket; answers the tracking token once",
             description = "Numbered TKT-000001… per company. attachmentFileIds = media-service files of the company.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
-            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_001, SUP_005, SUP_007, SUP_008, SUP_034"),
+            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_001, SUP_005, SUP_007, SUP_008, SUP_034, custom fields SUP_035-SUP_039"),
             @ApiResponse(responseCode = "503", description = "SUP_002 (media-service unreachable)")})
     public ApiMessageDto<CreatedTicketDto> create(@RequestParam(required = false) Long companyId,
                                                   @Valid @RequestBody TicketForm form) {
@@ -98,7 +98,7 @@ public class TicketController {
             description = "Full replacement of account type, name, email, category, subject, description, attachments "
                     + "and note; status null keeps the current status. Number and tracking token never change.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
-            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_005, SUP_007, SUP_008, SUP_034"),
+            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_005, SUP_007, SUP_008, SUP_034, custom fields SUP_035-SUP_039"),
             @ApiResponse(responseCode = "404", description = "SUP_004"),
             @ApiResponse(responseCode = "503", description = "SUP_002")})
     public ApiMessageDto<TicketDto> update(@PathVariable Long id, @Valid @RequestBody TicketForm form) {
