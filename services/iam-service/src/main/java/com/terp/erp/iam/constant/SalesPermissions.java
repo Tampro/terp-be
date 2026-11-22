@@ -43,6 +43,9 @@ public final class SalesPermissions {
             "REVENUE_APPROVE", "EXPENSE_VIEW", "EXPENSE_MANAGE", "EXPENSE_APPROVE", "PAYMENT_VIEW", "PAYMENT_MANAGE",
             "PAYMENT_CLEAR", "NOTE_VIEW", "NOTE_MANAGE", "NOTE_APPROVE", "ACCOUNTING_REPORT_VIEW");
 
+    /** accounting-service double entry: manual journals, reversal, ledger reports, balance sheet, year-end close. */
+    public static final Set<String> LEDGER = Set.of("LEDGER_VIEW", "LEDGER_MANAGE", "LEDGER_REPORT_VIEW", "LEDGER_CLOSE");
+
     public static final Set<String> ALL;
 
     static {
@@ -59,6 +62,7 @@ public final class SalesPermissions {
         all.addAll(PROJECT);
         all.addAll(FORM);
         all.addAll(ACCOUNTING);
+        all.addAll(LEDGER);
         ALL = Set.copyOf(all);
     }
 

@@ -113,3 +113,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122300000_project_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261122430000_accounting_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122510000_ledger_permission_init_data.mysql.sql

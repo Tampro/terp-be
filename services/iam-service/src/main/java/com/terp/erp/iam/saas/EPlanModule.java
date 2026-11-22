@@ -22,7 +22,7 @@ public enum EPlanModule {
     ZOOM_MEETING("Zoom Meeting", Set.of("ZOOM")),
     ACCOUNTING("Accounting", Set.of("BANK", "COA", "REVENUE", "EXPENSE", "PAYMENT", "NOTE",
             "ACCOUNTING_REPORT")),
-    DOUBLE_ENTRY("Double Entry", Set.of()),
+    DOUBLE_ENTRY("Double Entry", Set.of("LEDGER")),
     BUDGET_PLANNER("Budget Planner", Set.of()),
     FINANCIAL_GOAL("Financial Goal", Set.of()),
     POS("POS", Set.of("POS")),
