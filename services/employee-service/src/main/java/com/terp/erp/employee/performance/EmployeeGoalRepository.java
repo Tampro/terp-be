@@ -5,6 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,10 +20,19 @@ public interface EmployeeGoalRepository extends JpaRepository<EmployeeGoal, Long
             + "or lower(e.fullName) like :kw escape '!' or lower(e.email) like :kw escape '!' "
             + "or lower(e.employeeNo) like :kw escape '!')";
 
-    @Query(value = "select g " + FILTERS + " and (:status is null or g.status = :status)",
-            countQuery = "select count(g) " + FILTERS + " and (:status is null or g.status = :status)")
+    /** overdue = true: the OVERDUE tab; otherwise status matches the stored status of goals not overdue. */
+    String STATUS = " and (:status is null "
+            + "or (:overdue = true and g.status in :open and g.endDate < :today) "
+            + "or (:overdue = false and g.status = :status and not (g.status in :open and g.endDate < :today)))";
+
+    @Query(value = "select g " + FILTERS + STATUS, countQuery = "select count(g) " + FILTERS + STATUS)
     Page<EmployeeGoal> search(Long companyId, Long employeeId, Long goalTypeId, EmployeeGoal.EStatus status,
-                              String kw, Pageable pageable);
+                              boolean overdue, Collection<EmployeeGoal.EStatus> open, LocalDate today, String kw,
+                              Pageable pageable);
+
+    @Query("select g.status, count(g) " + FILTERS + " and g.status in :open and g.endDate < :today group by g.status")
+    List<Object[]> countOverdue(Long companyId, Long employeeId, Long goalTypeId, Collection<EmployeeGoal.EStatus> open,
+                                LocalDate today, String kw);
 
     @Query("select g.status, count(g) " + FILTERS + " group by g.status")
     List<Object[]> countByStatus(Long companyId, Long employeeId, Long goalTypeId, String kw);

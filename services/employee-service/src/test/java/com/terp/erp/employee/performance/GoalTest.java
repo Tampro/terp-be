@@ -15,13 +15,20 @@ import com.terp.erp.employee.performance.EmployeeGoal.EStatus;
 import com.terp.erp.employee.performance.GoalService.GoalForm;
 import com.terp.erp.exception.ApiException;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,7 +41,9 @@ class GoalTest {
     private final PerformanceCatalogService catalogs = new PerformanceCatalogService(items,
             mock(PerformanceIndicatorRepository.class), goalRepo);
     private final GoalService service = new GoalService(goalRepo, catalogs, items,
-            new LifecycleSupport(employees, mock(MediaClient.class)));
+            new LifecycleSupport(employees, mock(MediaClient.class)),
+            // 2026-11-30 17:30 UTC is already 2026-12-01 (START) in Vietnam
+            Clock.fixed(Instant.parse("2026-11-30T17:30:00Z"), ZoneOffset.UTC));
 
     private Employee employee;
     private PerformanceCatalog type;
@@ -90,6 +99,37 @@ class GoalTest {
         assertThat(service.updateProgress(9L, 30).status()).isEqualTo(EStatus.IN_PROGRESS);
         assertThat(service.updateProgress(9L, 100).status()).isEqualTo(EStatus.COMPLETED);
         assertThat(service.updateProgress(9L, 80).status()).isEqualTo(EStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void overdueIsDerivedOnRead() {
+        LocalDate nov1 = LocalDate.of(2026, 11, 1);
+        var g = service.create(new GoalForm(1L, 2L, "t", null, nov1, LocalDate.of(2026, 11, 30), null, 0, null));
+        assertThat(g.status()).isEqualTo(EStatus.OVERDUE);
+        assertThat(service.updateProgress(9L, 40).status()).isEqualTo(EStatus.OVERDUE);
+        assertThat(service.updateProgress(9L, 100).status()).isEqualTo(EStatus.COMPLETED);
+        // ending today (Vietnam) is not overdue
+        assertThat(service.update(9L, new GoalForm(1L, 2L, "t", null, nov1, START, null, 0,
+                EStatus.NOT_STARTED)).status()).isEqualTo(EStatus.NOT_STARTED);
+        assertCode(() -> service.create(new GoalForm(1L, 2L, "t", null, START, START, null, 0, EStatus.OVERDUE)),
+                EEmployeeError.EMP_099);
+    }
+
+    @Test
+    void overdueIsFilterableAndCounted() {
+        when(goalRepo.search(eq(10L), any(), any(), eq(EStatus.OVERDUE), eq(true), eq(GoalService.OPEN),
+                eq(START), any(), any())).thenReturn(Page.empty());
+        assertThat(service.search(null, null, null, null, EStatus.OVERDUE, Pageable.unpaged())).isEmpty();
+        verify(goalRepo).search(eq(10L), any(), any(), eq(EStatus.OVERDUE), eq(true), eq(GoalService.OPEN),
+                eq(START), any(), any());
+        when(goalRepo.countByStatus(eq(10L), any(), any(), any())).thenReturn(List.of(
+                new Object[]{EStatus.NOT_STARTED, 3L}, new Object[]{EStatus.COMPLETED, 1L}));
+        when(goalRepo.countOverdue(eq(10L), any(), any(), any(), any(), any())).thenReturn(List.<Object[]>of(
+                new Object[]{EStatus.NOT_STARTED, 2L}));
+        var c = service.statusCounts(null, null, null, null);
+        assertThat(c.all()).isEqualTo(4);
+        assertThat(c.byStatus()).containsEntry(EStatus.NOT_STARTED, 1L).containsEntry(EStatus.OVERDUE, 2L)
+                .containsEntry(EStatus.COMPLETED, 1L).containsEntry(EStatus.IN_PROGRESS, 0L);
     }
 
     @Test

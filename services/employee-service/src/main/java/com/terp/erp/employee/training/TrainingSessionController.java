@@ -109,7 +109,8 @@ public class TrainingSessionController {
             + "(daily / weekly / monthly) sharing a seriesId, each edited on its own.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Program completed or cancelled (EMP_083), end not "
-                    + "after start (EMP_052), trainer terminated (EMP_058)"),
+                    + "after start (EMP_052), trainer terminated (EMP_058), trainerId not an active trainer of the company "
+                    + "(EMP_101)"),
             @ApiResponse(responseCode = "404", description = "No such program (EMP_081) or trainer (EMP_001) in "
                     + "your company")})
     @PreAuthorize("@PermissionChecker.has('TRAINING_MANAGE')")
@@ -121,7 +122,7 @@ public class TrainingSessionController {
     @Operation(summary = "Edit a session", description = "Full replacement of this session only; status omitted = "
             + "kept; recurrence ignored.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "EMP_081, EMP_083, EMP_052, EMP_058"),
+            @ApiResponse(responseCode = "400", description = "EMP_081, EMP_083, EMP_052, EMP_058, EMP_101"),
             @ApiResponse(responseCode = "404", description = "No such session (EMP_086) or trainer (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('TRAINING_MANAGE')")
     @PutMapping("/{id}")

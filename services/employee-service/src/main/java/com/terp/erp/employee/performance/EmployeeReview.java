@@ -19,7 +19,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_review")
 public class EmployeeReview extends BaseAuditableEntity {
-    public enum EStatus { SCHEDULED, IN_PROGRESS, COMPLETED }
+    /** Manual 16: Pending -> In Progress -> Completed (SCHEDULED rows were migrated to PENDING, 20261122800100). */
+    public enum EStatus { PENDING, IN_PROGRESS, COMPLETED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
@@ -38,7 +39,7 @@ public class EmployeeReview extends BaseAuditableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
-    private EStatus status = EStatus.SCHEDULED;
+    private EStatus status = EStatus.PENDING;
 
     /** Weighted average of the rated indicators, 1 decimal; null until something is rated. */
     @Column(name = "overall_rating", precision = 3, scale = 1)
@@ -46,6 +47,12 @@ public class EmployeeReview extends BaseAuditableEntity {
 
     @Column(name = "overall_comments", columnDefinition = "TEXT")
     private String overallComments;
+
+    @Column(name = "pros", columnDefinition = "TEXT")
+    private String pros;
+
+    @Column(name = "cons", columnDefinition = "TEXT")
+    private String cons;
 
     @Column(name = "completed_at")
     private Instant completedAt;

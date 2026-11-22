@@ -57,3 +57,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261122730000_hr_manual_alignment_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122730100_hr_manual_status_data_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122800000_performance_training_manual_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122800100_review_status_data_changelog.mysql.sql

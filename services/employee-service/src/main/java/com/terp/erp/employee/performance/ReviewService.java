@@ -45,7 +45,8 @@ import java.util.stream.Collectors;
  * Employee Reviews page and Conduct Review (docs/analysis/06 §7.3.1). The first conduct copies the company's active
  * indicators into the review; each is rated 1 (Poor) – 5 (Excellent) and the overall rating is their weighted
  * average, 1 decimal (PO, 2026-11-20). Saving keeps the review IN_PROGRESS; submitting (or Update Status to
- * COMPLETED) needs every indicator rated (EMP_079) and locks the ratings (EMP_077) until the status is moved back.
+ * COMPLETED) needs every indicator rated (EMP_079). Status only moves forward, PENDING -> IN_PROGRESS -> COMPLETED
+ * (EMP_096); the first saved conduct starts a PENDING review; a COMPLETED review is read-only (EMP_077, manual 16).
  */
 @Service
 @RequiredArgsConstructor
@@ -73,7 +74,7 @@ public class ReviewService {
      */
     public record ReviewDto(String id, EmployeeRef employee, EmployeeRef reviewer, Ref reviewCycle,
                             LocalDate reviewDate, EStatus status, BigDecimal overallRating, String overallComments,
-                            Instant completedAt, boolean ratingsSaved, List<CategoryRatings> groups,
+                            String pros, String cons, Instant completedAt, boolean ratingsSaved, List<CategoryRatings> groups,
                             Instant createdDate, Instant updatedDate) {
     }
 
@@ -87,7 +88,7 @@ public class ReviewService {
             @Schema(description = "Entry of /performance/review-cycles", example = "3",
                     requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Long reviewCycleId,
             @Schema(example = "2026-12-01", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate reviewDate,
-            @Schema(description = "SCHEDULED or IN_PROGRESS; omitted = SCHEDULED on create, kept on edit")
+            @Schema(description = "PENDING or IN_PROGRESS; omitted = PENDING on create, kept on edit; never moves back")
             EStatus status) {
     }
 
@@ -104,6 +105,9 @@ public class ReviewService {
     public record ConductForm(
             @Schema(description = "Indicators not listed keep what they have") List<@Valid @NotNull RatingForm> ratings,
             @Size(max = 5000) String overallComments,
+            @Schema(description = "Strengths seen in the period", example = "Delivers on time") @Size(max = 5000)
+            String pros,
+            @Schema(description = "Points to improve", example = "Documentation") @Size(max = 5000) String cons,
             @Schema(description = "true = complete the review (every indicator rated)") boolean submit) {
     }
 
@@ -158,17 +162,33 @@ public class ReviewService {
         return detail(r);
     }
 
-    /** Update Status; COMPLETED needs every indicator rated, any other status reopens a completed review. */
+    /** Update Status: forward only; COMPLETED needs every indicator rated and is final. */
     @Transactional
     public ReviewDto changeStatus(Long id, EStatus status) {
         EmployeeReview r = require(id);
+        assertTransition(r.getStatus(), status);
         if (status == EStatus.COMPLETED) {
             complete(r, ratings.findByReviewIdOrderByCategoryNameAscIndicatorNameAsc(r.getId()));
         } else {
             r.setStatus(status);
-            r.setCompletedAt(null);
         }
         return detail(r);
+    }
+
+    /**
+     * Forward only. TODO(assumption): no way back once completed (manual 16 lists no reopen) and no step back from
+     * IN_PROGRESS to PENDING — confirm with BA.
+     */
+    static void assertTransition(EStatus from, EStatus to) {
+        if (from == to) {
+            return;
+        }
+        if (from == EStatus.COMPLETED) {
+            throw ApiException.badRequest(EEmployeeError.EMP_077);
+        }
+        if (to.ordinal() < from.ordinal()) {
+            throw ApiException.badRequest(EEmployeeError.EMP_096, from, to);
+        }
     }
 
     /** Conduct Review: saves the ratings and comments; submit completes it. */
@@ -190,6 +210,8 @@ public class ReviewService {
             row.setComments(PerformanceSupport.blankToNull(x.comments()));
         }
         r.setOverallComments(PerformanceSupport.blankToNull(f.overallComments()));
+        r.setPros(PerformanceSupport.blankToNull(f.pros()));
+        r.setCons(PerformanceSupport.blankToNull(f.cons()));
         r.setOverallRating(overall(rows));
         if (f.submit()) {
             complete(r, rows);
@@ -276,6 +298,9 @@ public class ReviewService {
         r.setReviewerId(reviewer.getId());
         r.setReviewDate(f.reviewDate());
         if (f.status() != null) {
+            if (r.getId() != null) {
+                assertTransition(r.getStatus(), f.status());
+            }
             r.setStatus(f.status());
         }
     }
@@ -318,7 +343,7 @@ public class ReviewService {
                                  List<CategoryRatings> groups, boolean saved) {
         return new ReviewDto(r.getId().toString(), refs.get(r.getEmployeeId()), refs.get(r.getReviewerId()),
                 new Ref(r.getReviewCycleId().toString(), cycle), r.getReviewDate(), r.getStatus(),
-                r.getOverallRating(), r.getOverallComments(), r.getCompletedAt(), saved, groups, r.getCreatedDate(),
+                r.getOverallRating(), r.getOverallComments(), r.getPros(), r.getCons(), r.getCompletedAt(), saved, groups, r.getCreatedDate(),
                 r.getUpdatedDate());
     }
 
