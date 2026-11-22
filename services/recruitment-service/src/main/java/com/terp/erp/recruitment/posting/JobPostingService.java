@@ -108,10 +108,16 @@ public class JobPostingService {
         return detail(p);
     }
 
-    /** Publish = status PUBLISHED, shown on the career page; unpublish = back to DRAFT. */
+    /**
+     * Publish = status PUBLISHED, shown on the career page (also re-opens a CLOSED posting); unpublish = back to DRAFT,
+     * refused for a CLOSED posting (REC_055).
+     */
     @Transactional
     public PostingDto setPublished(Long id, boolean published) {
         JobPosting p = require(id);
+        if (!published && p.getStatus() == JobPosting.EStatus.CLOSED) {
+            throw ApiException.badRequest(ERecruitmentError.REC_055);
+        }
         p.setPublished(published);
         p.setStatus(published ? JobPosting.EStatus.PUBLISHED : JobPosting.EStatus.DRAFT);
         if (published) {
@@ -126,6 +132,18 @@ public class JobPostingService {
                 p.setDepartmentName(department);
             }
         }
+        return detail(p);
+    }
+
+    /** PUBLISHED → CLOSED: off the career page, no more applications. */
+    @Transactional
+    public PostingDto close(Long id) {
+        JobPosting p = require(id);
+        if (p.getStatus() != JobPosting.EStatus.PUBLISHED) {
+            throw ApiException.badRequest(ERecruitmentError.REC_056);
+        }
+        p.setStatus(JobPosting.EStatus.CLOSED);
+        p.setPublished(false);
         return detail(p);
     }
 

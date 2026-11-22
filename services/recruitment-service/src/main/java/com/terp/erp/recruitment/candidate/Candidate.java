@@ -108,7 +108,11 @@ public class Candidate extends BaseAuditableEntity {
     @Column(name = "application_date", nullable = false)
     private LocalDate applicationDate;
 
-    /** employee-service id once converted (onboarding). */
+    /** Given to the applicant to track the application on the career page; null for candidates saved before it. */
+    @Column(name = "tracking_id", length = 20, unique = true)
+    private String trackingId;
+
+    /** employee-service id once converted (offer Convert to Employee, or onboarding). */
     @Column(name = "employee_id")
     private Long employeeId;
 

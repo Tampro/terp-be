@@ -87,7 +87,9 @@ public class PublicCareerService {
                           LocalDate applicationDeadline) {
     }
 
-    public record QuestionRef(String id, String question, boolean required) {
+    /** options: for SELECT / RADIO / CHECKBOX. */
+    public record QuestionRef(String id, String question, CustomQuestion.EType type, List<String> options,
+                              boolean required) {
     }
 
     /** applicationUrl is set when the job takes applications elsewhere (CUSTOM). */
@@ -98,7 +100,12 @@ public class PublicCareerService {
                             List<QuestionRef> questions, List<JobCard> similarJobs) {
     }
 
-    public record Applied(String jobTitle, LocalDate applicationDate) {
+    /** trackingId: shown to the applicant, used with their email on Track Application. */
+    public record Applied(String jobTitle, LocalDate applicationDate, String trackingId) {
+    }
+
+    /** Track Application: public fields only (no notes, ratings, salaries, offers). */
+    public record Tracked(String trackingId, String jobTitle, LocalDate applicationDate, Candidate.EStatus status) {
     }
 
     /** Gender / date of birth / cover letter message are kept only when the posting asks for them. */
@@ -167,7 +174,8 @@ public class PublicCareerService {
         Lookups l = lookups(java.util.stream.Stream.concat(java.util.stream.Stream.of(p), similar.stream()).toList());
         List<QuestionRef> qs = questions.findAllById(p.getCustomQuestionIds()).stream().filter(q -> !q.isDeleted())
                 .sorted(Comparator.comparing(CustomQuestion::getId))
-                .map(q -> new QuestionRef(q.getId().toString(), q.getQuestion(), q.isRequired())).toList();
+                .map(q -> new QuestionRef(q.getId().toString(), q.getQuestion(), q.getType(),
+                        List.copyOf(q.getOptions()), q.isRequired())).toList();
         boolean custom = p.getApplicationType() == JobPosting.EApplicationType.CUSTOM;
         return new JobDetail(card(p, l), p.getDepartmentName(), p.getDescription(), p.getRequirements(),
                 p.getBenefits(), p.getMinExperience(), p.getMaxExperience(), p.getApplicationType(),
@@ -181,6 +189,11 @@ public class PublicCareerService {
     @Transactional
     public Applied apply(String slug, Long id, ApplicationForm f, MultipartFile resume, MultipartFile coverLetter) {
         CareerSettings s = require(slug);
+        postings.findByIdAndDeletedFalse(id)
+                .filter(x -> x.getCompanyId().equals(s.getCompanyId()) && x.getStatus() == JobPosting.EStatus.CLOSED)
+                .ifPresent(x -> {
+                    throw ApiException.badRequest(ERecruitmentError.REC_054);
+                });
         JobPosting p = open(s, id);
         if (p.getApplicationType() == JobPosting.EApplicationType.CUSTOM) {
             throw ApiException.badRequest(ERecruitmentError.REC_052, p.getApplicationUrl());
@@ -203,7 +216,26 @@ public class PublicCareerService {
                 f.country(), p.isShowCoverLetter() ? f.coverLetterMessage() : null, f.termsAccepted(), null,
                 f.answers());
         Candidate c = candidates.register(p, form, resume, coverLetter);
-        return new Applied(p.getTitle(), c.getApplicationDate());
+        return new Applied(p.getTitle(), c.getApplicationDate(), c.getTrackingId());
+    }
+
+    /**
+     * The application of this company's career page with this tracking id and email (case-insensitive). Any mismatch
+     * (unknown id, other email, other company, deleted) is the same 404 so nothing tells which part was wrong.
+     */
+    @Transactional(readOnly = true)
+    public Tracked track(String slug, String trackingId, String email) {
+        CareerSettings s = require(slug);
+        String key = trackingId == null ? "" : trackingId.trim().toUpperCase(Locale.ROOT);
+        String mail = email == null ? "" : email.trim();
+        Candidate c = key.isEmpty() || mail.isEmpty() ? null : candidates.findByTracking(key)
+                .filter(x -> x.getCompanyId().equals(s.getCompanyId()) && x.getEmail().equalsIgnoreCase(mail))
+                .orElse(null);
+        if (c == null) {
+            throw ApiException.notFound(ERecruitmentError.REC_059);
+        }
+        String title = postings.findById(c.getJobPostingId()).map(JobPosting::getTitle).orElse(null);
+        return new Tracked(c.getTrackingId(), title, c.getApplicationDate(), c.getStatus());
     }
 
     // ------------------------------------------------------------------ helpers

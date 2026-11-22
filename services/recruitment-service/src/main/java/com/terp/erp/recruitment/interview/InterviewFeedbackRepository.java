@@ -14,4 +14,9 @@ public interface InterviewFeedbackRepository extends JpaRepository<InterviewFeed
     /** Interview ids among these that have at least one feedback. */
     @Query("select distinct f.interviewId from InterviewFeedback f where f.interviewId in :ids")
     List<Long> interviewsWithFeedback(Collection<Long> ids);
+
+    /** The candidate has a feedback with one of these recommendations on a not-deleted interview. */
+    @Query("select count(f) > 0 from InterviewFeedback f, Interview i where i.id = f.interviewId "
+            + "and i.candidateId = :candidateId and i.deleted = false and f.recommendation in :recommendations")
+    boolean candidateRecommended(Long candidateId, Collection<InterviewFeedback.ERecommendation> recommendations);
 }

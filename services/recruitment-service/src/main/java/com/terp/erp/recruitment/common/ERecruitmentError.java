@@ -60,7 +60,20 @@ public enum ERecruitmentError implements ErrorCode {
     REC_050("Attach your resume."),
     REC_051("The slug may contain only lowercase letters, digits and single hyphens (3 to 50 characters)."),
     REC_052("This job receives applications at {0}."),
-    REC_053("The candidate has no cover letter.");
+    REC_053("The candidate has no cover letter."),
+    REC_054("The job posting is closed and no longer takes applications."),
+    REC_055("A closed job posting cannot go back to draft."),
+    REC_056("Only a published job posting can be closed."),
+    REC_057("Assessments are only for candidates recommended Hire or Strong Hire in an interview feedback."),
+    REC_058("The offer must be approved before it is sent."),
+    REC_059("No application matches this tracking ID and email."),
+    REC_060("Only an accepted offer can be converted to an employee."),
+    REC_061("The candidate has already been converted to an employee."),
+    REC_062("Give the options of a {0} question."),
+    REC_063("A {0} question has no options."),
+    REC_064("The answer to \"{0}\" must be a number."),
+    REC_065("The answer to \"{0}\" must be a date (yyyy-MM-dd)."),
+    REC_066("The answer to \"{0}\" is not one of its options.");
 
     private final String message;
 }

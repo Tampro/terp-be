@@ -74,9 +74,10 @@ public class AssessmentController {
     }
 
     @Operation(summary = "Add an assessment", description = "Conducted By is an employee (needs EMPLOYEE_VIEW in "
-            + "employee-service).")
+            + "employee-service). Only for a candidate with an interview feedback recommending HIRE or STRONG_HIRE.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Score above max score (REC_046)"),
+            @ApiResponse(responseCode = "400", description = "Score above max score (REC_046), candidate not "
+                    + "recommended Hire / Strong Hire (REC_057)"),
             @ApiResponse(responseCode = "404", description = "No such candidate (REC_015); employee (EMP_001) relayed"),
             @ApiResponse(responseCode = "503", description = "employee-service unavailable (REC_012)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")

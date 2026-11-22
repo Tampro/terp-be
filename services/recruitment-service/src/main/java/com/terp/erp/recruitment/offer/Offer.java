@@ -10,6 +10,7 @@ import lombok.Setter;
 import com.terp.erp.recruitment.common.BaseAuditableEntity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 /** A job offer to a candidate (docs/analysis/06 §7.1.4). */
@@ -20,6 +21,9 @@ import java.time.LocalDate;
 public class Offer extends BaseAuditableEntity {
     /** Kanban column order. */
     public enum EStatus { DRAFT, SENT, NEGOTIATING, ACCEPTED, DECLINED, EXPIRED }
+
+    /** Separate from the status (user manual §17: "plus approval Approved/Rejected"). */
+    public enum EApprovalStatus { PENDING, APPROVED, REJECTED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;
@@ -55,6 +59,17 @@ public class Offer extends BaseAuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     private EStatus status = EStatus.DRAFT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", nullable = false, length = 10)
+    private EApprovalStatus approvalStatus = EApprovalStatus.PENDING;
+
+    /** Keycloak subject of the user who approved / rejected; approvedByEmployeeId stays the designated approver. */
+    @Column(name = "approval_decided_by", length = 64)
+    private String approvalDecidedBy;
+
+    @Column(name = "approval_decided_at")
+    private Instant approvalDecidedAt;
 
     @Column(name = "offer_date", nullable = false)
     private LocalDate offerDate;

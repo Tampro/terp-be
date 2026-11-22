@@ -27,8 +27,10 @@ class AssessmentServiceTest {
     private final CandidateService candidateService = mock(CandidateService.class);
     private final CandidateRepository candidates = mock(CandidateRepository.class);
     private final EmployeeClient employees = mock(EmployeeClient.class);
+    private final com.terp.erp.recruitment.interview.InterviewFeedbackRepository feedbacks =
+            mock(com.terp.erp.recruitment.interview.InterviewFeedbackRepository.class);
     private final AssessmentService service = new AssessmentService(assessments, candidateService, candidates,
-            employees);
+            employees, feedbacks);
 
     @AfterEach
     void tearDown() {
@@ -45,6 +47,7 @@ class AssessmentServiceTest {
         c.setLastName("Candidate");
         when(candidateService.require(7L)).thenReturn(c);
         when(candidates.findById(7L)).thenReturn(Optional.of(c));
+        when(feedbacks.candidateRecommended(7L, AssessmentService.RECOMMENDED)).thenReturn(true);
         when(employees.employee(5L)).thenReturn(new EmployeeClient.Employee("5", "10", "Test Assessor", null, null));
         when(assessments.save(any())).thenAnswer(i -> {
             CandidateAssessment a = i.getArgument(0);
@@ -57,6 +60,22 @@ class AssessmentServiceTest {
         assertThat(d.conductedBy().name()).isEqualTo("Test Assessor");
         assertThat(d.candidate().name()).isEqualTo("Test Candidate");
         assertCode(() -> service.create(form("51", "50")), ERecruitmentError.REC_046);
+    }
+
+    @Test
+    void onlyForCandidatesRecommendedHire() {
+        TestLogin.as(10L, "RECRUITMENT_MANAGE");
+        Candidate c = new Candidate();
+        c.setId(7L);
+        c.setCompanyId(10L);
+        when(candidateService.require(7L)).thenReturn(c);
+        when(feedbacks.candidateRecommended(7L, AssessmentService.RECOMMENDED)).thenReturn(false);
+        assertCode(() -> service.create(form("42", "50")), ERecruitmentError.REC_057);
+        org.mockito.Mockito.verify(assessments, org.mockito.Mockito.never()).save(any());
+        org.mockito.Mockito.verify(employees, org.mockito.Mockito.never()).employee(any());
+        assertThat(AssessmentService.RECOMMENDED).containsExactlyInAnyOrder(
+                com.terp.erp.recruitment.interview.InterviewFeedback.ERecommendation.HIRE,
+                com.terp.erp.recruitment.interview.InterviewFeedback.ERecommendation.STRONG_HIRE);
     }
 
     @Test

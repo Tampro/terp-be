@@ -24,6 +24,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.common.ResponseListDto;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import com.terp.erp.recruitment.offer.OfferConversionService.ConvertForm;
+import com.terp.erp.recruitment.offer.OfferConversionService.Converted;
+import com.terp.erp.recruitment.offer.OfferService.ApprovalForm;
 import com.terp.erp.recruitment.offer.OfferService.KanbanColumn;
 import com.terp.erp.recruitment.offer.OfferService.OfferDto;
 import com.terp.erp.recruitment.offer.OfferService.OfferForm;
@@ -42,6 +49,8 @@ public class OfferController {
     private static final String KEYWORD = "Matches the candidate's name or email, the job title or code";
 
     private final OfferService service;
+    private final OfferLetterService letters;
+    private final OfferConversionService conversions;
 
     @Operation(summary = "Offers of the company", description = "candidateId = Candidate filter, status = the tab. "
             + "Sort by offerDate, salary, startDate, expirationDate, createdDate.")
@@ -104,7 +113,8 @@ public class OfferController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit an offer", description = "Full replacement; status and offer date are kept.")
+    @Operation(summary = "Edit an offer", description = "Full replacement; status and offer date are kept; the "
+            + "approval goes back to PENDING.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "REC_036, REC_037"),
             @ApiResponse(responseCode = "404", description = "REC_035, REC_015, REC_006, EMP_003, EMP_001"),
@@ -115,12 +125,67 @@ public class OfferController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Update Status / kanban drag and drop", description = "ACCEPTED makes the candidate HIRED.")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)"))
+    @Operation(summary = "Update Status / kanban drag and drop", description = "ACCEPTED makes the candidate HIRED. "
+            + "SENT needs approvalStatus APPROVED.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not approved before sending (REC_058)"),
+            @ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}/status")
     public ApiMessageDto<OfferDto> status(@PathVariable Long id, @Valid @RequestBody StatusForm form) {
         return ApiMessageDto.ok(service.changeStatus(id, form.status()));
+    }
+
+    @Operation(summary = "Approve or reject an offer",
+            description = "Sets approvalStatus (APPROVED / REJECTED, PENDING withdraws) and records who decided "
+                    + "(approvalDecidedBy = Keycloak user id) and when. Independent of the offer status.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such offer in your company (REC_035)"))
+    @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
+    @PutMapping("/{id}/approval")
+    public ApiMessageDto<OfferDto> approval(@PathVariable Long id, @Valid @RequestBody ApprovalForm form) {
+        return ApiMessageDto.ok(service.approve(id, form.approvalStatus()));
+    }
+
+    @Operation(summary = "Download the offer letter (PDF)",
+            description = "The template (an offer template of the offer's company) filled from the offer. Variables: "
+                    + "candidate_name, candidate_email, position, job_title, job_code, department, salary, start_date, "
+                    + "offer_expiration_date, expiration_date, offer_date, benefits, company_name; any other "
+                    + "declared variable prints empty.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "application/pdf attachment"),
+            @ApiResponse(responseCode = "404", description = "No such offer (REC_035) or template (REC_032) in your "
+                    + "company"),
+            @ApiResponse(responseCode = "503", description = "employee-service unavailable (REC_012)")})
+    @PreAuthorize("@PermissionChecker.has('RECRUITMENT_VIEW')")
+    @GetMapping("/{id}/letter")
+    public ResponseEntity<byte[]> letter(@PathVariable Long id, @RequestParam Long templateId) {
+        OfferLetterService.Letter l = letters.letter(id, templateId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(l.fileName()).build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(l.pdf());
+    }
+
+    @Operation(summary = "Convert to Employee",
+            description = "Only an ACCEPTED offer, once per candidate. Creates the employee in employee-service as the "
+                    + "caller (needs EMPLOYEE_CREATE there and IAM_USER_CREATE in IAM) with the candidate's name, "
+                    + "email (login), phone, birth date, gender and address; then the candidate gets employeeId and "
+                    + "status HIRED. Nothing is saved here when employee-service refuses.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Offer not accepted (REC_060), candidate already "
+                    + "converted (REC_061); relayed from employee-service: email used (EMP_007), code used (EMP_008), "
+                    + "plan limit (EMP_009), branch/department/designation (EMP_002/003/004/023), IAM_010, IAM_014"),
+            @ApiResponse(responseCode = "403", description = "Caller lacks EMPLOYEE_CREATE / IAM_USER_CREATE "
+                    + "(COMMON_004)"),
+            @ApiResponse(responseCode = "404", description = "No such offer (REC_035) or candidate (REC_015) in your "
+                    + "company"),
+            @ApiResponse(responseCode = "503", description = "employee-service unavailable (REC_012)")})
+    @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
+    @PostMapping("/{id}/convert-to-employee")
+    public ApiMessageDto<Converted> convert(@PathVariable Long id, @Valid @RequestBody ConvertForm form) {
+        return ApiMessageDto.ok(conversions.convert(id, form));
     }
 
     @Operation(summary = "Delete an offer")

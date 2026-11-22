@@ -68,8 +68,11 @@ public class CustomQuestionController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Add a custom question")
-    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (REC_005)"))
+    @Operation(summary = "Add a custom question",
+            description = "type: TEXT (default), TEXTAREA, NUMBER, DATE, SELECT, RADIO, CHECKBOX; options for the last "
+                    + "three only.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (REC_005), choice "
+            + "type without options (REC_062), options on another type (REC_063)"))
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PostMapping
     public ApiMessageDto<QuestionDto> create(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -77,8 +80,12 @@ public class CustomQuestionController {
         return ApiMessageDto.ok(service.create(companyId, form));
     }
 
-    @Operation(summary = "Edit a custom question (full replacement)")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such question in your company (REC_003)"))
+    @Operation(summary = "Edit a custom question (full replacement)",
+            description = "Every field replaced, type and options included (omitted type = TEXT).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Choice type without options (REC_062), options on "
+                    + "another type (REC_063)"),
+            @ApiResponse(responseCode = "404", description = "No such question in your company (REC_003)")})
     @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
     @PutMapping("/{id}")
     public ApiMessageDto<QuestionDto> update(@PathVariable Long id, @Valid @RequestBody QuestionForm form) {

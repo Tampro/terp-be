@@ -55,6 +55,17 @@
             <version>${jsoup.version}</version>
         </dependency>
         <dependency>
+            <!-- Offer letter (PDF), same library as the other services; the extra fonts carry Vietnamese glyphs. -->
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>${openpdf.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf-fonts-extra</artifactId>
+            <version>${openpdf.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>

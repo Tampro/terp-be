@@ -80,6 +80,7 @@ class PublicCareerServiceTest {
         when(candidates.register(any(), any(), any(), any())).thenAnswer(i -> {
             Candidate c = new Candidate();
             c.setApplicationDate(TODAY);
+            c.setTrackingId("ABCDEFGH2345");
             return c;
         });
     }
@@ -128,9 +129,48 @@ class PublicCareerServiceTest {
     }
 
     @Test
+    void closedPostingRefusesApplications() {
+        posting.setStatus(JobPosting.EStatus.CLOSED);
+        posting.setPublished(false);
+        assertCode(() -> service.apply("test-co", 5L, form(true, null), resume, null), ERecruitmentError.REC_054);
+        assertCode(() -> service.job("test-co", 5L), ERecruitmentError.REC_048);
+        verify(candidates, never()).register(any(), any(), any(), any());
+    }
+
+    @Test
+    void trackNeedsTheMatchingEmail() {
+        Candidate c = new Candidate();
+        c.setCompanyId(10L);
+        c.setJobPostingId(5L);
+        c.setEmail("applicant@example.invalid");
+        c.setTrackingId("ABCDEFGH2345");
+        c.setApplicationDate(TODAY);
+        c.setStatus(Candidate.EStatus.INTERVIEW);
+        c.setNoticePeriod("internal");
+        when(candidates.findByTracking("ABCDEFGH2345")).thenReturn(Optional.of(c));
+        when(postings.findById(5L)).thenReturn(Optional.of(posting));
+        var t = service.track("test-co", " abcdefgh2345 ", "Applicant@Example.invalid");
+        assertThat(t).isEqualTo(new PublicCareerService.Tracked("ABCDEFGH2345", "Developer", TODAY,
+                Candidate.EStatus.INTERVIEW));
+        assertCode(() -> service.track("test-co", "ABCDEFGH2345", "other@example.invalid"), ERecruitmentError.REC_059);
+        assertCode(() -> service.track("test-co", "ZZZZZZZZZZZZ", "applicant@example.invalid"),
+                ERecruitmentError.REC_059);
+        assertCode(() -> service.track("test-co", "", ""), ERecruitmentError.REC_059);
+        // another company's page never finds it
+        CareerSettings other = new CareerSettings();
+        other.setCompanyId(11L);
+        other.setSlug("other-co");
+        other.setEnabled(true);
+        when(settings.findBySlug("other-co")).thenReturn(Optional.of(other));
+        assertCode(() -> service.track("other-co", "ABCDEFGH2345", "applicant@example.invalid"),
+                ERecruitmentError.REC_059);
+    }
+
+    @Test
     void applyDropsFieldsThePostingDoesNotAsk() {
         var applied = service.apply("test-co", 5L, form(true, null), resume, null);
         assertThat(applied.jobTitle()).isEqualTo("Developer");
+        assertThat(applied.trackingId()).isEqualTo("ABCDEFGH2345");
         ArgumentCaptor<CandidateForm> captor = ArgumentCaptor.forClass(CandidateForm.class);
         verify(candidates).register(eq(posting), captor.capture(), eq(resume), any());
         assertThat(captor.getValue().gender()).isNull();

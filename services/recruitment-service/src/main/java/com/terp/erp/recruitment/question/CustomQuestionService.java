@@ -23,16 +23,21 @@ import java.util.List;
 public class CustomQuestionService {
     private final CustomQuestionRepository questions;
 
-    public record QuestionDto(String id, String question, boolean required, Instant createdDate, Instant updatedDate) {
+    public record QuestionDto(String id, String question, CustomQuestion.EType type, List<String> options,
+                              boolean required, Instant createdDate, Instant updatedDate) {
         static QuestionDto of(CustomQuestion q) {
-            return new QuestionDto(q.getId().toString(), q.getQuestion(), q.isRequired(), q.getCreatedDate(),
-                    q.getUpdatedDate());
+            return new QuestionDto(q.getId().toString(), q.getQuestion(), q.getType(), List.copyOf(q.getOptions()),
+                    q.isRequired(), q.getCreatedDate(), q.getUpdatedDate());
         }
     }
 
     public record QuestionForm(
             @Schema(example = "Why do you want to join us?", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotBlank @Size(max = 1000) String question,
+            @Schema(description = "Omitted = TEXT") CustomQuestion.EType type,
+            @Schema(description = "Required for SELECT / RADIO / CHECKBOX, refused for the other types",
+                    example = "[\"Yes\", \"No\"]")
+            @Size(max = 50) List<@NotBlank @Size(max = 255) String> options,
             @Schema(description = "Mandatory for applicants") boolean required) {
     }
 
@@ -74,7 +79,20 @@ public class CustomQuestionService {
         require(id).setDeleted(true);
     }
 
-    private static void apply(CustomQuestion q, QuestionForm f) {
+    /** Options trimmed and de-duplicated; a choice type needs at least one (REC_062), others none (REC_063). */
+    static void apply(CustomQuestion q, QuestionForm f) {
+        CustomQuestion.EType type = f.type() == null ? CustomQuestion.EType.TEXT : f.type();
+        List<String> options = f.options() == null ? List.of()
+                : f.options().stream().filter(o -> o != null && !o.isBlank()).map(String::trim).distinct().toList();
+        if (CustomQuestion.CHOICE.contains(type) && options.isEmpty()) {
+            throw ApiException.badRequest(ERecruitmentError.REC_062, type);
+        }
+        if (!CustomQuestion.CHOICE.contains(type) && !options.isEmpty()) {
+            throw ApiException.badRequest(ERecruitmentError.REC_063, type);
+        }
+        q.setType(type);
+        q.getOptions().clear();
+        q.getOptions().addAll(options);
         q.setQuestion(f.question().trim());
         q.setRequired(f.required());
     }

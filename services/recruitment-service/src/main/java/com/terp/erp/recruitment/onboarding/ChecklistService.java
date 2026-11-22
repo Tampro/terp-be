@@ -46,8 +46,8 @@ public class ChecklistService {
     }
 
     public record ItemDto(String id, Ref checklist, String taskName, String description,
-                          ChecklistItem.ECategory category, boolean required, Integer dueDay, EStatus status,
-                          Instant createdDate, Instant updatedDate) {
+                          ChecklistItem.ECategory category, String assignedToRole, boolean required,
+                          Integer dueDay, EStatus status, Instant createdDate, Instant updatedDate) {
     }
 
     public record StatusCounts(long all, Map<EStatus, Long> byStatus) {
@@ -67,6 +67,8 @@ public class ChecklistService {
             String taskName,
             @Size(max = 1000) String description,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) @NotNull ChecklistItem.ECategory category,
+            @Schema(description = "Responsible role (free text)", example = "IT") @Size(max = 100)
+            String assignedToRole,
             @Schema(description = "Required Task") boolean required,
             @Schema(description = "Days after the onboarding start date", example = "1") @Min(0) @Max(365)
             Integer dueDay,
@@ -238,6 +240,7 @@ public class ChecklistService {
         i.setTaskName(f.taskName().trim());
         i.setDescription(Texts.blankToNull(f.description()));
         i.setCategory(f.category());
+        i.setAssignedToRole(Texts.blankToNull(f.assignedToRole()));
         i.setRequired(f.required());
         i.setDueDay(f.dueDay());
         if (f.status() != null) {
@@ -251,7 +254,7 @@ public class ChecklistService {
 
     private static ItemDto itemDto(ChecklistItem i, String checklistName) {
         return new ItemDto(i.getId().toString(), new Ref(i.getChecklistId().toString(), checklistName), i.getTaskName(),
-                i.getDescription(), i.getCategory(), i.isRequired(), i.getDueDay(), i.getStatus(), i.getCreatedDate(),
+                i.getDescription(), i.getCategory(), i.getAssignedToRole(), i.isRequired(), i.getDueDay(), i.getStatus(), i.getCreatedDate(),
                 i.getUpdatedDate());
     }
 
