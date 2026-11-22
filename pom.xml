@@ -34,6 +34,7 @@
         <module>services/accounting-service</module>
         <module>services/crm-service</module>
         <module>services/project-service</module>
+        <module>services/support-service</module>
         <module>services/gateway-server</module>
     </modules>
 

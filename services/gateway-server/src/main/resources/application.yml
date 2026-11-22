@@ -88,6 +88,10 @@ spring:
               uri: ${PROJECT_SERVICE_URL:http://localhost:8095}
               predicates:
                 - Path=/api/v1/projects/**,/api/v1/forms/**,/api/v1/public/forms/**
+            - id: support-service
+              uri: ${SUPPORT_SERVICE_URL:http://localhost:8096}
+              predicates:
+                - Path=/api/v1/support/**,/api/v1/messenger/**,/api/v1/public/support/**
 
 springdoc:
   api-docs:
@@ -134,3 +138,10 @@ erp:
       read-burst: ${GATEWAY_FORM_READ_BURST:40}
       apply-per-minute: ${GATEWAY_FORM_SUBMIT_PER_MINUTE:10}
       apply-burst: ${GATEWAY_FORM_SUBMIT_BURST:5}
+    # Public support portal (no token): reads limited per client IP; ticket create / track / reply and the contact
+    # form share a much tighter bucket (each stores a row, and track must not allow guessing ticket number + email).
+    support-rate-limit:
+      read-per-minute: ${GATEWAY_SUPPORT_READ_PER_MINUTE:120}
+      read-burst: ${GATEWAY_SUPPORT_READ_BURST:40}
+      write-per-minute: ${GATEWAY_SUPPORT_WRITE_PER_MINUTE:10}
+      write-burst: ${GATEWAY_SUPPORT_WRITE_BURST:5}

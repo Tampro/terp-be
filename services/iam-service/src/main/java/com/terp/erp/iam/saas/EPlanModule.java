@@ -33,7 +33,7 @@ public enum EPlanModule {
     TIMESHEET("Timesheet", Set.of()),
     CALENDAR("Calendar", Set.of()),
     FORM_BUILDER("Form Builder", Set.of("FORM")),
-    SUPPORT_TICKET("Support Ticket", Set.of()),
+    SUPPORT_TICKET("Support Ticket", Set.of("SUPPORT")),
     AI_ASSISTANT("AI Assistant", Set.of()),
     SLACK("Slack", Set.of()),
     TELEGRAM("Telegram", Set.of()),
@@ -45,8 +45,9 @@ public enum EPlanModule {
      * the commercial core (items and warehouses, proposals, invoices, returns, customers, purchase, vendors).
      */
     // TODO(assumption): the commercial core is always on, like the reference product (items, sales) — confirm with PO.
+    // TODO(assumption): the messenger (MESSENGER) is not a plan module of the plans list, so it stays on — confirm.
     public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION",
-            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR");
+            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR", "MESSENGER");
 
     private final String displayName;
     private final Set<String> permissionModules;

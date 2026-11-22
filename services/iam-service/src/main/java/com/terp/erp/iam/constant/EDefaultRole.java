@@ -15,7 +15,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public enum EDefaultRole {
     COMPANY_ADMIN("Company administrator",
-            union(union(union(union(union(IamPermissions.ALL, SalesPermissions.ALL), com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
+            union(union(union(union(union(union(IamPermissions.ALL, SupportPermissions.ALL), SalesPermissions.ALL),
+                            com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
                     com.terp.erp.iam.saas.SaasPermissions.ALL), MediaPermissions.ALL),
                     union(union(NotificationPermissions.ALL, EmployeePermissions.ALL),
                             union(union(AttendancePermissions.ALL, RecruitmentPermissions.ALL),
@@ -28,7 +29,7 @@ public enum EDefaultRole {
                                                                                     union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
     // TODO(assumption): HR manages accounts but not roles, and sees banking data — confirm with BA.
     HR("HR", union(Set.of(IamPermissions.USER_VIEW, IamPermissions.USER_CREATE, IamPermissions.USER_UPDATE,
-            IamPermissions.ROLE_VIEW, IamPermissions.PERMISSION_VIEW), union(union(MediaPermissions.ALL, EmployeePermissions.ALL),
+            IamPermissions.ROLE_VIEW, IamPermissions.PERMISSION_VIEW, SupportPermissions.MESSENGER_USE), union(union(MediaPermissions.ALL, EmployeePermissions.ALL),
             union(union(AttendancePermissions.ALL, RecruitmentPermissions.ALL),
                     union(LifecyclePermissions.ALL, union(PerformancePermissions.ALL,
                             union(TrainingPermissions.ALL,
@@ -38,8 +39,9 @@ public enum EDefaultRole {
                                                             union(EventPermissions.ALL,
                                                                     union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
     MANAGER("Manager", Set.of()),
-    // TODO(assumption): every employee clocks in/out and reads their own profile (ERP manual 15) — confirm with BA.
-    EMPLOYEE("Employee", Set.of("ATTENDANCE_SELF", "EMPLOYEE_SELF")),
+    // TODO(assumption): every employee clocks in/out, reads their own profile (ERP manual 15) and chats with
+    // colleagues (ERP manual 18, Messenger) — confirm with BA.
+    EMPLOYEE("Employee", Set.of("ATTENDANCE_SELF", "EMPLOYEE_SELF", SupportPermissions.MESSENGER_USE)),
     EXECUTIVE("Executive board", Set.of()),
     ACCOUNTANT("Accountant", Set.of()),
     // TODO(assumption): a client sees only its own invoices, payments, credit notes, deals and tickets, and a vendor
