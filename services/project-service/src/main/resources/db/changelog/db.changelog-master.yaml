@@ -1,0 +1,5 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/20261122310000_project_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122320000_form_changelog.mysql.sql
