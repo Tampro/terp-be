@@ -19,7 +19,8 @@ public enum EPurchaseError implements ErrorCode {
     PUR_009("Only a draft purchase return can be changed, approved or deleted."),
     PUR_010("Only an approved purchase return can be completed."),
     PUR_011("Line {0} is not a line of the original invoice."),
-    PUR_012("No items available for return.");
+    PUR_012("No items available for return."),
+    PUR_013("The period must end on or after its start and last at most {0} days.");
 
     private final String message;
 }

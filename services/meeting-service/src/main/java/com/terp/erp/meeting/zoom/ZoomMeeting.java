@@ -25,6 +25,9 @@ import java.util.Set;
 public class ZoomMeeting extends BaseAuditableEntity {
     public enum EStatus { SCHEDULED, STARTED, ENDED, CANCELLED }
 
+    /** Zoom's auto_recording values. */
+    public enum ERecording { NONE, LOCAL, CLOUD }
+
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
@@ -63,6 +66,19 @@ public class ZoomMeeting extends BaseAuditableEntity {
     @CollectionTable(name = "zoom_meeting_invitee", joinColumns = @JoinColumn(name = "zoom_meeting_id"))
     @Column(name = "employee_id", nullable = false)
     private Set<Long> inviteeIds = new LinkedHashSet<>();
+
+    @Column(name = "host_video", nullable = false)
+    private boolean hostVideo;
+
+    @Column(name = "participant_video", nullable = false)
+    private boolean participantVideo;
+
+    @Column(name = "waiting_room", nullable = false)
+    private boolean waitingRoom;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "auto_recording", nullable = false, length = 10)
+    private ERecording autoRecording = ERecording.NONE;
 
     @Column(name = "deleted", nullable = false)
     private boolean deleted;

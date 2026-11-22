@@ -231,6 +231,27 @@ class SalesDocumentServiceTest {
         assertThat(SalesDtos.DocumentRow.of(p, TODAY).expired()).isTrue();
     }
 
+    @Test
+    void calendarListsTheCallersInvoicesFallingDueAndLimitsThePeriod() {
+        TestLogin.as(10L, "SALES_VIEW");
+        LocalDate from = TODAY.minusDays(10);
+        LocalDate to = from.plusDays(61);
+        when(documents.dueBetween(10L, EDocumentKind.INVOICE, from, to))
+                .thenReturn(List.of(doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.POSTED)));
+        // a company user naming another company still reads their own
+        assertThat(service.calendar(EDocumentKind.INVOICE, 99L, from, to)).singleElement().satisfies(e -> {
+            assertThat(e.id()).isEqualTo("7");
+            assertThat(e.dueDate()).isEqualTo(TODAY.plusDays(25));
+        });
+        assertThatThrownBy(() -> service.calendar(EDocumentKind.INVOICE, null, from, to.plusDays(1)))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_020));
+        assertThatThrownBy(() -> service.calendar(EDocumentKind.INVOICE, null, to, from))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_020));
+        TestLogin.superAdmin();
+        assertThatThrownBy(() -> service.calendar(EDocumentKind.INVOICE, null, from, to))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_006));
+    }
+
     private static DocumentForm form(EInvoiceType type, Long warehouseId, List<LineForm> lines) {
         return new DocumentForm(null, 5L, warehouseId, type, TODAY, TODAY.plusDays(30), "Net 30", null, lines);
     }

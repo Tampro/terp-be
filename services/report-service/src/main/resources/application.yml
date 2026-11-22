@@ -25,6 +25,9 @@ erp:
     payroll-service-url: ${PAYROLL_SERVICE_URL:http://localhost:8086}
     asset-service-url: ${ASSET_SERVICE_URL:http://localhost:8087}
     meeting-service-url: ${MEETING_SERVICE_URL:http://localhost:8088}
+    commerce-service-url: ${COMMERCE_SERVICE_URL:http://localhost:8092}
+    crm-service-url: ${CRM_SERVICE_URL:http://localhost:8094}
+    project-service-url: ${PROJECT_SERVICE_URL:http://localhost:8095}
 
 management:
   endpoints:

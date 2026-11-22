@@ -13,6 +13,14 @@ import java.util.Optional;
 public interface PurchaseInvoiceRepository extends JpaRepository<PurchaseInvoice, Long> {
     Optional<PurchaseInvoice> findByIdAndDeletedFalse(Long id);
 
+    /** Unified calendar: invoices falling due in [from, to]. */
+    @Query("select d from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
+            + "and d.dueDate between :from and :to order by d.dueDate, d.id")
+    java.util.List<PurchaseInvoice> dueBetween(
+            @org.springframework.data.repository.query.Param("companyId") Long companyId,
+            @org.springframework.data.repository.query.Param("from") java.time.LocalDate from,
+            @org.springframework.data.repository.query.Param("to") java.time.LocalDate to);
+
     String FILTERS = "from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
             + "and (:vendorId is null or d.vendorId = :vendorId) "
             + "and (:warehouseId is null or d.warehouseId = :warehouseId) "

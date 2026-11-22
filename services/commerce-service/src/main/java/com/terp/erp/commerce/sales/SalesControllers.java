@@ -281,6 +281,19 @@ final class SalesControllers {
                     keyword, status, overdue, pageable)));
         }
 
+        @Operation(summary = "Unified calendar: invoices falling due in a period",
+                description = "Invoices with dueDate in [from, to] (at most 62 days), by due date; every status.")
+        @ApiResponses(@ApiResponse(responseCode = "400", description = "Period reversed or longer than 62 days "
+                + "(SAL_020), super admin without companyId (SAL_006)"))
+        @PreAuthorize("@PermissionChecker.has('SALES_VIEW')")
+        @GetMapping("/calendar")
+        public ApiMessageDto<java.util.List<SalesDocumentService.CalendarEntry>> calendar(
+                @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            return ApiMessageDto.ok(service.calendar(KIND, companyId, from, to));
+        }
+
         @Operation(summary = "Invoice counts per status (tabs)")
         @PreAuthorize("@PermissionChecker.has('SALES_VIEW')")
         @GetMapping("/status-counts")

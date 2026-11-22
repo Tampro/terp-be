@@ -348,6 +348,30 @@ final class CrmControllers {
         }
     }
 
+    @Tag(name = "CRM — lead and deal activity")
+    @RestController
+    @RequiredArgsConstructor
+    @RequestMapping("/api/v1/crm/tasks")
+    @SecurityRequirement(name = "bearerAuth")
+    public static class TaskCalendarController {
+        private final TaskCalendarService service;
+
+        @Operation(summary = "Unified calendar: lead or deal tasks of a period",
+                description = "Tasks dated in [from, to] (at most 62 days) of the leads (subject=LEAD) or deals "
+                        + "(subject=DEAL) of the company, by date and time; done ones included (see status).")
+        @ApiResponses(@ApiResponse(responseCode = "400", description = "Period reversed or longer than 62 days "
+                + "(CRM_021), super admin without companyId (CRM_001)"))
+        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @GetMapping("/calendar")
+        public ApiMessageDto<List<TaskCalendarService.TaskEntry>> calendar(
+                @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+                @RequestParam ESubject subject,
+                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            return ApiMessageDto.ok(service.calendar(companyId, subject, from, to));
+        }
+    }
+
     @Tag(name = "CRM — reports")
     @RestController
     @RequiredArgsConstructor

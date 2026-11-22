@@ -114,7 +114,7 @@ class ZoomMeetingServiceTest {
         assertCode(() -> service.create(null, form(null)), EMeetingError.MTG_024);
         verify(meetings, never()).saveAndFlush(any());
         assertCode(() -> service.create(null, new MeetingForm("X", LocalDate.of(2026, 11, 25), LocalTime.of(9, 0), 30,
-                null, Set.of(99L), null)), EMeetingError.MTG_013);
+                null, Set.of(99L), null, null, null, null, null)), EMeetingError.MTG_013);
         ZoomMeeting ended = new ZoomMeeting();
         ended.setId(6L);
         ended.setCompanyId(10L);
@@ -125,9 +125,33 @@ class ZoomMeetingServiceTest {
                 EMeetingError.MTG_021);
     }
 
+    @Test
+    void calendarIsScopedToTheCallersCompanyAndAllows62Days() {
+        ZoomMeeting z = new ZoomMeeting();
+        z.setId(8L);
+        z.setCompanyId(10L);
+        z.setTopic("Sync");
+        z.setStartDate(LocalDate.of(2026, 11, 25));
+        z.setStartTime(LocalTime.of(9, 0));
+        z.setDurationMinutes(30);
+        z.setStatus(ZoomMeeting.EStatus.SCHEDULED);
+        LocalDate from = LocalDate.of(2026, 10, 26);
+        LocalDate to = from.plusDays(61);
+        when(meetings.between(10L, from, to, null)).thenReturn(java.util.List.of(z));
+        // a company user naming another company still gets their own
+        assertThat(service.calendar(99L, from, to)).singleElement().satisfies(e -> {
+            assertThat(e.id()).isEqualTo("8");
+            assertThat(e.endTime()).isEqualTo(LocalTime.of(9, 30));
+        });
+        assertCode(() -> service.calendar(null, from, to.plusDays(1)), EMeetingError.MTG_021);
+        assertCode(() -> service.calendar(null, to, from), EMeetingError.MTG_021);
+        TestLogin.superAdmin();
+        assertCode(() -> service.calendar(null, from, to), EMeetingError.MTG_001);
+    }
+
     private static MeetingForm form(String passcode) {
         return new MeetingForm(" Team Sync ", LocalDate.of(2026, 11, 25), LocalTime.of(9, 30), 45, passcode,
-                Set.of(7L), "Agenda");
+                Set.of(7L), "Agenda", true, false, true, ZoomMeeting.ERecording.CLOUD);
     }
 
     private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, EMeetingError code) {

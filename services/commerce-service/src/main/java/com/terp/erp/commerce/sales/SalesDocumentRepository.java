@@ -34,6 +34,12 @@ public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Lo
                                  @Param("customerId") Long customerId, @Param("warehouseId") Long warehouseId,
                                  @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("kw") String keyword);
 
+    /** Unified calendar: documents of a kind falling due in [from, to]. */
+    @Query("select d from SalesDocument d where d.companyId = :companyId and d.kind = :kind and d.deleted = false "
+            + "and d.dueDate between :from and :to order by d.dueDate, d.id")
+    List<SalesDocument> dueBetween(@Param("companyId") Long companyId, @Param("kind") EDocumentKind kind,
+                                   @Param("from") LocalDate from, @Param("to") LocalDate to);
+
     /** Highest version number in a quotation family (the first version and every version made of it). */
     @Query("select max(d.versionNo) from SalesDocument d where d.id = :rootId or d.versionOfId = :rootId")
     Integer maxVersion(@Param("rootId") Long rootId);
