@@ -10,5 +10,6 @@ import org.springframework.validation.annotation.Validated;
 public record ReportProperties(@NotBlank String iamServiceUrl, @NotBlank String employeeServiceUrl,
                                @NotBlank String attendanceServiceUrl, @NotBlank String recruitmentServiceUrl,
                                @NotBlank String payrollServiceUrl, @NotBlank String assetServiceUrl,
-                               @NotBlank String meetingServiceUrl) {
+                               @NotBlank String meetingServiceUrl, @NotBlank String commerceServiceUrl,
+                               @NotBlank String crmServiceUrl, @NotBlank String projectServiceUrl) {
 }

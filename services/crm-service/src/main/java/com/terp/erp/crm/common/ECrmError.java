@@ -27,7 +27,8 @@ public enum ECrmError implements ErrorCode {
     CRM_017("The inventory service is unavailable. Please try again later."),
     CRM_018("Choose an existing client or give the new client's name and email."),
     CRM_019("The name {0} already exists in this pipeline."),
-    CRM_020("The stage list must contain exactly the stages of the pipeline.");
+    CRM_020("The stage list must contain exactly the stages of the pipeline."),
+    CRM_021("The period must end on or after its start and last at most {0} days.");
 
     private final String message;
 }

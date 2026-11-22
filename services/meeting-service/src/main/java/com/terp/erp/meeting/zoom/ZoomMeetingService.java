@@ -45,6 +45,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ZoomMeetingService {
     public static final int MAX_RANGE_DAYS = 42;
+    /** The unified calendar (report-service) shows a month with the weeks around it. */
+    public static final int MAX_CALENDAR_DAYS = 62;
     private static final String ZONE = "Asia/Ho_Chi_Minh";
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -65,7 +67,11 @@ public class ZoomMeetingService {
             @Schema(description = "Omitted = a random 6-digit passcode (create) / kept (edit)", example = "a1B2c3")
             @Pattern(regexp = "^[A-Za-z0-9@_*-]{1,10}$") String passcode,
             @Schema(description = "Employee ids") @Size(max = 300) Set<@NotNull Long> inviteeIds,
-            @Size(max = 2000) String agenda) {
+            @Size(max = 2000) String agenda,
+            @Schema(description = "Host video on when the meeting starts (default false)") Boolean hostVideo,
+            @Schema(description = "Participants' video on when they join (default false)") Boolean participantVideo,
+            @Schema(description = "Participants wait until the host admits them (default false)") Boolean waitingRoom,
+            @Schema(description = "NONE (default), LOCAL or CLOUD recording") ZoomMeeting.ERecording autoRecording) {
     }
 
     public record Person(String id, String fullName, String email, String profileImageUrl) {
@@ -75,7 +81,13 @@ public class ZoomMeetingService {
     public record MeetingDto(String id, String zoomMeetingId, String topic, String agenda, LocalDate startDate,
                              LocalTime startTime, LocalTime endTime, int durationMinutes, EStatus status,
                              String joinUrl, String passcode, String startUrl, List<Person> invitees,
-                             String createdBy) {
+                             String createdBy, boolean hostVideo, boolean participantVideo, boolean waitingRoom,
+                             ZoomMeeting.ERecording autoRecording) {
+    }
+
+    /** One meeting on the unified calendar: no invitees, no join data (no employee-service call). */
+    public record CalendarEntry(String id, String topic, LocalDate startDate, LocalTime startTime,
+                                LocalTime endTime, EStatus status) {
     }
 
     /** Start Meeting: the host URL to open. */
@@ -90,6 +102,17 @@ public class ZoomMeetingService {
         }
         Long companyId = Texts.company(requestedCompanyId);
         return dtos(meetings.between(companyId, from, to, status), companyId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CalendarEntry> calendar(Long requestedCompanyId, LocalDate from, LocalDate to) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) + 1 > MAX_CALENDAR_DAYS) {
+            throw ApiException.badRequest(EMeetingError.MTG_021, MAX_CALENDAR_DAYS);
+        }
+        return meetings.between(Texts.company(requestedCompanyId), from, to, null).stream()
+                .map(z -> new CalendarEntry(z.getId().toString(), z.getTopic(), z.getStartDate(), z.getStartTime(),
+                        z.getStartTime().plusMinutes(z.getDurationMinutes()), z.getStatus()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -184,6 +207,14 @@ public class ZoomMeetingService {
         z.setDurationMinutes(f.durationMinutes());
         z.getInviteeIds().clear();
         z.getInviteeIds().addAll(invitees);
+        z.setHostVideo(Boolean.TRUE.equals(f.hostVideo()));
+        z.setParticipantVideo(Boolean.TRUE.equals(f.participantVideo()));
+        z.setWaitingRoom(Boolean.TRUE.equals(f.waitingRoom()));
+        z.setAutoRecording(recording(f));
+    }
+
+    private static ZoomMeeting.ERecording recording(MeetingForm f) {
+        return f.autoRecording() == null ? ZoomMeeting.ERecording.NONE : f.autoRecording();
     }
 
     /** Zoom's meeting object: a scheduled meeting (type 2) in the company's local time. */
@@ -198,6 +229,12 @@ public class ZoomMeetingService {
         b.put("duration", f.durationMinutes());
         b.put("password", passcode);
         b.put("agenda", f.agenda() == null ? "" : f.agenda());
+        Map<String, Object> settings = new LinkedHashMap<>();
+        settings.put("host_video", Boolean.TRUE.equals(f.hostVideo()));
+        settings.put("participant_video", Boolean.TRUE.equals(f.participantVideo()));
+        settings.put("waiting_room", Boolean.TRUE.equals(f.waitingRoom()));
+        settings.put("auto_recording", recording(f).name().toLowerCase());
+        b.put("settings", settings);
         return b;
     }
 
@@ -218,7 +255,8 @@ public class ZoomMeetingService {
                     Employee e = found.get(i);
                     return e == null ? new Person(i.toString(), null, null, null)
                             : new Person(e.id(), e.fullName(), e.email(), e.profileImageUrl());
-                }).toList(), z.getCreatedBy())).toList();
+                }).toList(), z.getCreatedBy(), z.isHostVideo(), z.isParticipantVideo(), z.isWaitingRoom(),
+                z.getAutoRecording())).toList();
     }
 
     private ZoomMeeting requireOpen(Long id) {

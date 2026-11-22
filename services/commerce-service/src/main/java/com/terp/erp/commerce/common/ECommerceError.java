@@ -26,7 +26,8 @@ public enum ECommerceError implements ErrorCode {
     SAL_016("The accounting service is unavailable. Please try again later."),
     SAL_017("A new version can be made only of a sent, accepted or rejected quotation."),
     SAL_018("Line {0} is not a line of the original invoice."),
-    SAL_019("A service-wise invoice has no warehouse and no quantity other than 1.");
+    SAL_019("A service-wise invoice has no warehouse and no quantity other than 1."),
+    SAL_020("The period must end on or after its start and last at most {0} days.");
 
     private final String message;
 }

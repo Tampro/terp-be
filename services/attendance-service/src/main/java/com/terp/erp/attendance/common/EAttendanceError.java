@@ -59,7 +59,8 @@ public enum EAttendanceError implements ErrorCode {
     ATT_049("The file does not exist in the media library of the company."),
     ATT_050("The media service is unavailable. Please try again."),
     ATT_051("The period must end on or after its start and last at most {0} days."),
-    ATT_052("At most {0} employees can be summarised at once.");
+    ATT_052("At most {0} employees can be summarised at once."),
+    ATT_053("The time must be at least 15 minutes.");
 
     private final String message;
 }

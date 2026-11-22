@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.meeting.zoom.ZoomMeeting.EStatus;
+import com.terp.erp.meeting.zoom.ZoomMeetingService.CalendarEntry;
 import com.terp.erp.meeting.zoom.ZoomMeetingService.MeetingDto;
 import com.terp.erp.meeting.zoom.ZoomMeetingService.MeetingForm;
 import com.terp.erp.meeting.zoom.ZoomMeetingService.StartDto;
@@ -60,6 +61,19 @@ public class ZoomMeetingController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) EStatus status) {
         return ApiMessageDto.ok(service.between(companyId, from, to, status));
+    }
+
+    @Operation(summary = "Unified calendar: Zoom meetings starting in a period", description = "At most 62 days; "
+            + "cancelled ones included (see status). No invitees or join data, so EMPLOYEE_VIEW is not needed.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Period reversed or too long (MTG_021), super "
+            + "admin without companyId (MTG_001)"))
+    @PreAuthorize("@PermissionChecker.has('ZOOM_VIEW')")
+    @GetMapping("/calendar")
+    public ApiMessageDto<List<CalendarEntry>> calendar(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiMessageDto.ok(service.calendar(companyId, from, to));
     }
 
     @Operation(summary = "Meeting Details (View)", description = "Meeting ID, join URL; passcode and start URL for "

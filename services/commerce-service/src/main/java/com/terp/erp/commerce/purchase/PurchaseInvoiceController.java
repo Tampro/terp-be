@@ -60,6 +60,19 @@ public class PurchaseInvoiceController {
                 status, overdue, pageable)));
     }
 
+    @Operation(summary = "Unified calendar: purchase invoices falling due in a period",
+            description = "Invoices with dueDate in [from, to] (at most 62 days), by due date; every status.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Period reversed or longer than 62 days "
+            + "(PUR_013), super admin without companyId (PUR_003)"))
+    @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
+    @GetMapping("/calendar")
+    public ApiMessageDto<java.util.List<PurchaseInvoiceService.CalendarEntry>> calendar(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiMessageDto.ok(service.calendar(companyId, from, to));
+    }
+
     @Operation(summary = "Count per status", description = "Same filters as the list, without status.")
     @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
     @GetMapping("/status-counts")

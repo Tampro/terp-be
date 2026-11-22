@@ -49,18 +49,24 @@ public class ReportController {
         return ApiMessageDto.ok(dashboard.dashboard(companyId, year));
     }
 
-    @Operation(summary = "Calendar: meetings, holidays, leaves, birthdays",
-            description = "At most 62 days (a month view with the days of the weeks around it). Kinds you may not "
-                    + "see are left out and listed in unavailable.")
+    @Operation(summary = "Unified calendar (month / week / day)",
+            description = "Meetings, holidays, leaves, birthdays, sales and purchase invoices (due date), company "
+                    + "events, deal and lead tasks, contract ends, project tasks (due date), Zoom meetings and "
+                    + "interviews. At most 62 days (a month view with the days of the weeks around it). kinds = the "
+                    + "filter (comma list, default all): only those services are called. Kinds you may not see are "
+                    + "left out and listed in unavailable.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Range too long (REP_001), to before from (REP_002)"),
+            @ApiResponse(responseCode = "400", description = "Range too long (REP_001), to before from (REP_002), "
+                    + "unknown kind (COMMON_001)"),
             @ApiResponse(responseCode = "401", description = "Not signed in (COMMON_003)")})
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/calendar")
     public ApiMessageDto<CalendarView> calendar(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ApiMessageDto.ok(calendar.calendar(companyId, from, to));
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @Parameter(description = "Kinds to show, comma separated (e.g. MEETING,SALES_INVOICE); default all")
+            @RequestParam(required = false) java.util.List<CalendarService.EKind> kinds) {
+        return ApiMessageDto.ok(calendar.calendar(companyId, from, to, kinds));
     }
 }

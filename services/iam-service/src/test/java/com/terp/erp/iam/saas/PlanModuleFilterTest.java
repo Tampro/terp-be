@@ -22,7 +22,7 @@ public class PlanModuleFilterTest {
     private static final Set<String> SEEDED_MODULES = Set.of("ANNOUNCEMENT", "ASSET", "ATTENDANCE", "CONTRACT",
             "DOCUMENT", "EMPLOYEE", "EVENT", "HELPDESK", "IAM", "LEAVE", "LIFECYCLE", "MEDIA", "MEETING", "NOTIFICATION",
             "ORG", "PAYROLL", "PERFORMANCE", "RECRUITMENT", "SAAS", "TRAINING", "ZOOM", "INVENTORY", "SALES", "CUSTOMER",
-            "QUOTATION", "CRM", "CRM_CONTRACT", "PURCHASE", "VENDOR", "POS", "BANK");
+            "QUOTATION", "CRM", "CRM_CONTRACT", "PURCHASE", "VENDOR", "POS", "BANK", "PROJECT", "FORM");
 
     /** A filter for a company without a plan: every permission passes (used by other tests). */
     public static PlanModuleFilter noPlan() {
@@ -80,7 +80,8 @@ public class PlanModuleFilterTest {
         assertThat(EPlanModule.values()).hasSize(23);
         assertThat(EPlanModule.HRM.available()).isTrue();
         assertThat(EPlanModule.POS.available()).isTrue();
-        assertThat(EPlanModule.PROJECT.available()).isFalse();
+        assertThat(EPlanModule.PROJECT.available()).isTrue();
+        assertThat(EPlanModule.SLACK.available()).isFalse();
     }
 
     private static Permission perm(String code, String module) {

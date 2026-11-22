@@ -99,11 +99,32 @@ public class PurchaseInvoiceService {
         }
     }
 
+    /** One invoice on the unified calendar. */
+    public record CalendarEntry(String id, String number, String vendorName, LocalDate invoiceDate, LocalDate dueDate,
+                                PurchaseInvoice.EStatus status, BigDecimal total, BigDecimal balance) {
+    }
+
     public record InvoiceDetail(InvoiceRow invoice, String paymentTerms, String notes, List<LineDto> lines) {
         static InvoiceDetail of(PurchaseInvoice d, LocalDate today) {
             return new InvoiceDetail(InvoiceRow.of(d, today), d.getPaymentTerms(), d.getNotes(),
                     d.getLines().stream().map(LineDto::of).toList());
         }
+    }
+
+    /** The unified calendar (report-service) shows a month with the weeks around it. */
+    public static final int MAX_CALENDAR_DAYS = 62;
+
+    /** TODO(assumption): a purchase invoice is placed on its due date (when it must be paid), drafts included. */
+    @Transactional(readOnly = true)
+    public List<CalendarEntry> calendar(Long companyId, LocalDate from, LocalDate to) {
+        if (to.isBefore(from) || java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1 > MAX_CALENDAR_DAYS) {
+            throw ApiException.badRequest(EPurchaseError.PUR_013, MAX_CALENDAR_DAYS);
+        }
+        Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
+        return invoices.dueBetween(company, from, to).stream()
+                .map(d -> new CalendarEntry(d.getId().toString(), d.getNumber(), d.getVendorName(),
+                        d.getInvoiceDate(), d.getDueDate(), d.getStatus(), d.getTotal(), d.getBalance()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

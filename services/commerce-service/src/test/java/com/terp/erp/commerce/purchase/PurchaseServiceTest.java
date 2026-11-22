@@ -182,6 +182,28 @@ class PurchaseServiceTest {
         return r;
     }
 
+    @Test
+    void calendarListsTheCallersInvoicesFallingDueAndLimitsThePeriod() {
+        TestLogin.as(10L, "PURCHASE_VIEW");
+        PurchaseInvoice d = new PurchaseInvoice();
+        d.setId(40L);
+        d.setCompanyId(10L);
+        d.setNumber("PI-2026-11-001");
+        d.setVendorName("Test Supplier");
+        d.setInvoiceDate(TODAY);
+        d.setDueDate(TODAY.plusDays(30));
+        LocalDate from = TODAY;
+        LocalDate to = from.plusDays(61);
+        when(invoiceRepo.dueBetween(10L, from, to)).thenReturn(List.of(d));
+        assertThat(invoices.calendar(99L, from, to)).singleElement()
+                .satisfies(e -> assertThat(e.number()).isEqualTo("PI-2026-11-001"));
+        assertThatThrownBy(() -> invoices.calendar(null, from, to.plusDays(1)))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_013));
+        TestLogin.superAdmin();
+        assertThatThrownBy(() -> invoices.calendar(null, from, to))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_003));
+    }
+
     private static InvoiceForm form(Long warehouseId, List<LineForm> lines) {
         return new InvoiceForm(null, 3L, warehouseId, TODAY, TODAY.plusDays(30), "Net 30", null, lines);
     }

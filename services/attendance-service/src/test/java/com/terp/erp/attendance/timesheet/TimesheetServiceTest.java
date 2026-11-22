@@ -56,6 +56,33 @@ class TimesheetServiceTest {
     }
 
     @Test
+    void minutesAddToHoursTypeDefaultsToManualAndTheTotalIsAtLeastAQuarter() {
+        TestLogin.as(10L, "ATTENDANCE_MANAGE");
+        when(employees.get(7L)).thenReturn(employee("10"));
+        when(entries.hoursOfDay(eq(7L), eq(WED), anyLong())).thenReturn(BigDecimal.ZERO);
+        when(entries.save(any())).thenAnswer(i -> i.getArgument(0));
+        TimeEntry t = new TimeEntry();
+        service.save(t, 10L, new EntryForm(7L, WED, new BigDecimal("2"), null, "Review", null, 30));
+        assertThat(t.getHours()).isEqualByComparingTo("2.50");
+        assertThat(t.getEntryType()).isEqualTo(ETimeEntryType.MANUAL);
+        service.save(t, 10L, new EntryForm(7L, WED, BigDecimal.ZERO, "ERP", "Review", ETimeEntryType.PROJECT, 20));
+        assertThat(t.getHours()).isEqualByComparingTo("0.33");
+        assertThat(t.getEntryType()).isEqualTo(ETimeEntryType.PROJECT);
+        assertError(() -> service.save(new TimeEntry(), 10L, new EntryForm(7L, WED, BigDecimal.ZERO, null, "x", null, 10)),
+                EAttendanceError.ATT_053);
+    }
+
+    @Test
+    void monthCellsCoverEveryDayOfTheMonth() {
+        var cells = TimesheetService.cells(LocalDate.of(2026, 2, 1), 28, List.of(
+                entry(LocalDate.of(2026, 2, 3), "6.5", ERegularizationStatus.APPROVED),
+                entry(LocalDate.of(2026, 2, 3), "1.5", ERegularizationStatus.APPROVED)));
+        assertThat(cells).hasSize(28);
+        assertThat(cells.get(2).hours()).isEqualByComparingTo("8");
+        assertThat(cells.get(27).date()).isEqualTo(LocalDate.of(2026, 2, 28));
+    }
+
+    @Test
     void createRules() {
         TestLogin.as(10L, "ATTENDANCE_MANAGE");
         when(employees.get(7L)).thenReturn(employee("10"));
@@ -117,7 +144,7 @@ class TimesheetServiceTest {
     }
 
     private static EntryForm form(LocalDate date, String hours) {
-        return new EntryForm(7L, date, new BigDecimal(hours), " ERP ", " Code review ");
+        return new EntryForm(7L, date, new BigDecimal(hours), " ERP ", " Code review ", null, null);
     }
 
     private static TimeEntry entry(LocalDate date, String hours, ERegularizationStatus status) {

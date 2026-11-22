@@ -34,6 +34,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SalesDocumentService {
     static final String STOCK_SOURCE = "SALES_INVOICE";
+    /** The unified calendar (report-service) shows a month with the weeks around it. */
+    public static final int MAX_CALENDAR_DAYS = 62;
+
+    /** One invoice on the unified calendar. */
+    public record CalendarEntry(String id, String number, String customerName, LocalDate docDate, LocalDate dueDate,
+                                EDocumentStatus status, BigDecimal total, BigDecimal balance) {
+    }
 
     private final SalesDocumentRepository documents;
     private final Numbering numbering;
@@ -42,6 +49,19 @@ public class SalesDocumentService {
     private final Clock clock;
 
     // ---------- reads ----------
+
+    /** TODO(assumption): an invoice is placed on its due date (when it must be paid), drafts included. */
+    @Transactional(readOnly = true)
+    public List<CalendarEntry> calendar(EDocumentKind kind, Long companyId, LocalDate from, LocalDate to) {
+        if (to.isBefore(from) || java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1 > MAX_CALENDAR_DAYS) {
+            throw ApiException.badRequest(ECommerceError.SAL_020, MAX_CALENDAR_DAYS);
+        }
+        Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
+        return documents.dueBetween(company, kind, from, to).stream()
+                .map(d -> new CalendarEntry(d.getId().toString(), d.getNumber(), d.getCustomerName(), d.getDocDate(),
+                        d.getDueDate(), d.getStatus(), d.getTotal(), d.getBalance()))
+                .toList();
+    }
 
     @Transactional(readOnly = true)
     public Page<DocumentRow> search(EDocumentKind kind, Long companyId, Long customerId, Long warehouseId,

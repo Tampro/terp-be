@@ -84,6 +84,10 @@ spring:
               uri: ${CRM_SERVICE_URL:http://localhost:8094}
               predicates:
                 - Path=/api/v1/crm/**
+            - id: project-service
+              uri: ${PROJECT_SERVICE_URL:http://localhost:8095}
+              predicates:
+                - Path=/api/v1/projects/**,/api/v1/forms/**,/api/v1/public/forms/**
 
 springdoc:
   api-docs:
@@ -124,3 +128,9 @@ erp:
       read-burst: ${GATEWAY_CAREER_READ_BURST:40}
       apply-per-minute: ${GATEWAY_CAREER_APPLY_PER_MINUTE:10}
       apply-burst: ${GATEWAY_CAREER_APPLY_BURST:5}
+    # Public form link (no token): reads and submitted responses limited per client IP.
+    form-rate-limit:
+      read-per-minute: ${GATEWAY_FORM_READ_PER_MINUTE:120}
+      read-burst: ${GATEWAY_FORM_READ_BURST:40}
+      apply-per-minute: ${GATEWAY_FORM_SUBMIT_PER_MINUTE:10}
+      apply-burst: ${GATEWAY_FORM_SUBMIT_BURST:5}
