@@ -35,6 +35,7 @@ import com.terp.erp.employee.employee.EmployeeDtos.OrgChart;
 import com.terp.erp.employee.employee.EmployeeDtos.PasswordForm;
 import com.terp.erp.employee.employee.EmployeeDtos.ProfileForm;
 import com.terp.erp.employee.employee.EmployeeDtos.StatusCounts;
+import com.terp.erp.employee.employee.EmployeeDtos.TypeCounts;
 import com.terp.erp.employee.employee.EmployeeDtos.StatusForm;
 import com.terp.erp.employee.employee.EmployeeDtos.VerifyForm;
 
@@ -99,9 +100,30 @@ public class EmployeeController {
             @RequestParam(required = false) Boolean missingRequiredDocuments,
             @Parameter(description = "Only these employee ids (at most 100), e.g. ids=1,2,3")
             @RequestParam(required = false) java.util.Set<Long> ids,
+            @Parameter(description = "The employment-type tab") @RequestParam(required = false)
+            EEmploymentType employmentType,
+            @RequestParam(required = false) EGender gender,
             @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        Filter f = new Filter(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, ids);
+        Filter f = new Filter(keyword, branchId, departmentId, designationId, status, missingRequiredDocuments, ids,
+                employmentType, gender);
         return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, f, pageable)));
+    }
+
+    @Operation(summary = "Counts of the employment-type tabs (All, Full Time, Part Time, Contract, Intern, Temporary)",
+            description = "Same filters as the list, except employmentType.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
+    @PreAuthorize("@PermissionChecker.has('EMPLOYEE_VIEW')")
+    @GetMapping("/type-counts")
+    public ApiMessageDto<TypeCounts> typeCounts(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @Parameter(description = KEYWORD) @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) Long designationId,
+            @RequestParam(required = false) EEmployeeStatus status,
+            @RequestParam(required = false) EGender gender) {
+        return ApiMessageDto.ok(service.typeCounts(companyId,
+                new Filter(keyword, branchId, departmentId, designationId, status, null, null, null, gender)));
     }
 
     @Operation(summary = "Counts of the status tabs (All, Active, Inactive, Probation, Terminated)",
@@ -126,6 +148,17 @@ public class EmployeeController {
     @GetMapping("/org-chart")
     public ApiMessageDto<OrgChart> orgChart(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
         return ApiMessageDto.ok(chart.chart(companyId));
+    }
+
+    @Operation(summary = "My own employee profile (same shape as GET /employees/{id})",
+            description = "Found by the token's company and user. banking is null without EMPLOYEE_BANKING_VIEW.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "No company in the token, e.g. super admin (EMP_041)"),
+            @ApiResponse(responseCode = "404", description = "No employee profile linked to you (EMP_001)")})
+    @PreAuthorize("@PermissionChecker.hasAny('EMPLOYEE_SELF','EMPLOYEE_VIEW')")
+    @GetMapping("/me")
+    public ApiMessageDto<EmployeeDetail> me() {
+        return ApiMessageDto.ok(service.me());
     }
 
     @Operation(summary = "Employee profile with documents",

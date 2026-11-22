@@ -32,6 +32,7 @@ import com.terp.erp.document.hr.AcknowledgmentService.ETab;
 import com.terp.erp.document.hr.AcknowledgmentService.EditForm;
 import com.terp.erp.document.hr.AcknowledgmentService.TabCounts;
 import com.terp.erp.document.hr.HrDocumentService.Cards;
+import com.terp.erp.document.hr.HrDocumentService.DecisionForm;
 import com.terp.erp.document.hr.HrDocumentService.DocumentDto;
 import com.terp.erp.document.hr.HrDocumentService.DocumentForm;
 import com.terp.erp.document.hr.HrDocumentService.Download;
@@ -117,9 +118,11 @@ public class HrDocumentController {
     }
 
     @Operation(summary = "Download", description = "A signed, time-limited link of the media library (needs "
-            + "MEDIA_VIEW too).")
+            + "MEDIA_VIEW too). Without DOCUMENT_MANAGE: only an APPROVED or PUBLISHED document, and not while you "
+            + "still have a pending acknowledgment for it; DOCUMENT_MANAGE holders download in any status.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "The file is no longer in the media library (DOC_008)"),
+            @ApiResponse(responseCode = "400", description = "The file is no longer in the media library (DOC_008), "
+                    + "not approved or published (DOC_025), acknowledge it first (DOC_026)"),
             @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND),
             @ApiResponse(responseCode = "503", description = "media-service unavailable (DOC_007)")})
     @PreAuthorize("@PermissionChecker.has('DOCUMENT_VIEW')")
@@ -152,7 +155,30 @@ public class HrDocumentController {
         return ApiMessageDto.ok(documents.update(id, form));
     }
 
-    @Operation(summary = "Update Status", description = "DRAFT, UNDER_REVIEW, APPROVED, PUBLISHED, ARCHIVED or EXPIRED.")
+    @Operation(summary = "Approve a document", description = "PENDING only; optional comment. Records who and when.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not pending (DOC_024)"),
+            @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND)})
+    @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
+    @PostMapping("/documents/{id}/approve")
+    public ApiMessageDto<DocumentDto> approve(@PathVariable Long id,
+                                              @Valid @RequestBody(required = false) DecisionForm form) {
+        return ApiMessageDto.ok(documents.approve(id, form));
+    }
+
+    @Operation(summary = "Reject a document", description = "PENDING only; optional comment. Records who and when.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not pending (DOC_024)"),
+            @ApiResponse(responseCode = "404", description = DOC_NOT_FOUND)})
+    @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
+    @PostMapping("/documents/{id}/reject")
+    public ApiMessageDto<DocumentDto> reject(@PathVariable Long id,
+                                             @Valid @RequestBody(required = false) DecisionForm form) {
+        return ApiMessageDto.ok(documents.reject(id, form));
+    }
+
+    @Operation(summary = "Update Status", description = "DRAFT, PENDING, UNDER_REVIEW, APPROVED, REJECTED, PUBLISHED, "
+            + "ARCHIVED or EXPIRED. Prefer approve / reject, which record who decided.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = DOC_NOT_FOUND))
     @PreAuthorize("@PermissionChecker.has('DOCUMENT_MANAGE')")
     @PutMapping("/documents/{id}/status")
@@ -258,6 +284,19 @@ public class HrDocumentController {
     @GetMapping("/my-acknowledgments")
     public ApiMessageDto<ResponseListDto<AckDto>> mine(@ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         return ApiMessageDto.ok(ResponseListDto.of(acks.mine(pageable)));
+    }
+
+    @Operation(summary = "Download my document", description = "Only the employee it was assigned to, once "
+            + "acknowledged, and only an APPROVED or PUBLISHED document (no document permission needed).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not acknowledged yet (DOC_026), not approved or "
+                    + "published (DOC_025), file gone (DOC_008), not a company user (DOC_001)"),
+            @ApiResponse(responseCode = "404", description = "Not one of yours (DOC_011), document gone (DOC_009)"),
+            @ApiResponse(responseCode = "503", description = "media-service unavailable (DOC_007)")})
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/my-acknowledgments/{id}/download")
+    public ApiMessageDto<Download> downloadMine(@PathVariable Long id) {
+        return ApiMessageDto.ok(acks.downloadMine(id));
     }
 
     @Operation(summary = "Acknowledge my document", description = "Only the employee it was assigned to; pending only.")

@@ -129,7 +129,7 @@ class EmployeeServiceTest {
         TestLogin.as(COMPANY, "EMPLOYEE_CREATE", EmployeeService.BANKING_VIEW);
         when(iam.createAccount(any(), any(), any(), any())).thenReturn(42L);
         BankingForm bank = new BankingForm("VCB", "NGUYEN VAN A", "0123456789", null, null, "8000000000",
-                new BigDecimal("15000000"));
+                new BigDecimal("15000000"), new BigDecimal("8"), 5, new BigDecimal("85000"));
 
         var d = service.create(null, form("a@example.com", bank));
 
@@ -147,7 +147,7 @@ class EmployeeServiceTest {
     void bankingInTheFormIsIgnoredWithoutThePermission() {
         TestLogin.as(COMPANY, "EMPLOYEE_CREATE");
         when(iam.createAccount(any(), any(), any(), any())).thenReturn(42L);
-        BankingForm bank = new BankingForm("VCB", null, "0123456789", null, null, null, new BigDecimal("1"));
+        BankingForm bank = new BankingForm("VCB", null, "0123456789", null, null, null, new BigDecimal("1"), null, null, null);
 
         service.create(null, form("a@example.com", bank));
 

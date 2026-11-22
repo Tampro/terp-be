@@ -62,7 +62,7 @@ public class ResignationController {
                 service.search(companyId, keyword, employeeId, from, to, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Pending, Approved, Rejected, Completed)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, Accepted, Rejected)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
     @GetMapping("/status-counts")
@@ -94,10 +94,10 @@ public class ResignationController {
         return ApiMessageDto.ok(service.create(form));
     }
 
-    @Operation(summary = "Edit a resignation", description = "Full replacement of the form until completed; status "
+    @Operation(summary = "Edit a resignation", description = "Full replacement of the form while PENDING; status "
             + "and exit interview are kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_057), EMP_058, EMP_052, EMP_012"),
+            @ApiResponse(responseCode = "400", description = "Already decided (EMP_046), EMP_058, EMP_052, EMP_012"),
             @ApiResponse(responseCode = "404", description = "No such resignation (EMP_055) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}")
@@ -105,11 +105,11 @@ public class ResignationController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Change Status (Pending, Approved, Rejected, Completed) and exit interview",
-            description = "COMPLETED sets the employee TERMINATED and locks their login now, whatever the last "
+    @Operation(summary = "Decide: ACCEPTED or REJECTED (only from PENDING), with the exit interview",
+            description = "ACCEPTED sets the employee TERMINATED and locks their login now, whatever the last "
                     + "working day; the record is then locked. Exit interview not conducted clears date and feedback.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Already completed (EMP_057)"),
+            @ApiResponse(responseCode = "400", description = "Move not allowed, e.g. already decided (EMP_096)"),
             @ApiResponse(responseCode = "403", description = "Locking the login was refused by IAM"),
             @ApiResponse(responseCode = "404", description = "No such resignation in your company (EMP_055)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
@@ -118,9 +118,19 @@ public class ResignationController {
         return ApiMessageDto.ok(service.changeStatus(id, form));
     }
 
-    @Operation(summary = "Delete a resignation", description = "Not once completed.")
+    @Operation(summary = "Exit interview (full replacement of its three fields)",
+            description = "At any status; not conducted clears the date and the feedback.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such resignation in your company (EMP_055)"))
+    @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
+    @PutMapping("/{id}/exit-interview")
+    public ApiMessageDto<ResignationDto> exitInterview(@PathVariable Long id,
+            @Valid @RequestBody ResignationService.ExitInterviewForm form) {
+        return ApiMessageDto.ok(service.exitInterview(id, form));
+    }
+
+    @Operation(summary = "Delete a resignation", description = "Only while PENDING.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_057)"),
+            @ApiResponse(responseCode = "400", description = "Already decided (EMP_046)"),
             @ApiResponse(responseCode = "404", description = "No such resignation in your company (EMP_055)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @DeleteMapping("/{id}")

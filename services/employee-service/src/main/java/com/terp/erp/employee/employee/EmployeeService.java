@@ -26,6 +26,7 @@ import com.terp.erp.employee.employee.EmployeeDtos.Filter;
 import com.terp.erp.employee.employee.EmployeeDtos.ProfileForm;
 import com.terp.erp.employee.employee.EmployeeDtos.Ref;
 import com.terp.erp.employee.employee.EmployeeDtos.StatusCounts;
+import com.terp.erp.employee.employee.EmployeeDtos.TypeCounts;
 import com.terp.erp.employee.org.OrgService;
 import com.terp.erp.employee.org.OrgService.Names;
 import com.terp.erp.exception.ApiException;
@@ -100,6 +101,46 @@ public class EmployeeService {
         return new StatusCounts(all, by.getOrDefault(EEmployeeStatus.ACTIVE, 0L),
                 by.getOrDefault(EEmployeeStatus.INACTIVE, 0L), by.getOrDefault(EEmployeeStatus.PROBATION, 0L),
                 by.getOrDefault(EEmployeeStatus.TERMINATED, 0L));
+    }
+
+    /** Counts of the employment-type tabs under the other filters (the type itself excluded). */
+    @Transactional(readOnly = true)
+    public TypeCounts typeCounts(Long requestedCompanyId, Filter filter) {
+        Long companyId = company(requestedCompanyId);
+        Filter f = filter.withoutType();
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<Object[]> q = cb.createQuery(Object[].class);
+        Root<Employee> root = q.from(Employee.class);
+        q.multiselect(root.get("employmentType"), cb.count(root))
+                .where(EmployeeSpecs.of(companyId, f, true, required(companyId, f)).toPredicate(root, q, cb))
+                .groupBy(root.get("employmentType"));
+        Map<EEmploymentType, Long> by = new EnumMap<>(EEmploymentType.class);
+        for (EEmploymentType t : EEmploymentType.values()) {
+            by.put(t, 0L);
+        }
+        long all = 0;
+        for (Object[] row : em.createQuery(q).getResultList()) {
+            long n = (Long) row[1];
+            all += n;
+            if (row[0] != null) {
+                by.put((EEmploymentType) row[0], n);
+            }
+        }
+        return new TypeCounts(all, by);
+    }
+
+    /**
+     * The caller's own profile: matched on the token's company and user only, so another company's user id never
+     * matches. Super admin (no company) = 403 EMP_041; no linked profile = 404 EMP_001.
+     */
+    @Transactional(readOnly = true)
+    public EmployeeDetail me() {
+        com.terp.erp.security.ErpPrincipal p = CurrentUser.get();
+        if (p.companyId() == null || p.userId() == null) {
+            throw ApiException.forbidden(EEmployeeError.EMP_041);
+        }
+        return toDetail(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(p.companyId(), p.userId())
+                .orElseThrow(() -> ApiException.notFound(EEmployeeError.EMP_001)));
     }
 
     @Transactional(readOnly = true)
@@ -337,6 +378,9 @@ public class EmployeeService {
             e.setBankBranch(b == null ? null : blankToNull(b.bankBranch()));
             e.setTaxPayerIdEnc(b == null ? null : cipher.encrypt(b.taxPayerId()));
             e.setBaseSalary(b == null ? null : b.baseSalary());
+            e.setHoursPerDay(b == null ? null : b.hoursPerDay());
+            e.setDaysPerWeek(b == null ? null : b.daysPerWeek());
+            e.setRatePerHour(b == null ? null : b.ratePerHour());
         }
     }
 
@@ -380,7 +424,8 @@ public class EmployeeService {
         MediaFile photo = media.find(e.getProfileMediaId());
         BankingDto banking = CurrentUser.get().has(BANKING_VIEW)
                 ? new BankingDto(e.getBankName(), e.getAccountHolderName(), cipher.decrypt(e.getAccountNumberEnc()),
-                e.getBankIdentifierCode(), e.getBankBranch(), cipher.decrypt(e.getTaxPayerIdEnc()), e.getBaseSalary())
+                e.getBankIdentifierCode(), e.getBankBranch(), cipher.decrypt(e.getTaxPayerIdEnc()), e.getBaseSalary(),
+                e.getHoursPerDay(), e.getDaysPerWeek(), e.getRatePerHour())
                 : null;
         return new EmployeeDetail(e.getId().toString(), e.getCompanyId().toString(), e.getEmployeeNo(),
                 e.getEmployeeCode(), e.getFullName(), e.getEmail(), e.getPhone(), e.getDateOfBirth(), e.getGender(),

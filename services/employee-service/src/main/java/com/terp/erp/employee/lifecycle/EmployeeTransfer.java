@@ -55,8 +55,8 @@ public class EmployeeTransfer extends BaseAuditableEntity {
     private Long documentMediaId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 10)
-    private EDecision status = EDecision.PENDING;
+    @Column(name = "status", nullable = false, length = 12)
+    private ETransferStatus status = ETransferStatus.PENDING;
 
     @Column(name = "decided_at")
     private Instant decidedAt;

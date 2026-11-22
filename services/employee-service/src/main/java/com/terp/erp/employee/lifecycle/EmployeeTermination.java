@@ -16,7 +16,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_termination")
 public class EmployeeTermination extends SeparationRecord {
-    public enum EStatus { PLANNED, IN_PROGRESS, COMPLETED }
+    /** FR-ERP-CAR-001: Pending -> Approved | Rejected; APPROVED ends the employment. */
+    public enum EStatus { PENDING, APPROVED, REJECTED }
 
     @Column(name = "termination_type_id", nullable = false)
     private Long terminationTypeId;
@@ -29,5 +30,5 @@ public class EmployeeTermination extends SeparationRecord {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
-    private EStatus status = EStatus.PLANNED;
+    private EStatus status = EStatus.PENDING;
 }

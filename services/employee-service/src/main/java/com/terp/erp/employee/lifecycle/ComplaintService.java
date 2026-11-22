@@ -30,14 +30,30 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Complaints page (docs/analysis/06 §7.2.8). Status moves freely (Change Status); Assign sets the handler and the
- * deadline; Resolve records the resolution and sets RESOLVED; Follow-up only after it is resolved (EMP_070).
- * An anonymous complaint hides its complainant from anyone without LIFECYCLE_MANAGE.
+ * Complaints page (docs/analysis/06 §7.2.8, FR-ERP-ISS-001). Statuses and allowed moves (else 400 EMP_096):
+ * <pre>
+ *   PENDING     -> IN_REVIEW (status), ASSIGNED (assign)
+ *   IN_REVIEW   -> ASSIGNED (assign), RESOLVED (resolve)
+ *   ASSIGNED    -> IN_PROGRESS (status), ASSIGNED (re-assign), RESOLVED (resolve)
+ *   IN_PROGRESS -> ASSIGNED (re-assign), RESOLVED (resolve)
+ *   RESOLVED    -> RESOLVED (resolve again = correct the resolution); nothing else
+ * </pre>
+ * Assign sets the handler, the deadline and ASSIGNED; Resolve records the resolution and sets RESOLVED; Follow-up
+ * only after it is resolved (EMP_070). An anonymous complaint hides its complainant from anyone without
+ * LIFECYCLE_MANAGE. TODO(assumption): the move table is ours (the manual lists only the statuses) — confirm with BA.
  */
 @Service
 @RequiredArgsConstructor
 public class ComplaintService {
     static final String MANAGE = "LIFECYCLE_MANAGE";
+    static final Map<EStatus, Set<EStatus>> MOVES = Map.of(
+            EStatus.PENDING, java.util.EnumSet.of(EStatus.IN_REVIEW, EStatus.ASSIGNED),
+            EStatus.IN_REVIEW, java.util.EnumSet.of(EStatus.ASSIGNED, EStatus.RESOLVED),
+            EStatus.ASSIGNED, java.util.EnumSet.of(EStatus.IN_PROGRESS, EStatus.ASSIGNED, EStatus.RESOLVED),
+            EStatus.IN_PROGRESS, java.util.EnumSet.of(EStatus.ASSIGNED, EStatus.RESOLVED),
+            EStatus.RESOLVED, java.util.EnumSet.of(EStatus.RESOLVED));
+    /** Targets Change Status may set by itself; ASSIGNED and RESOLVED need their own forms. */
+    static final Set<EStatus> PLAIN = java.util.EnumSet.of(EStatus.IN_REVIEW, EStatus.IN_PROGRESS);
 
     private final EmployeeComplaintRepository complaints;
     private final LifecycleCatalogService catalogs;
@@ -80,7 +96,9 @@ public class ComplaintService {
             @Schema(description = "Submit Anonymously") boolean anonymous) {
     }
 
-    public record StatusForm(@Schema(requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EStatus status) {
+    public record StatusForm(
+            @Schema(description = "IN_REVIEW (from PENDING) or IN_PROGRESS (from ASSIGNED); use assign / resolve "
+                    + "for the others", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EStatus status) {
     }
 
     public record AssignForm(
@@ -139,7 +157,7 @@ public class ComplaintService {
         return detail(require(id));
     }
 
-    /** Starts as SUBMITTED. */
+    /** Starts as PENDING. */
     @Transactional
     public ComplaintDto create(ComplaintForm form) {
         EmployeeComplaint c = new EmployeeComplaint();
@@ -161,14 +179,19 @@ public class ComplaintService {
     @Transactional
     public ComplaintDto changeStatus(Long id, EStatus status) {
         EmployeeComplaint c = require(id);
+        if (!PLAIN.contains(status)) {
+            throw ApiException.badRequest(EEmployeeError.EMP_096, c.getStatus().name(), status.name());
+        }
+        LifecycleSupport.assertMove(MOVES, c.getStatus(), status);
         c.setStatus(status);
         return detail(c);
     }
 
-    /** TODO(assumption): assigning a SUBMITTED complaint moves it to UNDER_INVESTIGATION — confirm with BA. */
+    /** Sets the handler and ASSIGNED (also a re-assignment from ASSIGNED / IN_PROGRESS). */
     @Transactional
     public ComplaintDto assign(Long id, AssignForm f) {
         EmployeeComplaint c = require(id);
+        LifecycleSupport.assertMove(MOVES, c.getStatus(), EStatus.ASSIGNED);
         if (f.assignedToId().equals(c.getAgainstId())) {
             throw ApiException.badRequest(EEmployeeError.EMP_069);
         }
@@ -178,9 +201,7 @@ public class ComplaintService {
         }
         c.setAssignedToId(handler.getId());
         c.setResolutionDeadline(f.resolutionDeadline());
-        if (c.getStatus() == EStatus.SUBMITTED) {
-            c.setStatus(EStatus.UNDER_INVESTIGATION);
-        }
+        c.setStatus(EStatus.ASSIGNED);
         return detail(c);
     }
 
@@ -188,6 +209,7 @@ public class ComplaintService {
     @Transactional
     public ComplaintDto resolve(Long id, ResolveForm f) {
         EmployeeComplaint c = require(id);
+        LifecycleSupport.assertMove(MOVES, c.getStatus(), EStatus.RESOLVED);
         if (f.resolutionDate().isBefore(c.getComplaintDate())) {
             throw ApiException.badRequest(EEmployeeError.EMP_052, "resolution date", "complaint date");
         }

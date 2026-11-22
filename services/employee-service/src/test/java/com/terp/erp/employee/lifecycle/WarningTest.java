@@ -12,6 +12,7 @@ import com.terp.erp.employee.employee.EmployeeRepository;
 import com.terp.erp.employee.lifecycle.EmployeeWarning.EStatus;
 import com.terp.erp.employee.lifecycle.LifecycleCatalogService.CatalogForm;
 import com.terp.erp.employee.lifecycle.WarningService.PlanForm;
+import com.terp.erp.employee.lifecycle.WarningService.ResponseForm;
 import com.terp.erp.employee.lifecycle.WarningService.StatusForm;
 import com.terp.erp.employee.lifecycle.WarningService.WarningForm;
 import com.terp.erp.employee.org.EOrgStatus;
@@ -80,22 +81,55 @@ class WarningTest {
         type.setStatus(EOrgStatus.ACTIVE);
 
         var d = service.create(form(2L, 5L, 6L, null, true));
-        assertThat(d.status()).isEqualTo(EStatus.DRAFT);
+        assertThat(d.status()).isEqualTo(EStatus.PENDING);
         assertThat(d.improvementPlan().hasImprovementPlan()).isTrue();
         assertThat(d.improvementPlan().goals()).isEqualTo("Be on time");
     }
 
     @Test
-    void acknowledgeDefaultsToTodayAndExpiryIsFlagged() {
+    void decidedOnceFromPendingAndExpiryFlaggedOnlyWhenApproved() {
         EmployeeWarning w = existing();
         w.setExpiryDate(TODAY.minusDays(1));
-        assertThat(service.changeStatus(9L, new StatusForm(EStatus.ISSUED, null, null)).expired()).isTrue();
-        var ack = service.changeStatus(9L, new StatusForm(EStatus.ACKNOWLEDGED, null, " I will improve "));
-        assertThat(ack.acknowledgmentDate()).isEqualTo(TODAY);
-        assertThat(ack.employeeResponse()).isEqualTo("I will improve");
-        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.ACKNOWLEDGED, TODAY.minusYears(1), null)),
-                EEmployeeError.EMP_052);
-        assertThat(service.changeStatus(9L, new StatusForm(EStatus.EXPIRED, null, null)).expired()).isFalse();
+        assertThat(service.get(9L).expired()).isFalse();
+        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.PENDING)), EEmployeeError.EMP_096);
+        assertThat(service.changeStatus(9L, new StatusForm(EStatus.APPROVED)).expired()).isTrue();
+        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.REJECTED)), EEmployeeError.EMP_096);
+        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.APPROVED)), EEmployeeError.EMP_096);
+        w.setStatus(EStatus.REJECTED);
+        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.APPROVED)), EEmployeeError.EMP_096);
+    }
+
+    @Test
+    void onlyTheWarnedEmployeeRespondsAndOnlyWhilePending() {
+        EmployeeWarning w = existing();
+        Employee me = employee(1L, 10L);
+        // TestLogin user id is 5
+        when(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(10L, 5L)).thenReturn(Optional.of(me));
+        TestLogin.as(10L);
+        var d = service.respond(9L, new ResponseForm(" I will improve "));
+        assertThat(d.employeeResponse()).isEqualTo("I will improve");
+        assertThat(d.acknowledgmentDate()).isEqualTo(TODAY);
+
+        // another employee of the company: the warning reads as not found
+        when(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(10L, 5L)).thenReturn(Optional.of(employee(2L, 10L)));
+        assertCode(() -> service.respond(9L, new ResponseForm("x")), EEmployeeError.EMP_051);
+        // no profile at all
+        when(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(10L, 5L)).thenReturn(Optional.empty());
+        assertCode(() -> service.respond(9L, new ResponseForm("x")), EEmployeeError.EMP_041);
+
+        when(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(10L, 5L)).thenReturn(Optional.of(me));
+        w.setStatus(EStatus.APPROVED);
+        assertCode(() -> service.respond(9L, new ResponseForm("late")), EEmployeeError.EMP_097);
+        assertThat(w.getEmployeeResponse()).isEqualTo("I will improve");
+    }
+
+    @Test
+    void anotherCompanysWarningIsNotFound() {
+        existing();
+        TestLogin.as(11L, "LIFECYCLE_MANAGE");
+        assertCode(() -> service.changeStatus(9L, new StatusForm(EStatus.APPROVED)), EEmployeeError.EMP_051);
+        when(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(11L, 5L)).thenReturn(Optional.of(employee(1L, 11L)));
+        assertCode(() -> service.respond(9L, new ResponseForm("x")), EEmployeeError.EMP_051);
     }
 
     @Test

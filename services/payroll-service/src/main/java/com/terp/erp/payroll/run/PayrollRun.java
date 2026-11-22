@@ -24,6 +24,8 @@ public class PayrollRun extends BaseAuditableEntity {
 
     public enum EFrequency { MONTHLY, SEMI_MONTHLY, BI_WEEKLY, WEEKLY }
 
+    public enum EPaymentStatus { UNPAID, PAID }
+
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
@@ -64,6 +66,21 @@ public class PayrollRun extends BaseAuditableEntity {
 
     @Column(name = "processed_at")
     private Instant processedAt;
+
+    /** Accounting bank account the salaries are paid from (accounting-service id). */
+    @Column(name = "bank_account_id")
+    private Long bankAccountId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", nullable = false, length = 8)
+    private EPaymentStatus paymentStatus = EPaymentStatus.UNPAID;
+
+    @Column(name = "paid_at")
+    private Instant paidAt;
+
+    /** Keycloak subject of the user who paid. */
+    @Column(name = "paid_by", length = 64)
+    private String paidBy;
 
     @Column(name = "deleted", nullable = false)
     private boolean deleted;

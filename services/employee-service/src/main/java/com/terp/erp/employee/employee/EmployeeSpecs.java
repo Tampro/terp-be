@@ -50,6 +50,12 @@ final class EmployeeSpecs {
             if (f.designationId() != null) {
                 p.add(cb.equal(root.get("designationId"), f.designationId()));
             }
+            if (f.employmentType() != null) {
+                p.add(cb.equal(root.get("employmentType"), f.employmentType()));
+            }
+            if (f.gender() != null) {
+                p.add(cb.equal(root.get("gender"), f.gender()));
+            }
             if (withStatus && f.status() != null) {
                 p.add(cb.equal(root.get("status"), f.status()));
             }

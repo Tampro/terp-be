@@ -31,10 +31,17 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Transfers page (docs/analysis/06 §7.2.3). The form's to-values form the new placement, an omitted level keeping the
- * employee's current one; the whole branch ⊃ department ⊃ designation chain must hold (EMP_002/003/004/023) and
- * something must change (EMP_048). APPROVED moves the employee at once (PO, 2026-11-20); only a PENDING transfer can
- * be edited, decided or deleted (EMP_046).
+ * Transfers page (docs/analysis/06 §7.2.3, FR-ERP-CAR-001). The form's to-values form the new placement, an omitted
+ * level keeping the employee's current one; the whole branch ⊃ department ⊃ designation chain must hold
+ * (EMP_002/003/004/023) and something must change (EMP_048). Moves (else 400 EMP_096):
+ * <pre>
+ *   PENDING     -> IN_PROGRESS (start), APPROVED, REJECTED, CANCELLED
+ *   IN_PROGRESS -> APPROVED, REJECTED, CANCELLED
+ *   APPROVED, REJECTED, CANCELLED: final
+ * </pre>
+ * APPROVED moves the employee at once, whatever the effective date (PO, 2026-11-20; TODO(assumption): kept with the
+ * manual's statuses — moving on the effective date would need a job, confirm with BA). An open (PENDING / IN_PROGRESS)
+ * transfer can be edited (EMP_046 otherwise); only a PENDING one can be deleted.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,11 +57,19 @@ public class TransferService {
     public record TransferDto(String id, EmployeeRef employee, List<EChange> changes, Ref fromBranch,
                               Ref fromDepartment, Ref fromDesignation, Ref toBranch, Ref toDepartment,
                               Ref toDesignation, LocalDate transferDate, LocalDate effectiveDate, String reason,
-                              String documentId, FileRef document, EDecision status, Instant decidedAt,
+                              String documentId, FileRef document, ETransferStatus status, Instant decidedAt,
                               Instant createdDate, Instant updatedDate) {
     }
 
-    public record StatusCounts(long all, Map<EDecision, Long> byStatus) {
+    static final Map<ETransferStatus, Set<ETransferStatus>> MOVES = Map.of(
+            ETransferStatus.PENDING, java.util.EnumSet.of(ETransferStatus.IN_PROGRESS, ETransferStatus.APPROVED,
+                    ETransferStatus.REJECTED, ETransferStatus.CANCELLED),
+            ETransferStatus.IN_PROGRESS, java.util.EnumSet.of(ETransferStatus.APPROVED, ETransferStatus.REJECTED,
+                    ETransferStatus.CANCELLED));
+    private static final Set<ETransferStatus> OPEN = java.util.EnumSet.of(ETransferStatus.PENDING,
+            ETransferStatus.IN_PROGRESS);
+
+    public record StatusCounts(long all, Map<ETransferStatus, Long> byStatus) {
     }
 
     public record TransferForm(
@@ -72,7 +87,7 @@ public class TransferService {
 
     @Transactional(readOnly = true)
     public Page<TransferDto> search(Long requestedCompanyId, String keyword, Long departmentId, LocalDate from,
-                                    LocalDate to, EDecision status, Pageable pageable) {
+                                    LocalDate to, ETransferStatus status, Pageable pageable) {
         Long companyId = LifecycleSupport.company(requestedCompanyId);
         Page<EmployeeTransfer> page = transfers.search(companyId, departmentId, from, to, status,
                 DepartmentService.kw(keyword), pageable);
@@ -84,13 +99,13 @@ public class TransferService {
     @Transactional(readOnly = true)
     public StatusCounts statusCounts(Long requestedCompanyId, String keyword, Long departmentId, LocalDate from,
                                      LocalDate to) {
-        Map<EDecision, Long> by = new EnumMap<>(EDecision.class);
-        for (EDecision s : EDecision.values()) {
+        Map<ETransferStatus, Long> by = new EnumMap<>(ETransferStatus.class);
+        for (ETransferStatus s : ETransferStatus.values()) {
             by.put(s, 0L);
         }
         for (Object[] r : transfers.countByStatus(LifecycleSupport.company(requestedCompanyId), departmentId, from,
                 to, DepartmentService.kw(keyword))) {
-            by.put((EDecision) r[0], (Long) r[1]);
+            by.put((ETransferStatus) r[0], (Long) r[1]);
         }
         return new StatusCounts(by.values().stream().mapToLong(Long::longValue).sum(), by);
     }
@@ -107,10 +122,13 @@ public class TransferService {
         return detail(transfers.save(t));
     }
 
-    /** Full replacement while PENDING. */
+    /** Full replacement while PENDING or IN_PROGRESS. */
     @Transactional
     public TransferDto update(Long id, TransferForm form) {
-        EmployeeTransfer t = requirePending(id);
+        EmployeeTransfer t = require(id);
+        if (!OPEN.contains(t.getStatus())) {
+            throw ApiException.badRequest(EEmployeeError.EMP_046);
+        }
         apply(t, form);
         return detail(t);
     }
@@ -118,22 +136,43 @@ public class TransferService {
     /** Moves the employee to the new placement now; checked again against where they are today. */
     @Transactional
     public TransferDto approve(Long id) {
-        EmployeeTransfer t = requirePending(id);
+        EmployeeTransfer t = require(id);
+        LifecycleSupport.assertMove(MOVES, t.getStatus(), ETransferStatus.APPROVED);
         Employee e = support.employee(t.getEmployeeId());
         placeFrom(t, e);
         check(e, t.getToBranchId(), t.getToDepartmentId(), t.getToDesignationId(), t);
         e.setBranchId(t.getToBranchId());
         e.setDepartmentId(t.getToDepartmentId());
         e.setDesignationId(t.getToDesignationId());
-        t.setStatus(EDecision.APPROVED);
+        t.setStatus(ETransferStatus.APPROVED);
         t.setDecidedAt(clock.instant());
         return detail(t);
     }
 
     @Transactional
     public TransferDto reject(Long id) {
-        EmployeeTransfer t = requirePending(id);
-        t.setStatus(EDecision.REJECTED);
+        return close(id, ETransferStatus.REJECTED);
+    }
+
+    /** PENDING -> IN_PROGRESS: being processed; still editable and decidable. */
+    @Transactional
+    public TransferDto start(Long id) {
+        EmployeeTransfer t = require(id);
+        LifecycleSupport.assertMove(MOVES, t.getStatus(), ETransferStatus.IN_PROGRESS);
+        t.setStatus(ETransferStatus.IN_PROGRESS);
+        return detail(t);
+    }
+
+    /** Withdrawn before a decision; the employee stays where they are. */
+    @Transactional
+    public TransferDto cancel(Long id) {
+        return close(id, ETransferStatus.CANCELLED);
+    }
+
+    private TransferDto close(Long id, ETransferStatus to) {
+        EmployeeTransfer t = require(id);
+        LifecycleSupport.assertMove(MOVES, t.getStatus(), to);
+        t.setStatus(to);
         t.setDecidedAt(clock.instant());
         return detail(t);
     }
@@ -242,7 +281,7 @@ public class TransferService {
 
     private EmployeeTransfer requirePending(Long id) {
         EmployeeTransfer t = require(id);
-        if (t.getStatus() != EDecision.PENDING) {
+        if (t.getStatus() != ETransferStatus.PENDING) {
             throw ApiException.badRequest(EEmployeeError.EMP_046);
         }
         return t;

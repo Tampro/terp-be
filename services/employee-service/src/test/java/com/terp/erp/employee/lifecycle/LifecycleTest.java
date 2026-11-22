@@ -53,7 +53,8 @@ class LifecycleTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-20T03:00:00Z"), ZoneOffset.UTC);
     private final LifecycleSupport support = new LifecycleSupport(employees, media);
     private final AwardService awardService = new AwardService(awards, awardTypes, support);
-    private final PromotionService promotionService = new PromotionService(promotions, designations, support, clock);
+    private final PromotionService promotionService = new PromotionService(promotions, designations, orgs, support,
+            clock);
     private final TransferService transferService = new TransferService(transfers, orgs, support, clock);
 
     private Employee employee;
@@ -103,8 +104,10 @@ class LifecycleTest {
 
     @Test
     void promotionRulesAndApproval() {
-        assertCode(() -> promotionService.create(promotion(300L, DAY, null)), EEmployeeError.EMP_047);
-        assertCode(() -> promotionService.create(promotion(400L, DAY, null)), EEmployeeError.EMP_047);
+        assertCode(() -> promotionService.create(promotion(300L, DAY, null)), EEmployeeError.EMP_098);
+        doThrow(ApiException.badRequest(EEmployeeError.EMP_004)).when(orgs)
+                .assertChain(eq(10L), eq(100L), eq(200L), eq(400L), any(), any(), any());
+        assertCode(() -> promotionService.create(promotion(400L, DAY, null)), EEmployeeError.EMP_004);
         assertCode(() -> promotionService.create(promotion(301L, DAY.minusDays(1), null)), EEmployeeError.EMP_049);
 
         var pending = promotionService.create(promotion(301L, DAY, null));
@@ -116,6 +119,64 @@ class LifecycleTest {
         assertThat(approved.status()).isEqualTo(EDecision.APPROVED);
         assertThat(approved.decidedAt()).isEqualTo(clock.instant());
         assertThat(employee.getDesignationId()).isEqualTo(301L);
+    }
+
+    @Test
+    void promotionApprovalMovesBranchAndDepartment() {
+        var p = promotionService.create(new PromotionForm(1L, null, 101L, 201L, 302L, DAY, DAY, null, null,
+                EDecision.APPROVED));
+        // the new chain is validated like a transfer's, keeping inactive entries only where the employee is
+        verify(orgs, org.mockito.Mockito.atLeastOnce()).assertChain(10L, 101L, 201L, 302L, 100L, 200L, 300L);
+        assertThat(p.status()).isEqualTo(EDecision.APPROVED);
+        assertThat(employee.getBranchId()).isEqualTo(101L);
+        assertThat(employee.getDepartmentId()).isEqualTo(201L);
+        assertThat(employee.getDesignationId()).isEqualTo(302L);
+    }
+
+    @Test
+    void promotionToAnotherBranchNeedsADepartment() {
+        assertCode(() -> promotionService.create(new PromotionForm(1L, null, 101L, null, 302L, DAY, DAY, null, null,
+                null)), EEmployeeError.EMP_023);
+    }
+
+    @Test
+    void transferTransitionTable() {
+        EmployeeTransfer t = new EmployeeTransfer();
+        t.setId(9L);
+        t.setCompanyId(10L);
+        t.setEmployeeId(1L);
+        t.setToBranchId(100L);
+        t.setToDepartmentId(200L);
+        t.setToDesignationId(301L);
+        when(transfers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(t));
+        assertThat(transferService.start(9L).status()).isEqualTo(ETransferStatus.IN_PROGRESS);
+        assertCode(() -> transferService.start(9L), EEmployeeError.EMP_096);
+        assertCode(() -> transferService.delete(9L), EEmployeeError.EMP_046);
+        transferService.update(9L, transfer(null, null, 301L));
+        assertThat(transferService.cancel(9L).status()).isEqualTo(ETransferStatus.CANCELLED);
+        assertThat(employee.getDesignationId()).isEqualTo(300L);
+        for (ETransferStatus closed : List.of(ETransferStatus.CANCELLED, ETransferStatus.REJECTED,
+                ETransferStatus.APPROVED)) {
+            t.setStatus(closed);
+            assertCode(() -> transferService.approve(9L), EEmployeeError.EMP_096);
+            assertCode(() -> transferService.reject(9L), EEmployeeError.EMP_096);
+            assertCode(() -> transferService.cancel(9L), EEmployeeError.EMP_096);
+            assertCode(() -> transferService.update(9L, transfer(null, null, 301L)), EEmployeeError.EMP_046);
+        }
+        t.setStatus(ETransferStatus.IN_PROGRESS);
+        assertThat(transferService.reject(9L).status()).isEqualTo(ETransferStatus.REJECTED);
+    }
+
+    @Test
+    void anotherCompanysTransferIsNotFoundForStateActions() {
+        EmployeeTransfer t = new EmployeeTransfer();
+        t.setId(9L);
+        t.setCompanyId(11L);
+        t.setEmployeeId(1L);
+        when(transfers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(t));
+        assertCode(() -> transferService.approve(9L), EEmployeeError.EMP_045);
+        assertCode(() -> transferService.cancel(9L), EEmployeeError.EMP_045);
+        assertThat(t.getStatus()).isEqualTo(ETransferStatus.PENDING);
     }
 
     @Test
@@ -150,13 +211,13 @@ class LifecycleTest {
         saved.setToDesignationId(302L);
         when(transfers.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(saved));
         var approved = transferService.approve(9L);
-        assertThat(approved.status()).isEqualTo(EDecision.APPROVED);
+        assertThat(approved.status()).isEqualTo(ETransferStatus.APPROVED);
         assertThat(approved.changes()).containsExactly(TransferService.EChange.BRANCH,
                 TransferService.EChange.DEPARTMENT, TransferService.EChange.DESIGNATION);
         assertThat(employee.getBranchId()).isEqualTo(101L);
         assertThat(employee.getDepartmentId()).isEqualTo(201L);
         assertThat(employee.getDesignationId()).isEqualTo(302L);
-        assertCode(() -> transferService.reject(9L), EEmployeeError.EMP_046);
+        assertCode(() -> transferService.reject(9L), EEmployeeError.EMP_096);
     }
 
     @Test
@@ -172,7 +233,7 @@ class LifecycleTest {
                 .assertChain(eq(10L), eq(101L), eq(201L), any(), any(), any(), any());
         assertCode(() -> transferService.approve(9L), EEmployeeError.EMP_003);
         assertThat(employee.getBranchId()).isEqualTo(100L);
-        assertThat(saved.getStatus()).isEqualTo(EDecision.PENDING);
+        assertThat(saved.getStatus()).isEqualTo(ETransferStatus.PENDING);
     }
 
     @Test
@@ -208,7 +269,7 @@ class LifecycleTest {
     }
 
     private static PromotionForm promotion(Long designationId, LocalDate effective, EDecision status) {
-        return new PromotionForm(1L, null, designationId, DAY, effective, "Great work", null, status);
+        return new PromotionForm(1L, null, null, null, designationId, DAY, effective, "Great work", null, status);
     }
 
     private static TransferForm transfer(Long branch, Long department, Long designation) {

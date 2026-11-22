@@ -10,6 +10,7 @@ import com.terp.erp.attendance.common.BaseAuditableEntity;
 import java.time.DayOfWeek;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -27,6 +28,19 @@ public class AttendanceSetting extends BaseAuditableEntity {
     /** Comma-separated DayOfWeek names, e.g. "SATURDAY,SUNDAY". */
     @Column(name = "weekly_off_days", nullable = false, length = 80)
     private String weeklyOffDays;
+
+    /** Self clock-in/out only from allowedIps (FR-ERP-ATT-004). */
+    @Column(name = "ip_restriction_enabled", nullable = false)
+    private boolean ipRestrictionEnabled;
+
+    /** Comma-separated IPs and CIDR ranges, validated by IpRules on save. */
+    @Column(name = "allowed_ips", columnDefinition = "TEXT")
+    private String allowedIps;
+
+    public List<String> allowedIpList() {
+        return allowedIps == null || allowedIps.isBlank() ? List.of()
+                : Arrays.stream(allowedIps.split(",")).map(String::trim).filter(x -> !x.isEmpty()).toList();
+    }
 
     public Set<DayOfWeek> offDays() {
         if (weeklyOffDays == null || weeklyOffDays.isBlank()) {

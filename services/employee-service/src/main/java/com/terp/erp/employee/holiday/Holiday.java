@@ -38,6 +38,10 @@ public class Holiday extends BaseAuditableEntity {
     @Column(name = "description", length = 500)
     private String description;
 
+    /** Is Paid (FR-ERP-HOL-001): a paid public holiday; existing rows default to paid. */
+    @Column(name = "is_paid", nullable = false)
+    private boolean paid = true;
+
     @ElementCollection
     @CollectionTable(name = "holiday_branch", joinColumns = @JoinColumn(name = "holiday_id"))
     @Column(name = "branch_id", nullable = false)

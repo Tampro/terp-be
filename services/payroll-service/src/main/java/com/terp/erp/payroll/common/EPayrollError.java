@@ -33,7 +33,23 @@ public enum EPayrollError implements ErrorCode {
     PAY_023("The payroll run is already cancelled."),
     PAY_024("Payslips can only be generated for a completed payroll run."),
     PAY_025("Payslips have been generated for this payroll run, so it can no longer be changed."),
-    PAY_026("The payslip does not exist.");
+    PAY_026("The payslip does not exist."),
+    PAY_027("The type does not exist."),
+    PAY_028("This code already exists."),
+    PAY_029("The loan does not exist."),
+    PAY_030("Give either the monthly installment or the number of installments."),
+    PAY_031("The end date cannot be before the start date."),
+    PAY_032("Choose an active loan type."),
+    PAY_033("The overtime does not exist."),
+    PAY_034("The overtime has been paid in a payroll run and can no longer be changed."),
+    PAY_035("The loan has been repaid in a payroll run, so it cannot be deleted or set below what was repaid."),
+    PAY_036("Only a completed payroll run can be paid."),
+    PAY_037("The payroll run is already paid."),
+    PAY_038("Choose the bank account to pay from."),
+    PAY_039("The bank account is inactive."),
+    PAY_040("The payroll run has no net pay to pay."),
+    PAY_041("The accounting service is unavailable. Please try again."),
+    PAY_042("A paid payroll run can no longer be changed.");
 
     private final String message;
 }

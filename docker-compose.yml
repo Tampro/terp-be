@@ -212,6 +212,7 @@ services:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
+      ACCOUNTING_SERVICE_URL: http://accounting-service:8093
       EMPLOYEE_SERVICE_URL: http://employee-service:8083
       ATTENDANCE_SERVICE_URL: http://attendance-service:8084
     ports:

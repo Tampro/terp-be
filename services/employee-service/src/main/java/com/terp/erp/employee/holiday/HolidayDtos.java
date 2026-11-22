@@ -26,7 +26,8 @@ public final class HolidayDtos {
 
     /** allBranches = no branch chosen: the holiday applies to every branch, also ones created later. */
     public record HolidayDto(String id, String companyId, String name, CategoryDto category, LocalDate startDate,
-                             LocalDate endDate, long days, String description, boolean allBranches,
+                             LocalDate endDate, long days, String description, boolean isPaid,
+                             boolean allBranches,
                              List<Ref> branches, Instant createdDate, Instant updatedDate) {
     }
 
@@ -40,7 +41,8 @@ public final class HolidayDtos {
                     requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate endDate,
             @Schema(example = "Christmas") @Size(max = 500) String description,
             @Schema(description = "Applicable branch ids; empty or omitted = all branches")
-            @Size(max = 200) List<@NotNull Long> branchIds) {
+            @Size(max = 200) List<@NotNull Long> branchIds,
+            @Schema(description = "Is Paid; omitted = true", example = "true") Boolean isPaid) {
     }
 
     public record CategoryForm(

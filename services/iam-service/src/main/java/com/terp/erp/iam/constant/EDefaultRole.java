@@ -38,7 +38,8 @@ public enum EDefaultRole {
                                                             union(EventPermissions.ALL,
                                                                     union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
     MANAGER("Manager", Set.of()),
-    EMPLOYEE("Employee", Set.of()),
+    // TODO(assumption): every employee clocks in/out and reads their own profile (ERP manual 15) — confirm with BA.
+    EMPLOYEE("Employee", Set.of("ATTENDANCE_SELF", "EMPLOYEE_SELF")),
     EXECUTIVE("Executive board", Set.of()),
     ACCOUNTANT("Accountant", Set.of()),
     // TODO(assumption): a client sees only its own invoices, payments, credit notes, deals and tickets, and a vendor

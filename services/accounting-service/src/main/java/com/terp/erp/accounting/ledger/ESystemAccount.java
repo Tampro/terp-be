@@ -19,7 +19,12 @@ public enum ESystemAccount {
     COGS("632"),
     /** Year-end close: revenue and expense balances are carried here, then its net to RETAINED_EARNINGS. */
     INCOME_SUMMARY("911"),
-    RETAINED_EARNINGS("4212");
+    RETAINED_EARNINGS("4212"),
+    /**
+     * Payroll payments debit it (Dr 334 / Cr bank). Added after companies were seeded: AccountMapping maps it lazily
+     * to the company's 334 account the first time it is missing.
+     */
+    SALARY_PAYABLE("334");
 
     /** Account code the default chart maps this key to. */
     private final String defaultCode;

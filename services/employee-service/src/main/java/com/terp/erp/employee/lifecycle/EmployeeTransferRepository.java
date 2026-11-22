@@ -20,7 +20,7 @@ public interface EmployeeTransferRepository extends JpaRepository<EmployeeTransf
 
     @Query(value = "select t " + FILTERS + " and (:status is null or t.status = :status)",
             countQuery = "select count(t) " + FILTERS + " and (:status is null or t.status = :status)")
-    Page<EmployeeTransfer> search(Long companyId, Long departmentId, LocalDate from, LocalDate to, EDecision status,
+    Page<EmployeeTransfer> search(Long companyId, Long departmentId, LocalDate from, LocalDate to, ETransferStatus status,
                                   String kw, Pageable pageable);
 
     @Query("select t.status, count(t) " + FILTERS + " group by t.status")

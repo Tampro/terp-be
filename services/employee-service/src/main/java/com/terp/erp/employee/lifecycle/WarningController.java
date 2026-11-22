@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.common.ResponseListDto;
 import com.terp.erp.employee.lifecycle.WarningService.PlanForm;
+import com.terp.erp.employee.lifecycle.WarningService.ResponseForm;
 import com.terp.erp.employee.lifecycle.WarningService.StatusCounts;
 import com.terp.erp.employee.lifecycle.WarningService.StatusForm;
 import com.terp.erp.employee.lifecycle.WarningService.WarningDto;
@@ -44,7 +45,7 @@ public class WarningController {
 
     @Operation(summary = "Warnings of the company", description = "typeId / severityId = the Type and Severity "
             + "filters (entries of /catalogs/warning-types and /catalogs/warning-severities); status = the tab. "
-            + "expired = past the expiry date while Issued / Acknowledged.")
+            + "expired = APPROVED and past the expiry date.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
     @GetMapping
@@ -61,7 +62,7 @@ public class WarningController {
                 service.search(companyId, keyword, employeeId, typeId, severityId, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Draft, Issued, Acknowledged, Expired)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, Approved, Rejected)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
     @GetMapping("/status-counts")
@@ -74,6 +75,31 @@ public class WarningController {
         return ApiMessageDto.ok(service.statusCounts(companyId, keyword, employeeId, typeId, severityId));
     }
 
+    @Operation(summary = "My warnings (the caller's own employee profile)",
+            description = "For every employee with a profile; no permission needed. status = the tab.")
+    @ApiResponses(@ApiResponse(responseCode = "403", description = "No employee profile in the company (EMP_041)"))
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/my")
+    public ApiMessageDto<ResponseListDto<WarningDto>> mine(
+            @RequestParam(required = false) EmployeeWarning.EStatus status,
+            @ParameterObject @PageableDefault(size = 20, sort = "warningDate", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ApiMessageDto.ok(ResponseListDto.of(service.mine(status, pageable)));
+    }
+
+    @Operation(summary = "Respond to my warning (only while PENDING)",
+            description = "Only the warned employee; replaces an earlier response; the acknowledgment date becomes "
+                    + "today. No permission needed: the warning must be the caller's own.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not pending any more (EMP_097)"),
+            @ApiResponse(responseCode = "403", description = "No employee profile in the company (EMP_041)"),
+            @ApiResponse(responseCode = "404", description = "No such warning of yours (EMP_051)")})
+    @PreAuthorize("isAuthenticated()")
+    @PutMapping("/my/{id}/response")
+    public ApiMessageDto<WarningDto> respond(@PathVariable Long id, @Valid @RequestBody ResponseForm form) {
+        return ApiMessageDto.ok(service.respond(id, form));
+    }
+
     @Operation(summary = "Warning details", description = "With the improvement plan and a signed document link.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = "No such warning in your company (EMP_051)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")
@@ -82,7 +108,7 @@ public class WarningController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Add a warning (status DRAFT)")
+    @Operation(summary = "Add a warning (status PENDING)")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Warned by themselves (EMP_053), type / severity not in "
                     + "the company's lists (EMP_050) or inactive (EMP_054), expiry or plan end before its start "
@@ -105,11 +131,10 @@ public class WarningController {
         return ApiMessageDto.ok(service.update(id, form));
     }
 
-    @Operation(summary = "Change Status (Draft, Issued, Acknowledged, Expired)",
-            description = "Acknowledgment date (today when acknowledging without one) and employee response are "
-                    + "replaced by what is sent.")
+    @Operation(summary = "Decide: APPROVED or REJECTED (only from PENDING)",
+            description = "Allowed: PENDING -> APPROVED | REJECTED. The employee's response is kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Acknowledged before the warning date (EMP_052)"),
+            @ApiResponse(responseCode = "400", description = "Move not allowed, e.g. already decided (EMP_096)"),
             @ApiResponse(responseCode = "404", description = "No such warning in your company (EMP_051)")})
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_MANAGE')")
     @PutMapping("/{id}/status")

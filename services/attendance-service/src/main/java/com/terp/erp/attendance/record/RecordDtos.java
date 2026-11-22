@@ -19,13 +19,13 @@ public final class RecordDtos {
                             ERecordStatus status, boolean late, boolean earlyDeparture, boolean holiday,
                             boolean weekend, BigDecimal totalHours, BigDecimal breakHours, BigDecimal overtimeHours,
                             BigDecimal overtimeAmount, String shiftId, String attendancePolicyId, String notes,
-                            Instant createdDate, Instant updatedDate) {
+                            Instant createdDate, Instant updatedDate, boolean autoClockedOut) {
         static RecordDto of(AttendanceRecord r) {
             return new RecordDto(r.getId().toString(), r.getEmployeeId().toString(), r.getWorkDate(), r.getClockIn(),
                     r.getClockOut(), r.getStatus(), r.isLate(), r.isEarlyDeparture(), r.isHoliday(), r.isWeekend(),
                     r.getTotalHours(), r.getBreakHours(), r.getOvertimeHours(), r.getOvertimeAmount(),
                     str(r.getShiftId()), str(r.getAttendancePolicyId()), r.getNotes(), r.getCreatedDate(),
-                    r.getUpdatedDate());
+                    r.getUpdatedDate(), r.isAutoClockedOut());
         }
 
         private static String str(Long v) {
@@ -49,6 +49,25 @@ public final class RecordDtos {
     /** One cell of the calendar; recordId null when no record exists. */
     public record DayCell(LocalDate date, EDayStatus status, boolean weekend, boolean late, boolean earlyDeparture,
                           boolean overtime, LocalTime clockIn, LocalTime clockOut, String notes, String recordId) {
+        /**
+         * The derived statuses of FR-ERP-ATT-002 (Late, Early, Overtime) as one list next to the cell status, so the
+         * grid can show several on one day; same values as the three booleans, which stay for existing clients.
+         */
+        @com.fasterxml.jackson.annotation.JsonProperty("flags")
+        @Schema(description = "LATE / EARLY / OVERTIME of the day, empty when none")
+        public List<EDayFlag> flags() {
+            List<EDayFlag> out = new java.util.ArrayList<>(3);
+            if (late) {
+                out.add(EDayFlag.LATE);
+            }
+            if (earlyDeparture) {
+                out.add(EDayFlag.EARLY);
+            }
+            if (overtime) {
+                out.add(EDayFlag.OVERTIME);
+            }
+            return out;
+        }
     }
 
     /** attended = Present days + half of the Half Days; workingDays = days of the month neither off nor holiday. */

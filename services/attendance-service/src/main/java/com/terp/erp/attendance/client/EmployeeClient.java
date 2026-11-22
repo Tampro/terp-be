@@ -90,6 +90,16 @@ public class EmployeeClient {
         return mapper.convertValue(data, Employee.class);
     }
 
+    /**
+     * The caller's own employee profile (linked by the IAM user id), same shape as the detail. Needs employee-service
+     * {@code GET /api/v1/employees/me} for any authenticated company user: the list and detail need EMPLOYEE_VIEW,
+     * which a staff member does not hold. Null when no profile is linked.
+     */
+    public Employee me() {
+        JsonNode data = http.call(c -> c.get().uri("/api/v1/employees/me")).path("data");
+        return data.isMissingNode() || data.isNull() ? null : mapper.convertValue(data, Employee.class);
+    }
+
     /** Holidays overlapping [from, to] of the company (employee-service holiday calendar, at most 400 days). */
     public List<Holiday> holidays(Long companyId, LocalDate from, LocalDate to) {
         JsonNode data = http.call(c -> c.get().uri(u -> u.path("/api/v1/org/holidays/calendar")

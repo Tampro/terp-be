@@ -54,7 +54,7 @@ class HolidayServiceTest {
             h.setId(9L);
             return h;
         });
-        HolidayDto d = service.create(null, new HolidayForm(" Christmas ", 1L, XMAS, XMAS.plusDays(1), " ", null));
+        HolidayDto d = service.create(null, new HolidayForm(" Christmas ", 1L, XMAS, XMAS.plusDays(1), " ", null, null));
         assertThat(d.name()).isEqualTo("Christmas");
         assertThat(d.allBranches()).isTrue();
         assertThat(d.days()).isEqualTo(2);
@@ -65,7 +65,7 @@ class HolidayServiceTest {
     @Test
     void endBeforeStartIsRefused() {
         TestLogin.as(10L, "ORG_MANAGE");
-        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS.minusDays(1), null, null)),
+        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS.minusDays(1), null, null, null)),
                 EEmployeeError.EMP_034);
     }
 
@@ -73,7 +73,7 @@ class HolidayServiceTest {
     void categoryOfAnotherCompanyIsRefused() {
         TestLogin.as(10L, "ORG_MANAGE");
         when(categories.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(category(7L, 11L)));
-        assertError(() -> service.create(null, new HolidayForm("X", 7L, XMAS, XMAS, null, null)), EEmployeeError.EMP_033);
+        assertError(() -> service.create(null, new HolidayForm("X", 7L, XMAS, XMAS, null, null, null)), EEmployeeError.EMP_033);
     }
 
     @Test
@@ -82,7 +82,7 @@ class HolidayServiceTest {
         when(categories.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(category(1L, null)));
         when(branches.findByCompanyIdAndIdInAndDeletedFalse(eq(10L), anyCollection()))
                 .thenReturn(List.of(branch(1L, EOrgStatus.ACTIVE)));
-        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS, null, List.of(1L, 99L))),
+        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS, null, List.of(1L, 99L), null)),
                 EEmployeeError.EMP_002);
     }
 
@@ -93,12 +93,12 @@ class HolidayServiceTest {
         when(categories.findAllById(any())).thenReturn(List.of(category(1L, null)));
         when(branches.findByCompanyIdAndIdInAndDeletedFalse(eq(10L), anyCollection()))
                 .thenReturn(List.of(branch(2L, EOrgStatus.INACTIVE)));
-        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS, null, List.of(2L))),
+        assertError(() -> service.create(null, new HolidayForm("X", 1L, XMAS, XMAS, null, List.of(2L), null)),
                 EEmployeeError.EMP_029);
         Holiday h = holiday();
         h.getBranchIds().add(2L);
         when(holidays.findByIdAndDeletedFalse(9L)).thenReturn(Optional.of(h));
-        HolidayDto d = service.update(9L, new HolidayForm("Y", 1L, XMAS, XMAS, null, List.of(2L)));
+        HolidayDto d = service.update(9L, new HolidayForm("Y", 1L, XMAS, XMAS, null, List.of(2L), null));
         assertThat(d.branches()).extracting(HolidayDtos.Ref::name).containsExactly("B2");
     }
 
@@ -146,7 +146,7 @@ class HolidayServiceTest {
     void icalIsAllDayWithExclusiveEndEscapedAndFolded() {
         HolidayDto d = new HolidayDto("9", "10", "Tết; Lunar New Year, " + "x".repeat(80),
                 new HolidayDtos.CategoryDto("1", "National", "#E53935", true), LocalDate.of(2027, 2, 5),
-                LocalDate.of(2027, 2, 9), 5, null, true, List.of(), null, null);
+                LocalDate.of(2027, 2, 9), 5, null, true, true, List.of(), null, null);
         String ics = new String(HolidayExporter.ical(List.of(d), Instant.parse("2026-11-19T00:00:00Z")),
                 StandardCharsets.UTF_8);
         assertThat(ics).contains("DTSTART;VALUE=DATE:20270205\r\n", "DTEND;VALUE=DATE:20270210\r\n",
@@ -159,7 +159,7 @@ class HolidayServiceTest {
     @Test
     void pdfRendersVietnamese() {
         HolidayDto d = new HolidayDto("9", "10", "Quốc khánh", null, LocalDate.of(2026, 9, 2),
-                LocalDate.of(2026, 9, 2), 1, null, true, List.of(), null, null);
+                LocalDate.of(2026, 9, 2), 1, null, true, true, List.of(), null, null);
         byte[] pdf = HolidayExporter.pdf(List.of(d), "2026");
         assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
     }

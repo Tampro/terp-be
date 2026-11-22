@@ -33,11 +33,14 @@ import com.terp.erp.common.ResponseListDto;
 import com.terp.erp.payroll.run.PayrollRun.EStatus;
 import com.terp.erp.payroll.run.PayrollRunExcelService.ImportResult;
 import com.terp.erp.payroll.run.PayrollRunService.EntryDto;
+import com.terp.erp.payroll.run.PayrollRunService.ExclusionForm;
+import com.terp.erp.payroll.run.PayrollRunService.PayForm;
 import com.terp.erp.payroll.run.PayrollRunService.RunDto;
 import com.terp.erp.payroll.run.PayrollRunService.RunForm;
 import com.terp.erp.payroll.run.PayrollRunService.StatusCounts;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static com.terp.erp.payroll.common.Texts.COMPANY;
 
@@ -137,7 +140,8 @@ public class PayrollRunController {
 
     @Operation(summary = "Edit a payroll run", description = "Full replacement; DRAFT runs only.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = FORM_ERRORS + ", " + NOT_DRAFT),
+            @ApiResponse(responseCode = "400", description = FORM_ERRORS + ", " + NOT_DRAFT
+                    + ", inactive bank account (PAY_039), paid run (PAY_042)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @PutMapping("/{id}")
@@ -162,7 +166,8 @@ public class PayrollRunController {
 
     @Operation(summary = "Cancel a payroll run", description = "A DRAFT or COMPLETED run; its entries are kept.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Already cancelled (PAY_023)"),
+            @ApiResponse(responseCode = "400", description = "Already cancelled (PAY_023), paid (PAY_042), has "
+                    + "payslips (PAY_025)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @PutMapping("/{id}/cancel")
@@ -206,12 +211,59 @@ public class PayrollRunController {
     @Operation(summary = "Remove an entry from a run", description = "COMPLETED runs only; the run totals are "
             + "recalculated and returned.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "The run is not COMPLETED (PAY_014)"),
+            @ApiResponse(responseCode = "400", description = "The run is not COMPLETED (PAY_014), paid "
+                    + "(PAY_042), has payslips (PAY_025)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + ", no such entry in the run (PAY_018)")})
     @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
     @DeleteMapping("/{id}/entries/{entryId}")
     public ApiMessageDto<RunDto> deleteEntry(@PathVariable Long id, @PathVariable Long entryId) {
         return ApiMessageDto.ok(service.deleteEntry(id, entryId));
+    }
+
+    @Operation(summary = "Employees excluded from a run", description = "Employee ids processing skips.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
+    @PreAuthorize("@PermissionChecker.has('PAYROLL_VIEW')")
+    @GetMapping("/{id}/exclusions")
+    public ApiMessageDto<List<String>> exclusions(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.exclusions(id));
+    }
+
+    @Operation(summary = "Exclude an employee from a DRAFT run", description = "Processing makes no entry for the "
+            + "employee, so they count in no total. Idempotent; returns the excluded employee ids.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = NOT_DRAFT),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
+    @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
+    @PostMapping("/{id}/exclusions")
+    public ApiMessageDto<List<String>> exclude(@PathVariable Long id, @Valid @RequestBody ExclusionForm form) {
+        return ApiMessageDto.ok(service.exclude(id, form.employeeId()));
+    }
+
+    @Operation(summary = "Include an excluded employee again", description = "DRAFT runs only; idempotent.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = NOT_DRAFT),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND)})
+    @PreAuthorize("@PermissionChecker.has('PAYROLL_MANAGE')")
+    @DeleteMapping("/{id}/exclusions/{employeeId}")
+    public ApiMessageDto<List<String>> include(@PathVariable Long id, @PathVariable Long employeeId) {
+        return ApiMessageDto.ok(service.include(id, employeeId));
+    }
+
+    @Operation(summary = "Pay salary", description = "COMPLETED and UNPAID runs only. Books one bank DEBIT of the "
+            + "run's net pay and its journal entry (Dr 334 / Cr bank) in accounting-service as you (needs BANK_MANAGE "
+            + "or PAYROLL_PAY there), idempotent on the run id, then marks the run PAID. Body optional: bankAccountId "
+            + "(omitted = the run's), paymentDate (omitted = the pay date).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not COMPLETED (PAY_036), already paid (PAY_037), no "
+                    + "bank account (PAY_038), no net pay (PAY_040); relayed from accounting: inactive account "
+                    + "(ACC_008), unmapped account (ACC_017), closed year (ACC_070)"),
+            @ApiResponse(responseCode = "404", description = NOT_FOUND + "; bank account not in your company "
+                    + "(ACC_006, relayed)"),
+            @ApiResponse(responseCode = "503", description = "accounting-service unavailable (PAY_041)")})
+    @PreAuthorize("@PermissionChecker.has('PAYROLL_PAY')")
+    @PostMapping("/{id}/pay")
+    public ApiMessageDto<RunDto> pay(@PathVariable Long id, @Valid @RequestBody(required = false) PayForm form) {
+        return ApiMessageDto.ok(service.pay(id, form));
     }
 
     private static ResponseEntity<byte[]> file(byte[] body, String name) {
