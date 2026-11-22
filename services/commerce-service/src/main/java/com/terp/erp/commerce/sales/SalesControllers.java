@@ -263,6 +263,21 @@ final class SalesControllers {
     public static class InvoiceController {
         private static final EDocumentKind KIND = EDocumentKind.INVOICE;
         private final SalesDocumentService service;
+        private final SalesInvoicePaymentService payments;
+
+        @Operation(summary = "Apply a cleared payment (called by accounting-service)", description = "Takes amount off "
+                + "the balance: PARTIAL, or PAID at 0. Idempotent per (invoice, paymentId): a repeat with the same "
+                + "amount changes nothing and answers the invoice.")
+        @ApiResponses({
+                @ApiResponse(responseCode = "400", description = "Not posted/partly paid (SAL_021), amount over the "
+                        + "balance (SAL_022), same payment with another amount (SAL_023), validation (COMMON_001)"),
+                @ApiResponse(responseCode = "404", description = "No such invoice in your company (SAL_001)")})
+        @PreAuthorize("@PermissionChecker.hasAny('PAYMENT_CLEAR')")
+        @PostMapping("/{id}/payments")
+        public ApiMessageDto<DocumentDetail> applyPayment(@PathVariable Long id,
+                                                          @Valid @RequestBody com.terp.erp.commerce.common.InvoicePaymentForm form) {
+            return ApiMessageDto.ok(payments.apply(id, form));
+        }
 
         @Operation(summary = "Sales invoices", description = "Number SI-YYYY-MM-NNN. overdue = posted or partly paid "
                 + "past its due date; overdue=true lists only those.")

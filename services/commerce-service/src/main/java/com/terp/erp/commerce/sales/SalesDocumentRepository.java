@@ -2,7 +2,9 @@ package com.terp.erp.commerce.sales;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,6 +14,11 @@ import java.util.Optional;
 
 public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Long> {
     Optional<SalesDocument> findByIdAndDeletedFalse(Long id);
+
+    /** Payments: the invoice row locked until the transaction ends, so two payments cannot both pass the balance check. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from SalesDocument d where d.id = :id and d.deleted = false")
+    Optional<SalesDocument> lockById(@Param("id") Long id);
 
     String FILTERS = "from SalesDocument d where d.companyId = :companyId and d.kind = :kind and d.deleted = false "
             + "and (:customerId is null or d.customerId = :customerId) "

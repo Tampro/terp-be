@@ -42,6 +42,7 @@ public class PurchaseInvoiceController {
     private static final String WRITE_ERRORS = "Not a draft (PUR_002), due before invoice date (PUR_004), validation "
             + "(COMMON_001); vendor or item of another service (ACC_ / INV_ codes relayed)";
     private final PurchaseInvoiceService service;
+    private final PurchaseInvoicePaymentService payments;
 
     @Operation(summary = "Purchase invoices", description = "Number PI-YYYY-MM-NNN. overdue = posted or partly paid "
             + "past the due date.")
@@ -130,5 +131,19 @@ public class PurchaseInvoiceController {
     @PostMapping("/{id}/post")
     public ApiMessageDto<InvoiceDetail> post(@PathVariable Long id) {
         return ApiMessageDto.ok(service.post(id));
+    }
+
+    @Operation(summary = "Apply a cleared payment (called by accounting-service)", description = "Takes amount off the "
+            + "balance: PARTIAL, or PAID at 0. Idempotent per (invoice, paymentId): a repeat with the same amount "
+            + "changes nothing and answers the invoice.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not posted/partly paid (PUR_014), amount over the "
+                    + "balance (PUR_015), same payment with another amount (PUR_016), validation (COMMON_001)"),
+            @ApiResponse(responseCode = "404", description = "No such purchase invoice in your company (PUR_001)")})
+    @PreAuthorize("@PermissionChecker.hasAny('PAYMENT_CLEAR')")
+    @PostMapping("/{id}/payments")
+    public ApiMessageDto<InvoiceDetail> applyPayment(@PathVariable Long id,
+                                                     @Valid @RequestBody com.terp.erp.commerce.common.InvoicePaymentForm form) {
+        return ApiMessageDto.ok(payments.apply(id, form));
     }
 }
