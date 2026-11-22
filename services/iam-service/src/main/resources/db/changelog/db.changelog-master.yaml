@@ -121,3 +121,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122750000_hrm_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261122800000_support_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122900000_company_webhook_changelog.mysql.sql

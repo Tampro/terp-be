@@ -7,7 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.iam.language.LanguageRepository;
+import com.terp.erp.iam.model.Company;
+import com.terp.erp.iam.repository.CompanyRepository;
 import com.terp.erp.iam.repository.CurrencyRepository;
+import com.terp.erp.iam.settings.CompanySettingsService.CompanyProfile;
+import com.terp.erp.iam.settings.CompanySettingsService.ETaxType;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanyBrand;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanyCurrency;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanySystem;
@@ -36,8 +40,9 @@ class CompanySettingsServiceTest {
     private final SettingsService platform = mock(SettingsService.class);
     private final LanguageRepository languages = mock(LanguageRepository.class);
     private final CurrencyRepository currencies = mock(CurrencyRepository.class);
+    private final CompanyRepository companies = mock(CompanyRepository.class);
     private final CompanySettingsService service = new CompanySettingsService(repo, platform, languages, currencies,
-            new ObjectMapper());
+            new ObjectMapper(), companies);
 
     @BeforeEach
     void setUp() {
@@ -107,5 +112,54 @@ class CompanySettingsServiceTest {
     private static void assertError(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, ESettingsError code) {
         assertThatThrownBy(call).isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(code);
+    }
+
+    @Test
+    void profileFallsBackToTheAccountNameAndIsStoredPerCompany() {
+        Company c = new Company();
+        c.setName("Test Account");
+        when(companies.findById(10L)).thenReturn(Optional.of(c));
+
+        var empty = service.profile(null);
+        assertThat(empty.accountName()).isEqualTo("Test Account");
+        assertThat(empty.name()).isNull();
+        assertThat(empty.taxType()).isEqualTo(ETaxType.VAT);
+        assertThat(empty.taxNumberEnabled()).isFalse();
+
+        var saved = service.saveProfile(null, new CompanyProfile(" ", "REG-1", "1 Test St", "HCMC", null, "Vietnam",
+                "700000", "+84 28 0000 0000", "Contact@Example.com", "Test Co", true, ETaxType.GST, "GST-1"));
+        assertThat(saved.name()).isNull();
+        assertThat(saved.email()).isEqualTo("contact@example.com");
+        assertThat(saved.taxType()).isEqualTo(ETaxType.GST);
+        assertThat(rows.get(CompanySettingsService.PROFILE).getCompanyId()).isEqualTo(10L);
+        assertThat(service.effective(null).profile().name()).isEqualTo("Test Account");
+
+        service.saveProfile(null, new CompanyProfile("Legal Name Ltd", null, null, null, null, null, null, null, null,
+                null, null, null, null));
+        assertThat(service.profile(null).name()).isEqualTo("Legal Name Ltd");
+        assertThat(service.profile(null).registrationNumber()).isNull();
+        assertThat(service.effective(null).profile().name()).isEqualTo("Legal Name Ltd");
+    }
+
+    @Test
+    void profileOfACompanyUserIsAlwaysItsOwnCompany() {
+        UserProfileDeleteTest.login(2L, 20L, "IAM_SETTINGS_MANAGE");
+        service.saveProfile(99L, new CompanyProfile("Other", null, null, null, null, null, null, null, null, null,
+                null, null, null));
+        assertThat(rows.get(CompanySettingsService.PROFILE).getCompanyId()).isEqualTo(20L);
+    }
+
+    @Test
+    void superAdminMustNameTheCompanyForTheProfile() {
+        SecurityContextHolder.clearContext();
+        com.terp.erp.security.ErpPrincipal p = new com.terp.erp.security.ErpPrincipal(1L, "kc-1", "admin", null, true,
+                java.util.Set.of(), java.util.Set.of());
+        var jwt = new org.springframework.security.oauth2.jwt.Jwt("t", java.time.Instant.now(),
+                java.time.Instant.now().plusSeconds(60), Map.of("alg", "none"), Map.of("sub", "kc-1"));
+        var auth = new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(jwt,
+                java.util.List.of(), "kc-1");
+        auth.setDetails(p);
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        assertThatThrownBy(() -> service.profile(null)).isInstanceOf(ApiException.class);
     }
 }

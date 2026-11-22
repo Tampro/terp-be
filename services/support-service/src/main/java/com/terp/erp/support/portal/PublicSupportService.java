@@ -15,11 +15,16 @@ import com.terp.erp.support.ticket.Ticket;
 import com.terp.erp.support.ticket.Ticket.EStatus;
 import com.terp.erp.support.ticket.TicketCategoryService;
 import com.terp.erp.support.ticket.TicketCategoryService.CategoryDto;
+import com.terp.erp.support.ticket.TicketFieldService;
+import com.terp.erp.support.ticket.TicketFieldService.CustomFieldInput;
+import com.terp.erp.support.ticket.TicketFieldService.CustomFieldValue;
+import com.terp.erp.support.ticket.TicketFieldService.FieldDto;
 import com.terp.erp.support.ticket.TicketReply.ESender;
 import com.terp.erp.support.ticket.TicketRepository;
 import com.terp.erp.support.ticket.TicketService;
 import com.terp.erp.support.ticket.TrackingTokens;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -47,7 +52,8 @@ import java.util.Objects;
 public class PublicSupportService {
     public record PortalInfo(String slug, String brandName, String logoUrl, String faviconUrl, PortalContent content,
                              List<PageRow> pages, List<CategoryDto> ticketCategories,
-                             List<KnowledgeService.CategoryDto> kbCategories) {
+                             List<KnowledgeService.CategoryDto> kbCategories,
+                             @Schema(description = "Active custom ticket fields, in display order") List<FieldDto> ticketFields) {
     }
 
     public record PublicTicketForm(
@@ -60,7 +66,9 @@ public class PublicSupportService {
             @Schema(example = "Cannot download my invoice", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotBlank @Size(max = 255) String subject,
             @Schema(description = "HTML; sanitized", example = "<p>The download button does nothing.</p>",
-                    requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank @Size(max = 20_000) String description) {
+                    requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank @Size(max = 20_000) String description,
+            @Schema(description = "Values of ticketFields of the portal info") @Size(max = 100)
+            List<@Valid CustomFieldInput> customFields) {
     }
 
     /** Keep trackingToken: it opens the ticket without the email (a link the FE can build). */
@@ -88,7 +96,8 @@ public class PublicSupportService {
 
     public record PublicTicketView(String ticketNumber, String name, String subject, String categoryName,
                                    EStatus status, String description, List<String> attachmentNames,
-                                   Instant createdDate, Instant updatedDate, List<PublicReply> replies) {
+                                   Instant createdDate, Instant updatedDate, List<PublicReply> replies,
+                                   List<CustomFieldValue> customFields) {
     }
 
     private final PortalSettingsRepository settings;
@@ -100,6 +109,7 @@ public class PublicSupportService {
     private final KnowledgeService kb;
     private final FaqService faqs;
     private final ContactService contacts;
+    private final TicketFieldService ticketFields;
 
     @Transactional(readOnly = true)
     public PortalInfo info(String slug) {
@@ -108,7 +118,7 @@ public class PublicSupportService {
                 .map(PageRow::of).toList();
         return new PortalInfo(s.getSlug(), s.getBrandName(), s.getLogoUrl(), s.getFaviconUrl(),
                 settingsService.content(s), pageRows, ticketCategories.listOf(s.getCompanyId()),
-                kb.categoriesOf(s.getCompanyId()));
+                kb.categoriesOf(s.getCompanyId()), ticketFields.activeOf(s.getCompanyId()));
     }
 
     @Transactional(readOnly = true)
@@ -138,8 +148,10 @@ public class PublicSupportService {
     @Transactional
     public PublicTicketCreated createTicket(String slug, PublicTicketForm f) {
         PortalSettings s = portal(slug);
+        java.util.Map<Long, String> custom = ticketFields.validate(s.getCompanyId(), f.customFields());
         TicketService.Created c = tickets.open(s.getCompanyId(), Ticket.EAccountType.CUSTOM, f.name(), f.email(),
                 f.categoryId(), f.subject(), f.description(), EStatus.IN_PROGRESS, List.of(), true);
+        ticketFields.store(s.getCompanyId(), c.ticket().getId(), custom);
         return new PublicTicketCreated(c.ticket().getTicketNumber(), c.trackingToken(), c.ticket().getStatus());
     }
 
@@ -198,7 +210,7 @@ public class PublicSupportService {
                 .toList();
         return new PublicTicketView(t.getTicketNumber(), t.getName(), t.getSubject(), tickets.categoryName(t),
                 t.getStatus(), t.getDescription(), names(tickets.attachmentsOf(t)), t.getCreatedDate(),
-                t.getUpdatedDate(), replies);
+                t.getUpdatedDate(), replies, tickets.customFieldsOf(t));
     }
 
     /** File names only: downloading needs a media-service link, which the portal has no token for. */

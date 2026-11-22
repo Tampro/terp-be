@@ -20,6 +20,9 @@ import com.terp.erp.support.ticket.TicketNumbers;
 import com.terp.erp.support.ticket.TicketReply;
 import com.terp.erp.support.ticket.TicketReplyRepository;
 import com.terp.erp.support.ticket.TicketRepository;
+import com.terp.erp.support.ticket.TicketFieldRepository;
+import com.terp.erp.support.ticket.TicketFieldService;
+import com.terp.erp.support.ticket.TicketFieldValueRepository;
 import com.terp.erp.support.ticket.TicketService;
 import com.terp.erp.support.ticket.TrackingTokens;
 import org.junit.jupiter.api.Test;
@@ -49,11 +52,14 @@ class PublicSupportServiceTest {
     private final MediaClient media = mock(MediaClient.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final TicketCategoryService categories = new TicketCategoryService(categoryRepo, tickets);
+    final TicketFieldRepository fieldRepo = mock(TicketFieldRepository.class);
+    final TicketFieldValueRepository valueRepo = mock(TicketFieldValueRepository.class);
+    private final TicketFieldService fieldService = new TicketFieldService(fieldRepo, valueRepo, mapper);
     private final TicketService ticketService = new TicketService(tickets, replies, categoryRepo, categories, numbers,
-            new Attachments(media, mapper));
+            new Attachments(media, mapper), fieldService);
     private final PublicSupportService service = new PublicSupportService(settings, pages,
             new PortalSettingsService(settings, pages, mapper), categories, ticketService, tickets,
-            mock(KnowledgeService.class), mock(FaqService.class), mock(ContactService.class));
+            mock(KnowledgeService.class), mock(FaqService.class), mock(ContactService.class), fieldService);
 
     private void portal(boolean enabled) {
         PortalSettings s = new PortalSettings();
@@ -99,7 +105,7 @@ class PublicSupportServiceTest {
         when(tickets.save(any())).thenAnswer(i -> i.getArgument(0));
 
         var created = service.createTicket(SLUG, new PublicTicketForm("Test Customer", "customer@example.com", 3L,
-                "Help", "<p>Please help</p>"));
+                "Help", "<p>Please help</p>", null));
 
         ArgumentCaptor<Ticket> saved = ArgumentCaptor.forClass(Ticket.class);
         verify(tickets).save(saved.capture());

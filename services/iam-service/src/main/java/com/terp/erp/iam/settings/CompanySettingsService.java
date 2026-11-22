@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -15,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.iam.constant.EIamError;
 import com.terp.erp.iam.language.LanguageRepository;
+import com.terp.erp.iam.model.Company;
+import com.terp.erp.iam.repository.CompanyRepository;
 import com.terp.erp.iam.repository.CurrencyRepository;
 import com.terp.erp.iam.settings.SettingsDtos.BrandSettings;
 import com.terp.erp.iam.settings.SettingsDtos.CurrencyFormatSettings;
@@ -42,12 +45,14 @@ public class CompanySettingsService {
     static final String SYSTEM = "SYSTEM";
     static final String BRAND = "BRAND";
     static final String CURRENCY = "CURRENCY";
+    static final String PROFILE = "PROFILE";
 
     private final CompanySettingRepository repo;
     private final SettingsService platform;
     private final LanguageRepository languages;
     private final CurrencyRepository currencies;
     private final ObjectMapper mapper;
+    private final CompanyRepository companies;
 
     // ------------------------------------------------------------------ DTOs (null = the platform's value)
 
@@ -87,6 +92,39 @@ public class CompanySettingsService {
             Boolean addSpace) {
     }
 
+    /** Reference TERP Core company-settings.tsx: tax_type VAT or GST. */
+    public enum ETaxType { VAT, GST }
+
+    /**
+     * Company Settings (ERP manual 19; reference SettingController keys company_name, registration_number,
+     * company_address/city/state/country/zipcode/telephone, company_email, company_email_from_name,
+     * vat_gst_number_switch, tax_type, vat_number). name is the name printed on documents; null = the company
+     * account's name (Company.name stays the tenant's identity, renamed only by the super admin).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record CompanyProfile(
+            @Schema(description = "Name on documents; null = the account name", example = "Test Company Ltd") @Size(max = 255) String name,
+            @Schema(example = "0312345678") @Size(max = 100) String registrationNumber,
+            @Schema(example = "1 Test Street") @Size(max = 500) String address,
+            @Schema(example = "Ho Chi Minh City") @Size(max = 100) String city,
+            @Size(max = 100) String state,
+            @Schema(example = "Vietnam") @Size(max = 100) String country,
+            @Schema(example = "700000") @Size(max = 20) String zipCode,
+            @Schema(example = "+84 28 0000 0000") @Size(max = 30) @Pattern(regexp = "^$|[0-9+()\\-. ]{3,30}") String phone,
+            @Schema(example = "contact@example.com") @Email @Size(max = 255) String email,
+            @Schema(description = "Sender name of the company's emails", example = "Test Company") @Size(max = 255) String senderName,
+            @Schema(description = "Show the tax number on documents (reference vat_gst_number_switch)") Boolean taxNumberEnabled,
+            @Schema(example = "VAT") ETaxType taxType,
+            @Schema(description = "VAT / GST number", example = "0312345678-001") @Size(max = 100) String taxNumber) {
+    }
+
+    /** The profile plus the account name it falls back to. */
+    public record CompanyProfileView(String accountName, String name, String registrationNumber, String address,
+                                     String city, String state, String country, String zipCode, String phone,
+                                     String email, String senderName, boolean taxNumberEnabled, ETaxType taxType,
+                                     String taxNumber) {
+    }
+
     public record EffectiveSystem(String defaultLanguage, String dateFormat, String timeFormat,
                                   DayOfWeek calendarStartDay, String defaultTimezone) {
     }
@@ -95,7 +133,8 @@ public class CompanySettingsService {
     }
 
     @Schema(description = "What applies to the company: its own value where set, else the platform's")
-    public record EffectiveSettings(EffectiveSystem system, BrandSettings brand, EffectiveCurrency currency) {
+    public record EffectiveSettings(EffectiveSystem system, BrandSettings brand, EffectiveCurrency currency,
+                                    @Schema(description = "name = the profile's name, else the account name") CompanyProfileView profile) {
     }
 
     // ------------------------------------------------------------------ reads and writes
@@ -145,6 +184,35 @@ public class CompanySettingsService {
         return write(company(requestedCompanyId), CURRENCY, c);
     }
 
+    @Transactional(readOnly = true)
+    public CompanyProfileView profile(Long requestedCompanyId) {
+        Long companyId = company(requestedCompanyId);
+        return profileView(companyId, read(companyId, PROFILE, CompanyProfile.class), false);
+    }
+
+    /** Full replacement; blank strings are stored as null. */
+    @Transactional
+    public CompanyProfileView saveProfile(Long requestedCompanyId, CompanyProfile p) {
+        Long companyId = company(requestedCompanyId);
+        CompanyProfile clean = new CompanyProfile(trim(p.name()), trim(p.registrationNumber()), trim(p.address()),
+                trim(p.city()), trim(p.state()), trim(p.country()), trim(p.zipCode()), trim(p.phone()),
+                p.email() == null || p.email().isBlank() ? null : p.email().trim().toLowerCase(java.util.Locale.ROOT),
+                trim(p.senderName()), p.taxNumberEnabled(), p.taxType(), trim(p.taxNumber()));
+        return profileView(companyId, write(companyId, PROFILE, clean), false);
+    }
+
+    private CompanyProfileView profileView(Long companyId, CompanyProfile p, boolean effectiveName) {
+        String accountName = companies.findById(companyId).map(Company::getName).orElse(null);
+        return new CompanyProfileView(accountName, effectiveName ? or(p.name(), accountName) : p.name(),
+                p.registrationNumber(), p.address(), p.city(), p.state(), p.country(), p.zipCode(), p.phone(),
+                p.email(), p.senderName(), Boolean.TRUE.equals(p.taxNumberEnabled()),
+                p.taxType() == null ? ETaxType.VAT : p.taxType(), p.taxNumber());
+    }
+
+    private static String trim(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
     /** The merged settings the FE applies for this company. */
     @Transactional(readOnly = true)
     public EffectiveSettings effective(Long requestedCompanyId) {
@@ -181,7 +249,8 @@ public class CompanySettingsService {
                 symbol = own.get().getSymbol();
             }
         }
-        return new EffectiveSettings(system, brand, new EffectiveCurrency(code, symbol, format));
+        return new EffectiveSettings(system, brand, new EffectiveCurrency(code, symbol, format),
+                profileView(companyId, read(companyId, PROFILE, CompanyProfile.class), true));
     }
 
     // ------------------------------------------------------------------ helpers

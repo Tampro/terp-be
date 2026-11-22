@@ -18,10 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanyBrand;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanyCurrency;
+import com.terp.erp.iam.settings.CompanySettingsService.CompanyProfile;
+import com.terp.erp.iam.settings.CompanySettingsService.CompanyProfileView;
 import com.terp.erp.iam.settings.CompanySettingsService.CompanySystem;
 import com.terp.erp.iam.settings.CompanySettingsService.EffectiveSettings;
 
-@Tag(name = "Company settings", description = "System, Brand and Currency settings of the company")
+@Tag(name = "Company settings", description = "Profile, System, Brand and Currency settings of the company")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/settings/company")
@@ -95,5 +97,25 @@ public class CompanySettingsController {
     public ApiMessageDto<CompanyCurrency> saveCurrency(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
                                                        @Valid @RequestBody CompanyCurrency form) {
         return ApiMessageDto.ok(service.saveCurrency(companyId, form));
+    }
+
+    @Operation(summary = "Company Settings (profile)", description = "Name on documents, registration number, "
+            + "address, contacts, sender name and VAT/GST number. accountName is the company account's name, used "
+            + "where name is null.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = NO_COMPANY))
+    @PreAuthorize("@PermissionChecker.has('IAM_SETTINGS_MANAGE')")
+    @GetMapping("/profile")
+    public ApiMessageDto<CompanyProfileView> profile(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
+        return ApiMessageDto.ok(service.profile(companyId));
+    }
+
+    @Operation(summary = "Save Company Settings (profile)", description = "Full replacement: an omitted field is "
+            + "cleared. Blank strings are stored as null. The company account's name is not changed.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Validation (email, phone, lengths), " + NO_COMPANY))
+    @PreAuthorize("@PermissionChecker.has('IAM_SETTINGS_MANAGE')")
+    @PutMapping("/profile")
+    public ApiMessageDto<CompanyProfileView> saveProfile(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+                                                         @Valid @RequestBody CompanyProfile form) {
+        return ApiMessageDto.ok(service.saveProfile(companyId, form));
     }
 }

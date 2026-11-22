@@ -90,7 +90,7 @@ public class PublicSupportController {
     @Operation(summary = "Open a ticket; answers its number and tracking token (shown once)",
             description = "No attachments on the portal. Account type CUSTOM, status IN_PROGRESS.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
-            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_005 (category), SUP_034"),
+            @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_005 (category), SUP_034, custom fields SUP_035-SUP_039"),
             @ApiResponse(responseCode = "404", description = "SUP_009"),
             @ApiResponse(responseCode = "429", description = "COMMON_006 (gateway rate limit)")})
     public ApiMessageDto<PublicTicketCreated> create(@PathVariable String slug,

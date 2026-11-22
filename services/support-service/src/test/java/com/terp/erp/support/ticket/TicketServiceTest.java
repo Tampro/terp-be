@@ -35,8 +35,11 @@ class TicketServiceTest {
     private final MediaClient media = mock(MediaClient.class);
     private final Attachments attachments = new Attachments(media, new ObjectMapper());
     private final TicketCategoryService categories = new TicketCategoryService(categoryRepo, tickets);
+    private final TicketFieldRepository fieldRepo = mock(TicketFieldRepository.class);
+    private final TicketFieldValueRepository valueRepo = mock(TicketFieldValueRepository.class);
+    private final TicketFieldService fieldService = new TicketFieldService(fieldRepo, valueRepo, new ObjectMapper());
     private final TicketService service = new TicketService(tickets, replies, categoryRepo, categories, numbers,
-            attachments);
+            attachments, fieldService);
 
     @AfterEach
     void tearDown() {
@@ -70,7 +73,7 @@ class TicketServiceTest {
 
     private static TicketForm form(Long categoryId) {
         return new TicketForm(EAccountType.STAFF, " Test Staff ", "Staff@Example.com", categoryId, "Printer",
-                "<p>Broken<script>alert(1)</script></p>", null, null, "call back");
+                "<p>Broken<script>alert(1)</script></p>", null, null, "call back", null);
     }
 
     @Test

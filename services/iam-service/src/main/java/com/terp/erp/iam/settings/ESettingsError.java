@@ -18,7 +18,15 @@ public enum ESettingsError implements ErrorCode {
     SETTINGS_008("The language {0} does not exist or is disabled."),
     SETTINGS_009("The currency {0} does not exist."),
     SETTINGS_010("Stripe needs a publishable key, a secret key and a webhook signing secret to be enabled."),
-    SETTINGS_011("The Stripe keys are not {0} mode keys.");
+    SETTINGS_011("The Stripe keys are not {0} mode keys."),
+    SETTINGS_012("{0} cannot be enabled without {1}."),
+    SETTINGS_013("This URL is not allowed: {0}."),
+    SETTINGS_014("Unknown webhook event: {0}."),
+    SETTINGS_015("The webhook does not exist."),
+    SETTINGS_016("The Google service account JSON is not valid."),
+    SETTINGS_017("The {0} integration is not configured."),
+    SETTINGS_018("Unknown integration: {0}."),
+    SETTINGS_019("The value of {0} is not valid.");
 
     private final String message;
 }

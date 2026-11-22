@@ -9,8 +9,11 @@ import com.terp.erp.support.common.Texts;
 import com.terp.erp.support.ticket.Attachments.Attachment;
 import com.terp.erp.support.ticket.Ticket.EAccountType;
 import com.terp.erp.support.ticket.Ticket.EStatus;
+import com.terp.erp.support.ticket.TicketFieldService.CustomFieldInput;
+import com.terp.erp.support.ticket.TicketFieldService.CustomFieldValue;
 import com.terp.erp.support.ticket.TicketReply.ESender;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -45,7 +48,7 @@ public class TicketService {
 
     /** note is internal: only this admin view carries it. */
     public record TicketDto(TicketRow ticket, String description, List<Attachment> attachments, String note,
-                            List<ReplyDto> replies) {
+                            List<ReplyDto> replies, List<CustomFieldValue> customFields) {
     }
 
     /** trackingToken: shown once; give it to the customer to open the ticket on the portal. */
@@ -71,7 +74,10 @@ public class TicketService {
             EStatus status,
             @Schema(description = "media-service file ids of the company, at most 10") @Size(max = 10)
             List<Long> attachmentFileIds,
-            @Schema(description = "Internal note, never shown on the portal") @Size(max = 5000) String note) {
+            @Schema(description = "Internal note, never shown on the portal") @Size(max = 5000) String note,
+            @Schema(description = "Values of the company's active ticket fields (GET /support/ticket-fields). "
+                    + "Update: replaces the values of active fields; values of inactive fields stay")
+            @Size(max = 100) List<@Valid CustomFieldInput> customFields) {
     }
 
     public record StatusForm(
@@ -95,6 +101,7 @@ public class TicketService {
     private final TicketCategoryService categories;
     private final TicketNumbers numbers;
     private final Attachments attachments;
+    private final TicketFieldService fields;
 
     @Transactional(readOnly = true)
     public Page<TicketRow> list(Long requestedCompanyId, EStatus status, Long categoryId, EAccountType accountType,
@@ -126,9 +133,11 @@ public class TicketService {
     public CreatedTicketDto create(Long requestedCompanyId, TicketForm f) {
         Long companyId = Texts.company(requestedCompanyId);
         List<Attachment> files = attachments.resolve(f.attachmentFileIds(), companyId);
+        Map<Long, String> custom = fields.validate(companyId, f.customFields());
         Created c = open(companyId, f.accountType(), f.name(), f.email(), f.categoryId(), f.subject(),
                 f.description(), f.status(), files, false);
         c.ticket().setNote(Texts.blankToNull(f.note()));
+        fields.store(companyId, c.ticket().getId(), custom);
         return new CreatedTicketDto(dto(c.ticket()), c.trackingToken());
     }
 
@@ -137,6 +146,7 @@ public class TicketService {
     public TicketDto update(Long id, TicketForm f) {
         Ticket t = require(id);
         categories.requireForTicket(f.categoryId(), t.getCompanyId());
+        Map<Long, String> custom = fields.validate(t.getCompanyId(), f.customFields());
         t.setAccountType(f.accountType());
         t.setName(f.name().trim());
         t.setEmail(Texts.email(f.email()));
@@ -148,6 +158,7 @@ public class TicketService {
         }
         t.setAttachments(attachments.write(attachments.resolve(f.attachmentFileIds(), t.getCompanyId())));
         t.setNote(Texts.blankToNull(f.note()));
+        fields.store(t.getCompanyId(), t.getId(), custom);
         return dto(t);
     }
 
@@ -219,6 +230,10 @@ public class TicketService {
         return attachments.read(t.getAttachments());
     }
 
+    public List<CustomFieldValue> customFieldsOf(Ticket t) {
+        return fields.valuesOf(t.getId());
+    }
+
     public String categoryName(Ticket t) {
         return t.getCategoryId() == null ? null : categoryNames(List.of(t)).get(t.getCategoryId());
     }
@@ -249,7 +264,7 @@ public class TicketService {
 
     private TicketDto dto(Ticket t) {
         return new TicketDto(row(t, categoryNames(List.of(t))), t.getDescription(), attachmentsOf(t), t.getNote(),
-                conversation(t));
+                conversation(t), customFieldsOf(t));
     }
 
     private static TicketRow row(Ticket t, Map<Long, String> names) {
