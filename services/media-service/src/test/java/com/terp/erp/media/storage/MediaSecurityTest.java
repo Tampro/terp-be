@@ -25,7 +25,7 @@ class MediaSecurityTest {
 
     private static MediaProperties props(Path dir) {
         return new MediaProperties(dir.toString(), "test-secret-test-secret-test-secret!!", Duration.ofMinutes(10),
-                DataSize.ofMegabytes(10), "http://localhost:8080", "http://iam", "erp-employee-service");
+                DataSize.ofMegabytes(10), "http://localhost:8080", "http://iam", java.util.List.of("erp-employee-service"));
     }
 
     @Test

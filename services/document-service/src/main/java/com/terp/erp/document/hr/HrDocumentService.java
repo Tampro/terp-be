@@ -171,7 +171,8 @@ public class HrDocumentService {
     }
 
     Download link(HrDocument d) {
-        MediaFile f = media.require(d.getFileId(), d.getCompanyId());
+        // The caller was authorized for this document above; media-service would also demand MEDIA_VIEW.
+        MediaFile f = media.linksAsService(d.getFileId(), d.getCompanyId());
         return new Download(f.downloadUrl());
     }
 

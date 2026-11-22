@@ -41,8 +41,9 @@ erp:
     max-file-size: ${MEDIA_MAX_FILE_SIZE:10MB}
     public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
-    # Service account allowed on /api/v1/internal/** (employee-service: announcement attachments).
-    internal-client-id: ${MEDIA_INTERNAL_CLIENT_ID:erp-employee-service}
+    # Service accounts allowed on /api/v1/internal/** (employee-service: announcement attachments;
+    # document-service: HR document downloads), comma-separated.
+    internal-client-ids: ${MEDIA_INTERNAL_CLIENT_IDS:erp-employee-service,erp-document-service}
 
 management:
   endpoints:

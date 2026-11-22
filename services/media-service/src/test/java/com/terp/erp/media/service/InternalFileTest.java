@@ -32,7 +32,7 @@ class InternalFileTest {
     private MediaService service(Path dir) {
         MediaProperties props = new MediaProperties(dir.toString(), "test-secret-test-secret-test-secret!!",
                 Duration.ofMinutes(10), DataSize.ofMegabytes(10), "http://localhost:8080", "http://iam",
-                "erp-employee-service");
+                java.util.List.of("erp-employee-service"));
         LinkSigner signer = new LinkSigner(props, Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC));
         return new MediaService(files, mock(MediaFolderRepository.class), mock(FileStorage.class), signer, props,
                 mock(StoragePolicyClient.class));
