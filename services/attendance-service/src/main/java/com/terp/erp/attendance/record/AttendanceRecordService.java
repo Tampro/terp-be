@@ -235,12 +235,12 @@ public class AttendanceRecordService {
         return companyId;
     }
 
-    private Shift ownShift(Long companyId, String id) {
+    Shift ownShift(Long companyId, String id) {
         return id == null ? null : shifts.findById(Long.valueOf(id))
                 .filter(s -> Objects.equals(s.getCompanyId(), companyId)).orElse(null);
     }
 
-    private AttendancePolicy ownPolicy(Long companyId, String id) {
+    AttendancePolicy ownPolicy(Long companyId, String id) {
         return id == null ? null : policies.findById(Long.valueOf(id))
                 .filter(p -> Objects.equals(p.getCompanyId(), companyId)).orElse(null);
     }

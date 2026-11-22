@@ -45,6 +45,10 @@ public class AttendanceRecord extends BaseAuditableEntity {
     @Column(name = "clock_out")
     private LocalTime clockOut;
 
+    /** The clock-out was set by AutoClockOutService at the shift end, not by the employee. */
+    @Column(name = "auto_clocked_out", nullable = false)
+    private boolean autoClockedOut;
+
     @Column(name = "total_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal totalHours = BigDecimal.ZERO;
 

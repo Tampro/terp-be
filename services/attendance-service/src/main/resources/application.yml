@@ -45,6 +45,11 @@ erp:
       failed-per-minute: ${DEVICE_RATE_FAILED_PER_MINUTE:10}
       # true only behind the gateway (compose): the client IP is then the last X-Forwarded-For entry.
       trust-forwarded-for: ${DEVICE_RATE_TRUST_FORWARDED_FOR:false}
+    # Forgotten clock-outs closed at the shift end, once the end + after-end-minutes has passed.
+    auto-clock-out:
+      enabled: ${ATTENDANCE_AUTO_CLOCK_OUT_ENABLED:true}
+      cron: ${ATTENDANCE_AUTO_CLOCK_OUT_CRON:0 */15 * * * *}
+      after-end-minutes: ${ATTENDANCE_AUTO_CLOCK_OUT_AFTER_END_MINUTES:60}
 
 management:
   endpoints:

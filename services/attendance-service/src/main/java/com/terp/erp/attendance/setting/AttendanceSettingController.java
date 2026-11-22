@@ -29,7 +29,9 @@ public class AttendanceSettingController {
 
     private final AttendanceSettingService service;
 
-    @Operation(summary = "Weekly days off of the company", description = "Default SATURDAY and SUNDAY.")
+    @Operation(summary = "Attendance settings of the company",
+            description = "Weekly days off (default SATURDAY and SUNDAY; working days are the others) and the IP "
+                    + "restriction of self clock-in/out (default off).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (ATT_004)"))
     @PreAuthorize("@PermissionChecker.has('ATTENDANCE_VIEW')")
     @GetMapping
@@ -37,9 +39,11 @@ public class AttendanceSettingController {
         return ApiMessageDto.ok(service.get(companyId));
     }
 
-    @Operation(summary = "Set the weekly days off (full replacement)",
-            description = "Applies to the calendar from now on; saved records keep their weekend flag.")
-    @ApiResponses(@ApiResponse(responseCode = "400", description = "Not 1 to 6 days (ATT_017), no company (ATT_004)"))
+    @Operation(summary = "Save the attendance settings (full replacement)",
+            description = "Days off apply to the calendar from now on; saved records keep their weekend flag. "
+                    + "Omitted ipRestrictionEnabled / allowedIps = off / none.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Not 1 to 6 days (ATT_017), no company (ATT_004), "
+            + "invalid IP or CIDR (ATT_057), more than 100 IPs (ATT_058), restriction on without IPs (ATT_059)"))
     @PreAuthorize("@PermissionChecker.has('ATTENDANCE_MANAGE')")
     @PutMapping
     public ApiMessageDto<SettingsDto> save(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
