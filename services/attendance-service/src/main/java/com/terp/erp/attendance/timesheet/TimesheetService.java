@@ -12,6 +12,8 @@ import com.terp.erp.attendance.regularization.ERegularizationStatus;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.DayCell;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.EntryDto;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.EntryForm;
+import com.terp.erp.attendance.timesheet.TimesheetDtos.Month;
+import com.terp.erp.attendance.timesheet.TimesheetDtos.MonthRow;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.StatusCounts;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.Week;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.WeekRow;
@@ -21,12 +23,15 @@ import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +47,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TimesheetService {
     static final BigDecimal DAY_MAX = new BigDecimal("24");
+    static final BigDecimal MIN_TIME = new BigDecimal("0.25");
     /** TODO(assumption): "today" is the Vietnam date until companies carry their own time zone. */
     static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
@@ -75,6 +81,66 @@ public class TimesheetService {
         StatusCounts counts = ids.isEmpty() ? new StatusCounts(0, 0, 0, 0)
                 : counts(entries.countByStatus(companyId, ids, monday, sunday));
         return new Week(monday, sunday, rows, counts, page, size, total);
+    }
+
+    /** hours + minutes / 60, kept to 2 decimals (the column's scale). */
+    static BigDecimal total(EntryForm f) {
+        BigDecimal minutes = f.minutes() == null ? BigDecimal.ZERO
+                : BigDecimal.valueOf(f.minutes()).divide(BigDecimal.valueOf(60), 4, RoundingMode.HALF_UP);
+        return f.hours().add(minutes).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** The month grid (ERP manual 11.5): one row per employee, one cell per day, totals per row, day and month. */
+    @Transactional(readOnly = true)
+    public Month month(Long requestedCompanyId, int year, int month, Long employeeId, String keyword,
+                       ERegularizationStatus status, int page, int size) {
+        Long companyId = company(requestedCompanyId);
+        YearMonth ym = YearMonth.of(year, month);
+        LocalDate first = ym.atDay(1);
+        LocalDate last = ym.atEndOfMonth();
+        List<Employee> people;
+        long total;
+        if (employeeId != null) {
+            people = List.of(employees.get(employeeId));
+            total = 1;
+        } else {
+            EmployeePage p = employees.page(requestedCompanyId, keyword, page, size);
+            people = p.content();
+            total = p.totalElements();
+        }
+        List<Long> ids = people.stream().map(e -> Long.valueOf(e.id())).toList();
+        Map<Long, List<TimeEntry>> byEmployee = ids.isEmpty() ? Map.of()
+                : entries.forEmployees(companyId, ids, first, last, status).stream()
+                .collect(Collectors.groupingBy(TimeEntry::getEmployeeId));
+        int days = ym.lengthOfMonth();
+        List<MonthRow> rows = new ArrayList<>();
+        List<BigDecimal> dayTotals = new ArrayList<>(Collections.nCopies(days, BigDecimal.ZERO));
+        BigDecimal grand = BigDecimal.ZERO;
+        for (Employee e : people) {
+            List<DayCell> cells = cells(first, days, byEmployee.getOrDefault(Long.valueOf(e.id()), List.of()));
+            BigDecimal sum = BigDecimal.ZERO;
+            for (int i = 0; i < days; i++) {
+                dayTotals.set(i, dayTotals.get(i).add(cells.get(i).hours()));
+                sum = sum.add(cells.get(i).hours());
+            }
+            grand = grand.add(sum);
+            rows.add(new MonthRow(e.id(), e.fullName(), e.designation() == null ? null : e.designation().name(),
+                    e.profileImageUrl(), cells, sum));
+        }
+        StatusCounts counts = ids.isEmpty() ? new StatusCounts(0, 0, 0, 0)
+                : counts(entries.countByStatus(companyId, ids, first, last));
+        return new Month(year, month, first, last, rows, dayTotals, grand, counts, page, size, total);
+    }
+
+    static List<DayCell> cells(LocalDate start, int days, List<TimeEntry> list) {
+        List<DayCell> out = new ArrayList<>();
+        for (int i = 0; i < days; i++) {
+            LocalDate d = start.plusDays(i);
+            List<TimeEntry> mine = list.stream().filter(t -> t.getWorkDate().equals(d)).toList();
+            BigDecimal hours = mine.stream().map(TimeEntry::getHours).reduce(BigDecimal.ZERO, BigDecimal::add);
+            out.add(new DayCell(d, hours, mine.size(), dayStatus(mine)));
+        }
+        return out;
     }
 
     static WeekRow row(Employee e, LocalDate monday, List<TimeEntry> list) {
@@ -156,14 +222,19 @@ public class TimesheetService {
         if (f.date().isAfter(LocalDate.now(clock.withZone(ZONE)))) {
             throw ApiException.badRequest(EAttendanceError.ATT_032);
         }
+        BigDecimal hours = total(f);
+        if (hours.compareTo(MIN_TIME) < 0) {
+            throw ApiException.badRequest(EAttendanceError.ATT_053);
+        }
         BigDecimal other = entries.hoursOfDay(f.employeeId(), f.date(), t.getId() == null ? -1L : t.getId());
-        if (other.add(f.hours()).compareTo(DAY_MAX) > 0) {
+        if (other.add(hours).compareTo(DAY_MAX) > 0) {
             throw ApiException.badRequest(EAttendanceError.ATT_031);
         }
         t.setCompanyId(companyId);
         t.setEmployeeId(f.employeeId());
         t.setWorkDate(f.date());
-        t.setHours(f.hours());
+        t.setHours(hours);
+        t.setEntryType(f.type() == null ? ETimeEntryType.MANUAL : f.type());
         t.setProject(Texts.blankToNull(f.project()));
         t.setDescription(f.description().trim());
         return entries.save(t);

@@ -32,6 +32,10 @@ public class TimeEntry extends BaseAuditableEntity {
     @Column(name = "hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal hours;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_type", nullable = false, length = 15)
+    private ETimeEntryType entryType = ETimeEntryType.MANUAL;
+
     /** Shown as the entry's Title in the day popup. */
     @Column(name = "project", length = 150)
     private String project;

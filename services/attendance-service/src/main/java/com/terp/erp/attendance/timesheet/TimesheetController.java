@@ -32,6 +32,7 @@ import com.terp.erp.attendance.regularization.ERegularizationStatus;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.DecisionForm;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.EntryDto;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.EntryForm;
+import com.terp.erp.attendance.timesheet.TimesheetDtos.Month;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.ImportResult;
 import com.terp.erp.attendance.timesheet.TimesheetDtos.Week;
 import com.terp.erp.common.ApiMessageDto;
@@ -73,6 +74,25 @@ public class TimesheetController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(200) int size) {
         return ApiMessageDto.ok(service.week(companyId, date, employeeId, keyword, status, page, size));
+    }
+
+    @Operation(summary = "Monthly grid of the month (ERP manual 11.5)",
+            description = "One row per employee (paged; keyword = employee search; employeeId = one user), one cell per "
+                    + "day of the month with hours, entry count and the day's status; row, day and month totals. status "
+                    + "filters the entries. Needs EMPLOYEE_VIEW too.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (ATT_004), month "
+            + "or year out of range (COMMON_001)"))
+    @PreAuthorize("@PermissionChecker.has('ATTENDANCE_VIEW')")
+    @GetMapping("/month")
+    public ApiMessageDto<Month> month(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam @Min(2000) @Max(2100) int year, @RequestParam @Min(1) @Max(12) int month,
+            @RequestParam(required = false) Long employeeId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) ERegularizationStatus status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(200) int size) {
+        return ApiMessageDto.ok(service.month(companyId, year, month, employeeId, keyword, status, page, size));
     }
 
     @Operation(summary = "Every entry of one employee's day (View All)")

@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261120250000_leave_type_policy_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261120260000_leave_application_balance_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122330000_time_entry_type_changelog.mysql.sql

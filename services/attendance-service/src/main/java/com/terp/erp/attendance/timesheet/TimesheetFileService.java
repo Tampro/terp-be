@@ -105,7 +105,7 @@ public class TimesheetFileService {
                 }
                 service.save(new TimeEntry(), companyId,
                         new EntryForm(Long.valueOf(e.id()), date, hours, r[3], r[4].length() > 1000
-                                ? r[4].substring(0, 1000) : r[4]));
+                                ? r[4].substring(0, 1000) : r[4], ETimeEntryType.MANUAL, null));
                 created++;
             } catch (ApiException ex) {
                 errors.add(new RowError(n, ex.getErrorCode().getCode(), messages.resolve(ex.getErrorCode(), ex.getArgs())));
