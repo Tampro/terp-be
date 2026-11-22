@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122410000_payment_note_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122500000_double_entry_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261122600000_goal_budget_changelog.mysql.sql

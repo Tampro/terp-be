@@ -52,4 +52,12 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
             + "from JournalEntry e join e.lines l where e.companyId = :companyId and e.status in :statuses "
             + "and e.entryDate < :before group by l.accountId")
     List<AccountSum> sumsBefore(Long companyId, Collection<EJournalStatus> statuses, LocalDate before);
+
+    /** Totals per account of counted lines on the given accounts dated from..to (both inclusive). */
+    @Query("select new com.terp.erp.accounting.ledger.AccountSum(l.accountId, sum(l.debit), sum(l.credit)) "
+            + "from JournalEntry e join e.lines l where e.companyId = :companyId and e.status in :statuses "
+            + "and l.accountId in :accountIds and e.entryDate >= :from and e.entryDate <= :to "
+            + "group by l.accountId")
+    List<AccountSum> sumsBetween(Long companyId, Collection<Long> accountIds, Collection<EJournalStatus> statuses,
+                                 LocalDate from, LocalDate to);
 }
