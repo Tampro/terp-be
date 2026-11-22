@@ -1,4 +1,4 @@
-# Local stack: MySQL + Keycloak + IAM + media + employee + attendance + recruitment + payroll + asset + meeting + document + gateway. Secrets come from .env (copy .env.example; .env is gitignored).
+# Local stack: MySQL + Keycloak + RabbitMQ + IAM + media + employee + attendance + recruitment + payroll + asset + meeting + document + gateway. Secrets come from .env (copy .env.example; .env is gitignored).
 # Build the jars first: mvn -DskipTests package
 name: erp
 
@@ -6,6 +6,8 @@ services:
   mysql:
     image: mysql:8.4.3
     mem_limit: 1g
+    # 16 services × a pool of DB_POOL_SIZE (default 5) plus Keycloak; the MySQL default of 151 was exhausted at 15 × 10.
+    command: ["--max-connections=400"]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set in .env}
       IAM_DB_USERNAME: ${IAM_DB_USERNAME:?set in .env}
@@ -40,6 +42,8 @@ services:
       PROJECT_DB_PASSWORD: ${PROJECT_DB_PASSWORD:?set in .env}
       SUPPORT_DB_USERNAME: ${SUPPORT_DB_USERNAME:-erp_support}
       SUPPORT_DB_PASSWORD: ${SUPPORT_DB_PASSWORD:?set in .env}
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-erp_notification}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
     ports:
       - "13316:3306"
     volumes:
@@ -70,6 +74,7 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?set in .env}
       EMPLOYEE_SERVICE_CLIENT_SECRET: ${EMPLOYEE_SERVICE_CLIENT_SECRET:?set in .env}
       DOCUMENT_SERVICE_CLIENT_SECRET: ${DOCUMENT_SERVICE_CLIENT_SECRET:?set in .env}
+      NOTIFICATION_SERVICE_CLIENT_SECRET: ${NOTIFICATION_SERVICE_CLIENT_SECRET:?set in .env}
       ERP_SUPERADMIN_INITIAL_PASSWORD: ${ERP_SUPERADMIN_INITIAL_PASSWORD:?set in .env}
     ports:
       - "18180:8080"
@@ -85,11 +90,34 @@ services:
       timeout: 5s
       retries: 30
 
+  # Broker of the outbox events (topic exchange erp.events). AMQP on host 15673, management UI http://localhost:25672
+  # (both clear of the ERP 13316/18xxx ports and of the HRM stack's 8xxx/3316).
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    mem_limit: 512m
+    # Fixed node name, so the data on the volume belongs to the same node after a re-create.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set in .env}
+    ports:
+      - "15673:5672"
+      - "25672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
   iam-service:
     build: ./services/iam-service
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       IAM_DB_URL: jdbc:mysql://mysql:3306/erp_iam?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       IAM_DB_USERNAME: ${IAM_DB_USERNAME}
       IAM_DB_PASSWORD: ${IAM_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -119,6 +147,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       MEDIA_DB_URL: jdbc:mysql://mysql:3306/erp_media?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       MEDIA_DB_USERNAME: ${MEDIA_DB_USERNAME:-erp_media}
       MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD}
       # HMAC key of the time-limited file links (>= 32 chars).
@@ -143,6 +172,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       EMPLOYEE_DB_URL: jdbc:mysql://mysql:3306/erp_employee?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       EMPLOYEE_DB_USERNAME: ${EMPLOYEE_DB_USERNAME:-erp_employee}
       EMPLOYEE_DB_PASSWORD: ${EMPLOYEE_DB_PASSWORD}
       # AES key of bank account number / tax payer id: openssl rand -base64 32
@@ -166,6 +196,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       ATTENDANCE_DB_URL: jdbc:mysql://mysql:3306/erp_attendance?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       ATTENDANCE_DB_USERNAME: ${ATTENDANCE_DB_USERNAME:-erp_attendance}
       ATTENDANCE_DB_PASSWORD: ${ATTENDANCE_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -188,6 +219,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       RECRUITMENT_DB_URL: jdbc:mysql://mysql:3306/erp_recruitment?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       RECRUITMENT_DB_USERNAME: ${RECRUITMENT_DB_USERNAME:-erp_recruitment}
       RECRUITMENT_DB_PASSWORD: ${RECRUITMENT_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -195,6 +227,10 @@ services:
       IAM_SERVICE_URL: http://iam-service:8081
       EMPLOYEE_SERVICE_URL: http://employee-service:8083
       RECRUITMENT_STORAGE_DIR: /data/recruitment
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18085:8085"
     volumes:
@@ -204,12 +240,15 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   payroll-service:
     build: ./services/payroll-service
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       PAYROLL_DB_URL: jdbc:mysql://mysql:3306/erp_payroll?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       PAYROLL_DB_USERNAME: ${PAYROLL_DB_USERNAME:-erp_payroll}
       PAYROLL_DB_PASSWORD: ${PAYROLL_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -231,6 +270,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       ASSET_DB_URL: jdbc:mysql://mysql:3306/erp_asset?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       ASSET_DB_USERNAME: ${ASSET_DB_USERNAME:-erp_asset}
       ASSET_DB_PASSWORD: ${ASSET_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -251,6 +291,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       MEETING_DB_URL: jdbc:mysql://mysql:3306/erp_meeting?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       MEETING_DB_USERNAME: ${MEETING_DB_USERNAME:-erp_meeting}
       MEETING_DB_PASSWORD: ${MEETING_DB_PASSWORD}
       MEETING_ENC_KEY: ${MEETING_ENC_KEY:?set in .env}
@@ -273,6 +314,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       DOCUMENT_DB_URL: jdbc:mysql://mysql:3306/erp_document?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       DOCUMENT_DB_USERNAME: ${DOCUMENT_DB_USERNAME:-erp_document}
       DOCUMENT_DB_PASSWORD: ${DOCUMENT_DB_PASSWORD}
       # Secret of Keycloak client erp-document-service (realm import reads the same value).
@@ -318,6 +360,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       INVENTORY_DB_URL: jdbc:mysql://mysql:3306/erp_inventory?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       INVENTORY_DB_USERNAME: ${INVENTORY_DB_USERNAME:-erp_inventory}
       INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -337,6 +380,7 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       COMMERCE_DB_URL: jdbc:mysql://mysql:3306/erp_commerce?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       COMMERCE_DB_USERNAME: ${COMMERCE_DB_USERNAME:-erp_commerce}
       COMMERCE_DB_PASSWORD: ${COMMERCE_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -344,6 +388,10 @@ services:
       IAM_SERVICE_URL: http://iam-service:8081
       INVENTORY_SERVICE_URL: http://inventory-service:8091
       ACCOUNTING_SERVICE_URL: http://accounting-service:8093
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18092:8092"
     depends_on:
@@ -351,18 +399,25 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   accounting-service:
     build: ./services/accounting-service
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       ACCOUNTING_DB_URL: jdbc:mysql://mysql:3306/erp_accounting?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       ACCOUNTING_DB_USERNAME: ${ACCOUNTING_DB_USERNAME:-erp_accounting}
       ACCOUNTING_DB_PASSWORD: ${ACCOUNTING_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
       COMMERCE_SERVICE_URL: http://commerce-service:8092
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18093:8093"
     depends_on:
@@ -370,12 +425,15 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   crm-service:
     build: ./services/crm-service
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       CRM_DB_URL: jdbc:mysql://mysql:3306/erp_crm?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       CRM_DB_USERNAME: ${CRM_DB_USERNAME:-erp_crm}
       CRM_DB_PASSWORD: ${CRM_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -384,6 +442,10 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:8091
       MEDIA_SERVICE_URL: http://media-service:8082
       ACCOUNTING_SERVICE_URL: http://accounting-service:8093
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18094:8094"
     depends_on:
@@ -391,12 +453,15 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   project-service:
     build: ./services/project-service
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       PROJECT_DB_URL: jdbc:mysql://mysql:3306/erp_project?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       PROJECT_DB_USERNAME: ${PROJECT_DB_USERNAME:-erp_project}
       PROJECT_DB_PASSWORD: ${PROJECT_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
@@ -418,18 +483,53 @@ services:
     mem_limit: 1g  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
     environment:
       SUPPORT_DB_URL: jdbc:mysql://mysql:3306/erp_support?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
       SUPPORT_DB_USERNAME: ${SUPPORT_DB_USERNAME:-erp_support}
       SUPPORT_DB_PASSWORD: ${SUPPORT_DB_PASSWORD}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
       MEDIA_SERVICE_URL: http://media-service:8082
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18096:8096"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Consumes erp.events and sends email / Slack / Telegram / webhooks; channel settings from IAM's internal API.
+  notification-service:
+    build: ./services/notification-service
+    mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
+    environment:
+      NOTIFICATION_DB_URL: jdbc:mysql://mysql:3306/erp_notification?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-erp_notification}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      # Secret of Keycloak client erp-notification-service (realm import reads the same value).
+      NOTIFICATION_SERVICE_CLIENT_SECRET: ${NOTIFICATION_SERVICE_CLIENT_SECRET:?set in .env}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
+      IAM_SERVICE_URL: http://iam-service:8081
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "18097:8097"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   gateway-server:
@@ -454,6 +554,7 @@ services:
       CRM_SERVICE_URL: http://crm-service:8094
       PROJECT_SERVICE_URL: http://project-service:8095
       SUPPORT_SERVICE_URL: http://support-service:8096
+      NOTIFICATION_SERVICE_URL: http://notification-service:8097
     ports:
       - "18080:8080"
     depends_on:
@@ -462,5 +563,6 @@ services:
 
 volumes:
   mysql-data:
+  rabbitmq-data:
   media-data:
   recruitment-data:

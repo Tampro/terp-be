@@ -93,6 +93,16 @@ public class DocumentPostingService {
             throw ApiException.forbidden(ECommonError.COMMON_004);
         }
         Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
+        return postFor(companyId, f);
+    }
+
+    /**
+     * The journal of a commerce document for a company, without a caller: used by the REST endpoint above after its
+     * permission and tenant checks, and by {@link PostingEventIntake} for commerce.journal.requested (commerce checked
+     * SALES_POST / PURCHASE_POST when it published the event; the company comes from the event).
+     */
+    @Transactional
+    public PostingDto postFor(Long companyId, PostingForm f) {
         Optional<com.terp.erp.accounting.ledger.JournalEntry> existing = entries
                 .findByCompanyIdAndSourceTypeAndSourceId(companyId, f.sourceType().name(), f.sourceId());
         if (existing.isPresent()) {

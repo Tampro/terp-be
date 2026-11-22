@@ -56,7 +56,7 @@ class PublicSupportServiceTest {
     final TicketFieldValueRepository valueRepo = mock(TicketFieldValueRepository.class);
     private final TicketFieldService fieldService = new TicketFieldService(fieldRepo, valueRepo, mapper);
     private final TicketService ticketService = new TicketService(tickets, replies, categoryRepo, categories, numbers,
-            new Attachments(media, mapper), fieldService);
+            new Attachments(media, mapper), fieldService, mock(com.terp.erp.outbox.OutboxPublisher.class));
     private final PublicSupportService service = new PublicSupportService(settings, pages,
             new PortalSettingsService(settings, pages, mapper), categories, ticketService, tickets,
             mock(KnowledgeService.class), mock(FaqService.class), mock(ContactService.class), fieldService);

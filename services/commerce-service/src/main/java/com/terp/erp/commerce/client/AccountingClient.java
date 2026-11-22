@@ -73,10 +73,11 @@ public class AccountingClient {
     }
 
     /**
-     * The document's journal entry (POST /journal-postings), idempotent per (sourceType, sourceId). validateOnly =
-     * true checks mapping, closed year (ACC_070) and balance and writes nothing. Errors are relayed.
+     * Checks the document's journal entry (POST /journal-postings, validateOnly = true): mapping (ACC_017), closed
+     * year (ACC_070) and balance; writes nothing. The entry itself is requested through the outbox
+     * ({@link com.terp.erp.commerce.common.Postings}). Errors are relayed.
      */
-    public void journal(Posting p, boolean validateOnly) {
+    public void validate(Posting p) {
         Map<String, Object> body = new HashMap<>();
         body.put("sourceType", p.sourceType());
         body.put("sourceId", p.sourceId());
@@ -87,7 +88,7 @@ public class AccountingClient {
         body.put("serviceAmount", p.serviceAmount());
         body.put("taxAmount", p.taxAmount());
         body.put("costAmount", p.costAmount());
-        body.put("validateOnly", validateOnly);
+        body.put("validateOnly", true);
         http.call(c -> c.post().uri("/api/v1/accounting/journal-postings").body(body));
     }
 

@@ -56,9 +56,11 @@ public class PurchaseInvoiceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @Parameter(description = "Matches the number or the vendor") @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "false") boolean overdue,
+            @Parameter(description = "PENDING, POSTED or FAILED: state of the asynchronous accounting journal")
+            @RequestParam(required = false) com.terp.erp.commerce.common.EJournalStatus journalStatus,
             @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, vendorId, warehouseId, from, to, keyword,
-                status, overdue, pageable)));
+                status, overdue, journalStatus, pageable)));
     }
 
     @Operation(summary = "Unified calendar: purchase invoices falling due in a period",
@@ -122,15 +124,31 @@ public class PurchaseInvoiceController {
         return ApiMessageDto.ok(null);
     }
 
-    @Operation(summary = "Post: DRAFT → POSTED", description = "Stock lines go into the receiving warehouse.")
+    @Operation(summary = "Post: DRAFT → POSTED", description = "Stock lines go into the receiving warehouse. The "
+            + "journal is checked now but written asynchronously by accounting: journalStatus PENDING, then POSTED or "
+            + "FAILED (poll the invoice).")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "Not a draft (PUR_002), no warehouse for stock "
-            + "items (PUR_005), stock errors (INV_ codes relayed)"),
+            + "items (PUR_005), stock errors (INV_ codes relayed), closed year (ACC_070) / unmapped account "
+            + "(ACC_017) relayed"),
             @ApiResponse(responseCode = "404", description = "PUR_001"),
-            @ApiResponse(responseCode = "503", description = "Inventory unavailable (SAL_015)")})
+            @ApiResponse(responseCode = "503", description = "Inventory (SAL_015) or accounting (SAL_016) unavailable")})
     @PreAuthorize("@PermissionChecker.has('PURCHASE_POST')")
     @PostMapping("/{id}/post")
     public ApiMessageDto<InvoiceDetail> post(@PathVariable Long id) {
         return ApiMessageDto.ok(service.post(id));
+    }
+
+    @Operation(summary = "Re-post the journal of a purchase invoice whose journal FAILED", description = "Checks the "
+            + "journal again with accounting, then requests it again: journalStatus → PENDING. Moves no stock; "
+            + "accounting writes the entry once per invoice.")
+    @ApiResponses({@ApiResponse(responseCode = "400", description = "journalStatus is not FAILED (PUR_017), closed "
+            + "year (ACC_070) / unmapped account (ACC_017) relayed"),
+            @ApiResponse(responseCode = "404", description = "No such invoice in your company (PUR_001)"),
+            @ApiResponse(responseCode = "503", description = "Accounting unavailable (SAL_016)")})
+    @PreAuthorize("@PermissionChecker.has('PURCHASE_POST')")
+    @PostMapping("/{id}/journal/retry")
+    public ApiMessageDto<InvoiceDetail> retryJournal(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.retryJournal(id));
     }
 
     @Operation(summary = "Apply a cleared payment (called by accounting-service)", description = "Takes amount off the "

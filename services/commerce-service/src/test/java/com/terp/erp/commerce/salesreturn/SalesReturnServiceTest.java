@@ -46,8 +46,9 @@ class SalesReturnServiceTest {
     private final Numbering numbering = mock(Numbering.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
     private final AccountingClient accounting = mock(AccountingClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final SalesReturnService service = new SalesReturnService(returns, documents, numbering, inventory,
-            accounting, Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
+            accounting, Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC), outbox);
     private final SalesDocument invoice = new SalesDocument();
 
     @BeforeEach
@@ -156,13 +157,16 @@ class SalesReturnServiceTest {
                 eq(List.of(new InventoryClient.MoveLine(1L, 3L, new BigDecimal("2")))));
         assertThat(done.ret().status()).isEqualTo(SalesReturn.EStatus.COMPLETED);
         // validated first, then journalled: net 180 (5213), VAT 18, cost 2 x 60 = 120 at the invoice line's cost
-        var order = org.mockito.Mockito.inOrder(accounting, inventory);
-        order.verify(accounting).journal(any(), eq(true));
-        order.verify(inventory).move(eq("SALES_RETURN"), eq(70L), anyList());
-        order.verify(accounting).journal(org.mockito.ArgumentMatchers.argThat(p -> p.sourceType().equals("SALES_RETURN")
+        var order = org.mockito.Mockito.inOrder(accounting, inventory, outbox);
+        order.verify(accounting).validate(org.mockito.ArgumentMatchers.argThat(p -> p.sourceType().equals("SALES_RETURN")
                 && p.sourceId() == 70L && p.goodsAmount().compareTo(new BigDecimal("180")) == 0
                 && p.serviceAmount().signum() == 0 && p.taxAmount().compareTo(new BigDecimal("18")) == 0
-                && p.costAmount().compareTo(new BigDecimal("120")) == 0), eq(false));
+                && p.costAmount().compareTo(new BigDecimal("120")) == 0));
+        order.verify(inventory).move(eq("SALES_RETURN"), eq(70L), anyList());
+        order.verify(outbox).publish(any(), eq("commerce.journal.requested"), eq("SALES_RETURN"), eq(70L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> new BigDecimal("120")
+                        .compareTo((BigDecimal) ((java.util.Map<?, ?>) p).get("costAmount")) == 0));
+        assertThat(done.ret().journalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
         assertThatThrownBy(() -> service.delete(70L))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_013);
     }
@@ -215,10 +219,11 @@ class SalesReturnServiceTest {
         when(returns.findByIdAndDeletedFalse(70L)).thenReturn(Optional.of(r));
         var closed = new com.terp.erp.commerce.client.RemoteApiException(
                 org.springframework.http.HttpStatus.BAD_REQUEST, "ACC_070", "closed");
-        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+        org.mockito.Mockito.doThrow(closed).when(accounting).validate(any());
 
         assertThatThrownBy(() -> service.complete(70L)).isSameAs(closed);
         verify(inventory, org.mockito.Mockito.never()).move(anyString(), anyLong(), anyList());
+        verify(outbox, org.mockito.Mockito.never()).publish(any(), anyString(), anyString(), any(), any());
         assertThat(r.getStatus()).isEqualTo(SalesReturn.EStatus.APPROVED);
     }
 }

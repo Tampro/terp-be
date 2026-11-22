@@ -124,4 +124,17 @@ public class PurchaseReturnController {
     public ApiMessageDto<ReturnDetail> complete(@PathVariable Long id) {
         return ApiMessageDto.ok(service.complete(id));
     }
+
+    @Operation(summary = "Re-post the journal of a return whose journal FAILED", description = "Checks the journal "
+            + "again with accounting, then requests it again: journalStatus → PENDING. Moves no stock; accounting "
+            + "writes the entry once per return.")
+    @ApiResponses({@ApiResponse(responseCode = "400", description = "journalStatus is not FAILED (PUR_017), closed "
+            + "year (ACC_070) / unmapped account (ACC_017) relayed"),
+            @ApiResponse(responseCode = "404", description = "No such return in your company (PUR_008)"),
+            @ApiResponse(responseCode = "503", description = "Accounting unavailable (SAL_016)")})
+    @PreAuthorize("@PermissionChecker.has('PURCHASE_POST')")
+    @PostMapping("/{id}/journal/retry")
+    public ApiMessageDto<ReturnDetail> retryJournal(@PathVariable Long id) {
+        return ApiMessageDto.ok(service.retryJournal(id));
+    }
 }

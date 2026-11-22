@@ -57,8 +57,9 @@ class PaymentServiceTest {
     private final DocumentNumbering numbering = mock(DocumentNumbering.class);
     private final AccountMapping mapping = mock(AccountMapping.class);
     private final JournalService journal = mock(JournalService.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final PaymentService service = new PaymentService(payments, notes, commerce, bank, customers, vendors,
-            numbering, mapping, journal, clock);
+            numbering, mapping, journal, clock, outbox);
 
     @BeforeEach
     void setUp() {
@@ -156,7 +157,7 @@ class PaymentServiceTest {
         assertThat(dto.status()).isEqualTo(EPaymentStatus.PENDING);
         assertThat(dto.number()).isEqualTo("CP-2026-11-001");
         assertThat(dto.amount()).isEqualByComparingTo("500");
-        verify(commerce, never()).applyPayment(any(), anyLong(), anyLong(), any());
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
     }
 
     /** GWT FR-ACC-PAY-003: SI balance 500, bank B; clear 500 → SI paid, Credit 500 on B, Dr B / Cr receivable 500. */
@@ -164,12 +165,14 @@ class PaymentServiceTest {
     void clearPaysTheInvoiceRecordsTheBankCreditAndPostsABalancedEntry() {
         TestLogin.as(10L, "PAYMENT_CLEAR");
         Payment p = pending(10L, EPaymentStatus.PENDING);
+        invoice("500", "POSTED");
 
         PaymentService.PaymentDto dto = service.clear(EPaymentKind.CUSTOMER, 31L);
 
         assertThat(dto.status()).isEqualTo(EPaymentStatus.CLEARED);
         assertThat(p.getClearedAt()).isNotNull();
-        verify(commerce).applyPayment(ESide.SALES, 9L, 31L, new BigDecimal("500"));
+        // commerce is only read here; the invoice is paid by commerce from the event below
+        verify(commerce).invoice(ESide.SALES, 9L);
         verify(bank).record(eq(10L), eq(2L), eq(ETransactionType.CREDIT), eq(new BigDecimal("500")), eq(DAY),
                 eq("CUSTOMER_PAYMENT"), eq(31L), eq("CP-2026-11-001"), anyString());
         @SuppressWarnings("unchecked")
@@ -185,6 +188,46 @@ class PaymentServiceTest {
         BigDecimal dr = l.stream().map(JournalService.Line::debit).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal cr = l.stream().map(JournalService.Line::credit).reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(dr).isEqualByComparingTo(cr);
+        verify(outbox).publish(eq(10L), eq("accounting.customer_payment.cleared"), eq("CUSTOMER_PAYMENT"), eq(31L),
+                org.mockito.ArgumentMatchers.<Object>argThat(x -> ((java.util.Map<?, ?>) x).get("number")
+                        .equals("CP-2026-11-001")
+                        && ((java.util.Map<?, ?>) x).get("allocations").equals(List.of(
+                        com.terp.erp.outbox.Payload.of("invoiceId", 9L, "amount", new BigDecimal("500"))))));
+    }
+
+    @Test
+    void clearingAVendorPaymentPublishesItsAllocationsForThePurchaseInvoices() {
+        TestLogin.as(10L, "PAYMENT_CLEAR");
+        Payment p = pending(10L, EPaymentStatus.PENDING);
+        p.setKind(EPaymentKind.VENDOR);
+        p.setNumber("VP-2026-11-001");
+        when(commerce.invoice(ESide.PURCHASE, 9L)).thenReturn(new CommerceClient.Invoice(9L, "PI-2026-11-001", 5L,
+                "Test Supplier", DAY, DAY.plusDays(30), BigDecimal.ZERO, new BigDecimal("800"),
+                new BigDecimal("800"), "PARTIAL"));
+        when(mapping.require(10L, ESystemAccount.PAYABLE)).thenReturn(331L);
+
+        assertThat(service.clear(EPaymentKind.VENDOR, 31L).status()).isEqualTo(EPaymentStatus.CLEARED);
+
+        verify(bank).record(eq(10L), eq(2L), eq(ETransactionType.DEBIT), eq(new BigDecimal("500")), eq(DAY),
+                eq("VENDOR_PAYMENT"), eq(31L), eq("VP-2026-11-001"), anyString());
+        verify(outbox).publish(eq(10L), eq("accounting.vendor_payment.cleared"), eq("VENDOR_PAYMENT"), eq(31L),
+                org.mockito.ArgumentMatchers.<Object>argThat(x -> ((java.util.Map<?, ?>) x).get("allocations")
+                        .equals(List.of(com.terp.erp.outbox.Payload.of("invoiceId", 9L, "amount",
+                                new BigDecimal("500"))))));
+    }
+
+    @Test
+    void anInvoiceNoLongerOpenRefusesTheClearBeforeAnyWrite() {
+        TestLogin.as(10L, "PAYMENT_CLEAR");
+        Payment p = pending(10L, EPaymentStatus.PENDING);
+        invoice("0", "PAID");
+
+        fails(() -> service.clear(EPaymentKind.CUSTOMER, 31L), HttpStatus.BAD_REQUEST, EAccountingError.ACC_053);
+        invoice("100", "PARTIAL");
+        fails(() -> service.clear(EPaymentKind.CUSTOMER, 31L), HttpStatus.BAD_REQUEST, EAccountingError.ACC_054);
+        assertThat(p.getStatus()).isEqualTo(EPaymentStatus.PENDING);
+        verify(journal, never()).post(anyLong(), any(), anyString(), anyLong(), anyString(), anyString(), anyList());
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -193,7 +236,7 @@ class PaymentServiceTest {
         pending(10L, EPaymentStatus.CLEARED);
 
         fails(() -> service.clear(EPaymentKind.CUSTOMER, 31L), HttpStatus.BAD_REQUEST, EAccountingError.ACC_051);
-        verify(commerce, never()).applyPayment(any(), anyLong(), anyLong(), any());
+        verify(commerce, never()).invoice(any(), anyLong());
         verify(journal, never()).post(anyLong(), any(), anyString(), anyLong(), anyString(), anyString(), anyList());
     }
 
@@ -202,10 +245,11 @@ class PaymentServiceTest {
         TestLogin.as(10L, "PAYMENT_CLEAR");
         Payment p = pending(10L, EPaymentStatus.PENDING);
         org.mockito.Mockito.doThrow(ApiException.badRequest(EAccountingError.ACC_060)).when(commerce)
-                .applyPayment(ESide.SALES, 9L, 31L, new BigDecimal("500"));
+                .invoice(ESide.SALES, 9L);
 
         assertThatThrownBy(() -> service.clear(EPaymentKind.CUSTOMER, 31L)).isInstanceOf(ApiException.class);
         assertThat(p.getStatus()).isEqualTo(EPaymentStatus.PENDING);
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
         verify(bank, never()).record(anyLong(), anyLong(), any(), any(), any(), anyString(), anyLong(), anyString(),
                 anyString());
     }
@@ -227,7 +271,7 @@ class PaymentServiceTest {
 
         fails(() -> service.get(EPaymentKind.CUSTOMER, 31L), HttpStatus.NOT_FOUND, EAccountingError.ACC_050);
         fails(() -> service.clear(EPaymentKind.CUSTOMER, 31L), HttpStatus.NOT_FOUND, EAccountingError.ACC_050);
-        verify(commerce, never()).applyPayment(any(), anyLong(), anyLong(), any());
+        verify(commerce, never()).invoice(any(), anyLong());
     }
 
     @Test

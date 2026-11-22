@@ -3,7 +3,8 @@
 Multi-company ERP SaaS as microservices on Spring Boot 3.5 / Java 17 (package `com.terp.erp`). Keycloak proves who
 the caller is; the IAM service decides which company they belong to and what they may do. The services below cover
 all 20 sections of the user manual: HR, inventory, sales/purchase/POS, accounting, CRM, projects, support and company
-settings. A notification service (port 8097, email and webhook dispatch) is still planned — see [Status](#status).
+settings. Business events go through a transactional outbox to RabbitMQ; notification-service turns them into
+emails, Slack / Telegram messages and webhooks.
 
 Ports are the container ports. `docker-compose.yml` (project `erp`) publishes them on the host **+10000**, so the
 gateway is `http://localhost:18080` and Keycloak `http://localhost:18180` — this keeps it apart from other local
@@ -28,8 +29,10 @@ stacks that use the plain ports.
 | `crm-service` | 8094 (18094) | Pipelines and stages, leads, deals (tasks, calls, emails, files), lead → deal conversion, customer contracts. Database `erp_crm`. |
 | `project-service` | 8095 (18095) | Projects, tasks and bugs with Kanban, milestones, task calendar; form builder with a public link. Database `erp_project`. |
 | `support-service` | 8096 (18096) | Support tickets with custom fields, public support portal per company, knowledge base and FAQ (CSV import), contact messages, one-to-one messenger. Database `erp_support`. |
-| `erp-common` | — | Library shared by the servlet services: API envelope, error handling + i18n, trace id, resource-server setup, `ErpPrincipal`, `PermissionChecker`, `TenantGuard`. |
-| Keycloak 26 | 8080 (18180) | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Clients `erp-web` (FE), `erp-iam-admin`, `erp-employee-service`, `erp-document-service`. Config in `deploy/keycloak/erp-realm.json`. |
+| `notification-service` | 8097 (18097) | Consumes the `erp.events` exchange (queue `erp.notification.events`, dead letters in `erp.events.dlq`), deduplicates on `eventId`, sends email (company or platform SMTP, the company's per-event switch), Slack / Telegram (when the integration is on) and signed webhooks; delivery log with retry. Channel settings come from IAM's internal API with its own service account. Database `erp_notification`. |
+| `erp-common` | — | Library shared by the servlet services: API envelope, error handling + i18n, trace id, resource-server setup, `ErpPrincipal`, `PermissionChecker`, `TenantGuard`; opt-in transactional outbox (`com.terp.erp.outbox`, `erp.outbox.enabled`) and the SSRF guard / outbound POST (`com.terp.erp.net`). |
+| RabbitMQ 3.13 | 5672 (15673), UI 15672 (25672) | Topic exchange `erp.events` (routing key = event type, e.g. `support.ticket.created`). Producers today: commerce, accounting, support, recruitment, crm. |
+| Keycloak 26 | 8080 (18180) | Realm `erp`: passwords, sessions, brute-force lockout, token signing. Clients `erp-web` (FE), `erp-iam-admin`, `erp-employee-service`, `erp-document-service`, `erp-notification-service`. Config in `deploy/keycloak/erp-realm.json`. |
 | MySQL 8.4 | 3306 (13316) | One database per service (`erp_*`) plus `keycloak`, created by `deploy/mysql/init`. |
 
 ## How a request is authorized
@@ -130,10 +133,17 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #                                          for an existing MySQL volume)
 #   EMPLOYEE_SERVICE_CLIENT_SECRET        (secret of client erp-employee-service; realm import and employee-service)
 #   DOCUMENT_SERVICE_CLIENT_SECRET        (secret of client erp-document-service; realm import and document-service)
+#   NOTIFICATION_DB_PASSWORD             (notification-service, database erp_notification / user erp_notification;
+#                                          same note for an existing MySQL volume)
+#   NOTIFICATION_SERVICE_CLIENT_SECRET    (secret of client erp-notification-service; realm import and
+#                                          notification-service — an existing realm needs the client added by hand)
+#   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
+#                                          commerce, accounting, support, recruitment, crm)
 #   ERP_SETTINGS_ENC_KEY                  (optional; base64 of 32 random bytes — needed to save the SMTP password
 #                                          or reCAPTCHA secret in Settings: openssl rand -base64 32)
 # optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,
 #   SAAS_BANK_ACCOUNT_NUMBER, SAAS_BANK_ACCOUNT_NAME, *_DB_USERNAME (default erp_<service>)
+#   DB_POOL_SIZE (Hikari pool per service, default 5; MySQL runs with --max-connections=400)
 docker compose up -d --build       # compose project "erp": containers erp-*, volumes erp_*, host ports +10000
 ```
 
@@ -166,10 +176,11 @@ End-to-end checks run against the ERP stack through the gateway, with two fake c
 
 What still needs a decision or is not built (2026-11-22):
 
-- **No notification service yet.** Email-notification switches, integrations (Slack, Telegram, Twilio, AI, Google
-  Calendar) and webhooks are stored and testable, but no business event is dispatched. This needs a message broker
-  and an outbox, which have not been chosen.
-- **No outbox for cross-service writes.** A commerce post runs: accounting validate-only → stock move → journal post.
+- **Notifications, stage 1.** Dispatched events: sales / purchase invoice posted, customer payment cleared, support
+  ticket created / replied, job application received, CRM lead / deal assigned and moved (email, Slack, Telegram,
+  webhooks). Twilio, AI and Google Calendar are stored but unused; the other catalog events have no producer yet.
+- **Cross-service postings still synchronous.** The outbox exists (erp-common) but commerce → accounting postings
+  do not use it yet. A commerce post runs: accounting validate-only → stock move → journal post.
   If the journal post fails after the stock move, the document stays draft with stock moved; a retry completes it
   (both calls are idempotent). Clearing a customer payment marks the commerce invoice paid before the journal is
   written, with no compensation.

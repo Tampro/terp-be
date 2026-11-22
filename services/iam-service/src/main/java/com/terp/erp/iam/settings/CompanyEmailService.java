@@ -122,6 +122,23 @@ public class CompanyEmailService {
         return platform.mailer();
     }
 
+    /** Same choice as {@link #mailerFor} (own SMTP when on, else the platform's), as decrypted settings. */
+    @Transactional(readOnly = true)
+    public SettingsService.SmtpConfig smtpFor(Long companyId) {
+        CompanyEmailSetting s = companyId == null ? null : repo.findById(Nulls.nonNull(companyId)).orElse(null);
+        if (s != null && s.isEnabled()) {
+            try {
+                return new SettingsService.SmtpConfig(s.getHost(), s.getPort(), s.getUsername(),
+                        s.getPasswordEnc() == null ? null : cipher.decrypt(s.getPasswordEnc()), s.getEncryption(),
+                        s.getFromAddress(), s.getFromName());
+            } catch (RuntimeException e) {
+                log.warn("Company {} SMTP unusable ({}), using the platform SMTP", companyId,
+                        e.getClass().getSimpleName());
+            }
+        }
+        return platform.platformSmtp();
+    }
+
     private Mailer mailer(CompanyEmailSetting s) {
         return SettingsService.buildMailer(s.getHost(), s.getPort(), s.getUsername(),
                 s.getPasswordEnc() == null ? null : cipher.decrypt(s.getPasswordEnc()), s.getEncryption(),

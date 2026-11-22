@@ -24,6 +24,8 @@ import com.terp.erp.crm.setup.SetupEntities.EStageKind;
 import com.terp.erp.crm.setup.SetupService;
 import com.terp.erp.crm.setup.Stage;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -36,9 +38,12 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class DealService {
+    static final String EVENT_ASSIGNED = "crm.deal.assigned";
+    static final String EVENT_MOVED = "crm.deal.moved";
     private final DealRepository deals;
     private final SetupService setup;
     private final ActivityService activity;
+    private final OutboxPublisher outbox;
 
     public record DealForm(
             @Schema(description = "Pipeline id (it decides the company)", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -165,13 +170,37 @@ public class DealService {
         d.setPosition(pos);
         if (!to.getName().equals(fromName)) {
             activity.log(subject(d), "Moved", fromName + " → " + to.getName());
+            // Notifications DEAL_MOVED (email to the deal's members, webhook DEAL_MOVED).
+            outbox.publish(d.getCompanyId(), EVENT_MOVED, "DEAL", d.getId(), Payload.of("dealId", d.getId(),
+                    "pipelineId", d.getPipelineId(), "name", d.getName(), "price", d.getPrice(),
+                    "fromStage", fromName, "toStage", to.getName(),
+                    "recipientUserIds", Payload.ids(members(d.getId()))));
         }
         return get(d.getId());
     }
 
     @Transactional
     public List<LinkDto> setLinks(Long id, ELinkType type, LinksForm f) {
-        return activity.setLinks(subject(require(id)), type, f.ids());
+        Deal d = require(id);
+        if (type != ELinkType.MEMBER) {
+            return activity.setLinks(subject(d), type, f.ids());
+        }
+        List<Long> before = members(d.getId());
+        List<LinkDto> after = activity.setLinks(subject(d), type, f.ids());
+        List<Long> added = after.stream().map(l -> Long.valueOf(l.refId())).filter(x -> !before.contains(x)).toList();
+        if (!added.isEmpty()) {
+            // Notification DEAL_ASSIGNED to the members just added (IAM users).
+            outbox.publish(d.getCompanyId(), EVENT_ASSIGNED, "DEAL", d.getId(), Payload.of("dealId", d.getId(),
+                    "pipelineId", d.getPipelineId(), "name", d.getName(), "price", d.getPrice(),
+                    "recipientUserIds", Payload.ids(added)));
+        }
+        return after;
+    }
+
+    /** User ids linked to the deal as MEMBER. */
+    private List<Long> members(Long dealId) {
+        return activity.linksOf(ESubject.DEAL, List.of(dealId)).getOrDefault(dealId, List.of()).stream()
+                .filter(k -> k.getLinkType() == ELinkType.MEMBER).map(CrmLink::getRefId).toList();
     }
 
     Deal require(Long id) {

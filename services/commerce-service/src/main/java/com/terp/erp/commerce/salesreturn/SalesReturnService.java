@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.ECommerceError;
+import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
@@ -22,6 +23,7 @@ import com.terp.erp.commerce.sales.SalesDocument;
 import com.terp.erp.commerce.sales.SalesDocumentLine;
 import com.terp.erp.commerce.sales.SalesDocumentService;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -50,6 +52,7 @@ public class SalesReturnService {
     private final InventoryClient inventory;
     private final AccountingClient accounting;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record LineForm(
             @Schema(description = "Id of the invoice line returned", example = "31", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -85,12 +88,19 @@ public class SalesReturnService {
 
     public record ReturnRow(String id, String number, String invoiceId, String customerId, String customerName,
                             String warehouseId, LocalDate returnDate, BigDecimal total, int items,
-                            SalesReturn.EStatus status, Instant createdDate) {
+                            SalesReturn.EStatus status,
+                            @Schema(description = "Accounting journal, written asynchronously after completion - "
+                                    + "PENDING, POSTED or FAILED; null = not completed / nothing to journal")
+                            EJournalStatus journalStatus,
+                            @Schema(description = "Accounting error code when journalStatus = FAILED",
+                                    example = "ACC_070") String journalErrorCode,
+                            Instant createdDate) {
         static ReturnRow of(SalesReturn r) {
             return new ReturnRow(r.getId().toString(), r.getNumber(), r.getInvoiceId().toString(),
                     r.getCustomerId().toString(), r.getCustomerName(),
                     r.getWarehouseId() == null ? null : r.getWarehouseId().toString(), r.getReturnDate(), r.getTotal(),
-                    r.getLines().size(), r.getStatus(), r.getCreatedDate());
+                    r.getLines().size(), r.getStatus(), r.getJournalStatus(), r.getJournalErrorCode(),
+                    r.getCreatedDate());
         }
     }
 
@@ -177,6 +187,38 @@ public class SalesReturnService {
             throw ApiException.badRequest(ECommerceError.SAL_014);
         }
         boolean restock = r.getWarehouseId() != null;
+        r.setJournalStatus(Postings.run(accounting, outbox, r.getCompanyId(), posting(r), () -> {
+            if (restock) {
+                inventory.move(STOCK_SOURCE, r.getId(), r.getLines().stream().filter(SalesReturn.Line::stocked)
+                        .map(l -> new InventoryClient.MoveLine(l.getItemId(), r.getWarehouseId(), l.getQuantity()))
+                        .toList());
+            }
+        }));
+        r.setJournalErrorCode(null);
+        r.setStatus(SalesReturn.EStatus.COMPLETED);
+        r.setCompletedAt(Instant.now(clock));
+        return ReturnDetail.of(r);
+    }
+
+    /**
+     * Re-post of a journal accounting refused after completion (journalStatus FAILED): validated again, requested
+     * again; journalStatus → PENDING. Stock is not moved again.
+     */
+    @Transactional
+    public ReturnDetail retryJournal(Long id) {
+        SalesReturn r = require(id);
+        if (r.getJournalStatus() != EJournalStatus.FAILED) {
+            throw ApiException.badRequest(ECommerceError.SAL_025);
+        }
+        Postings.retry(accounting, outbox, r.getCompanyId(), posting(r));
+        r.setJournalStatus(EJournalStatus.PENDING);
+        r.setJournalErrorCode(null);
+        return ReturnDetail.of(r);
+    }
+
+    /** Amounts by role; cost of restocked lines at the invoice line's unit cost. */
+    AccountingClient.Posting posting(SalesReturn r) {
+        boolean restock = r.getWarehouseId() != null;
         BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO, cost = BigDecimal.ZERO;
         Map<Long, SalesDocumentLine> invoiceLines = restock
                 ? documents.requirePostedInvoice(r.getInvoiceId()).getLines().stream()
@@ -194,19 +236,8 @@ public class SalesReturnService {
                 service = service.add(net);
             }
         }
-        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(),
-                r.getNumber(), "Sales return " + r.getNumber() + " - " + r.getCustomerName(), goods, service,
-                r.getTaxTotal(), cost);
-        Postings.run(accounting, posting, () -> {
-            if (restock) {
-                inventory.move(STOCK_SOURCE, r.getId(), r.getLines().stream().filter(SalesReturn.Line::stocked)
-                        .map(l -> new InventoryClient.MoveLine(l.getItemId(), r.getWarehouseId(), l.getQuantity()))
-                        .toList());
-            }
-        });
-        r.setStatus(SalesReturn.EStatus.COMPLETED);
-        r.setCompletedAt(Instant.now(clock));
-        return ReturnDetail.of(r);
+        return new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(), r.getNumber(),
+                "Sales return " + r.getNumber() + " - " + r.getCustomerName(), goods, service, r.getTaxTotal(), cost);
     }
 
     private void apply(SalesReturn r, SalesDocument inv, ReturnForm f, Long excludeId) {

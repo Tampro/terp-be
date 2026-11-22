@@ -33,6 +33,8 @@ import com.terp.erp.accounting.note.NoteService;
 import com.terp.erp.accounting.vendor.Vendor;
 import com.terp.erp.accounting.vendor.VendorService;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
@@ -54,6 +56,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
+    static final String EVENT_CUSTOMER_PAYMENT_CLEARED = "accounting.customer_payment.cleared";
+    static final String EVENT_VENDOR_PAYMENT_CLEARED = "accounting.vendor_payment.cleared";
+
     public record AllocationForm(
             @Schema(description = "Invoice id of commerce-service (sales invoice for a customer payment, purchase "
                     + "invoice for a vendor payment)", example = "9", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -127,6 +132,7 @@ public class PaymentService {
     private final AccountMapping mapping;
     private final JournalService journal;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     // ---------- reads ----------
 
@@ -247,13 +253,16 @@ public class PaymentService {
     }
 
     /**
-     * PENDING → CLEARED in one local transaction (FR-ACC-PAY-003): notes' balances drop, each invoice is paid in
-     * commerce-service, the bank account gets a CREDIT (customer) / DEBIT (vendor) transaction of the cash amount, and
-     * a balanced entry is posted — customer: Dr bank GL / Cr receivable; vendor: Dr payable / Cr bank GL.
-     * Local checks run before the first remote call. If commerce fails half-way, everything local rolls back, but
-     * the invoices already paid in commerce stay paid: a retry of clear re-applies nothing twice (commerce is
-     * idempotent on (invoice, paymentId)). TODO(assumption): a payment cancelled after such a failure leaves those
-     * invoices paid — commerce has no reversal yet; needs an outbox / compensation decision.
+     * PENDING → CLEARED in one local transaction (FR-ACC-PAY-003): notes' balances drop, the bank account gets a
+     * CREDIT (customer) / DEBIT (vendor) transaction of the cash amount, a balanced entry is posted — customer: Dr
+     * bank GL / Cr receivable; vendor: Dr payable / Cr bank GL — and the event accounting.customer_payment.cleared /
+     * accounting.vendor_payment.cleared (with the allocations) is written to the outbox in the same transaction.
+     * commerce-service consumes it and pays each invoice, idempotently per (invoice, paymentId). Before any write,
+     * each invoice is read from commerce (synchronous, the caller's token, read-only) and must still be open with a
+     * balance covering its allocation (ACC_053 / ACC_054), so a payment that commerce would refuse is not cleared.
+     * TODO(assumption): between that read and the consumer, another payment or a return can still shrink a balance;
+     *  commerce then refuses the event (dead-lettered to erp.commerce.accounting.dlq for an operator) while the
+     *  payment stays CLEARED here — there is no automatic reversal.
      */
     @Transactional
     public PaymentDto clear(EPaymentKind kind, Long id) {
@@ -271,7 +280,13 @@ public class PaymentService {
             n.setStatus(n.getBalance().signum() == 0 ? ENoteStatus.APPLIED : ENoteStatus.PARTIAL);
         }
         for (PaymentAllocation a : p.getAllocations()) {
-            commerce.applyPayment(side(kind), a.getInvoiceId(), p.getId(), a.getAmount());
+            CommerceClient.Invoice inv = commerce.invoice(side(kind), a.getInvoiceId());
+            if (!inv.open()) {
+                throw ApiException.badRequest(EAccountingError.ACC_053, inv.number());
+            }
+            if (a.getAmount().compareTo(inv.balance()) > 0) {
+                throw ApiException.badRequest(EAccountingError.ACC_054, inv.number(), inv.balance().toPlainString());
+            }
         }
         if (p.getAmount().signum() > 0) {
             String text = (kind == EPaymentKind.CUSTOMER ? "Customer payment " : "Vendor payment ") + p.getNumber()
@@ -294,6 +309,25 @@ public class PaymentService {
         p.setStatus(EPaymentStatus.CLEARED);
         p.setClearedBy(CurrentUser.find().map(ErpPrincipal::keycloakId).orElse(null));
         p.setClearedAt(Instant.now(clock));
+        // commerce pays the invoices from "allocations"; notification-service sends INVOICE_PAYMENT_CREATED to the
+        // customer's email (the vendor event has no notification route and is ignored there).
+        List<java.util.Map<String, Object>> allocations = p.getAllocations().stream()
+                .map(a -> Payload.of("invoiceId", a.getInvoiceId(), "amount", a.getAmount())).toList();
+        if (kind == EPaymentKind.CUSTOMER) {
+            Customer c = customers.require(p.getPartyId());
+            outbox.publish(company, EVENT_CUSTOMER_PAYMENT_CLEARED, kind.sourceType(), p.getId(), Payload.of(
+                    "paymentId", p.getId(), "number", p.getNumber(), "customerId", p.getPartyId(),
+                    "customerName", p.getPartyName(), "amount", p.getAmount(), "paymentDate", p.getPaymentDate(),
+                    "invoiceIds", p.getAllocations().stream().map(PaymentAllocation::getInvoiceId).toList(),
+                    "allocations", allocations,
+                    "recipientEmail", c == null ? null : c.getEmail()));
+        } else {
+            outbox.publish(company, EVENT_VENDOR_PAYMENT_CLEARED, kind.sourceType(), p.getId(), Payload.of(
+                    "paymentId", p.getId(), "number", p.getNumber(), "vendorId", p.getPartyId(),
+                    "vendorName", p.getPartyName(), "amount", p.getAmount(), "paymentDate", p.getPaymentDate(),
+                    "invoiceIds", p.getAllocations().stream().map(PaymentAllocation::getInvoiceId).toList(),
+                    "allocations", allocations));
+        }
         return PaymentDto.of(p);
     }
 

@@ -15,6 +15,7 @@ public class AuditingConfig {
     /** created_by / updated_by hold the Keycloak subject; "system" for writes made outside a request. */
     @Bean
     AuditorAware<String> auditorAware() {
-        return () -> Optional.of(CurrentUser.find().map(ErpPrincipal::keycloakId).orElse("system"));
+        return () -> Optional.of(CurrentUser.find().map(ErpPrincipal::keycloakId)
+                .or(com.terp.erp.accounting.common.SystemActor::current).orElse("system"));
     }
 }

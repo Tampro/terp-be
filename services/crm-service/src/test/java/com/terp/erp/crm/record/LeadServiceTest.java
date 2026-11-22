@@ -43,7 +43,8 @@ class LeadServiceTest {
     private final SetupService setup = mock(SetupService.class);
     private final ActivityService activity = mock(ActivityService.class);
     private final AccountingClient accounting = mock(AccountingClient.class);
-    private final LeadService service = new LeadService(leads, deals, setup, activity, accounting);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final LeadService service = new LeadService(leads, deals, setup, activity, accounting, outbox);
     private final Lead lead = new Lead();
 
     @BeforeEach
@@ -138,5 +139,40 @@ class LeadServiceTest {
         assertThatThrownBy(() -> service.setLinks(7L, ELinkType.CLIENT, new LeadService.LinksForm(List.of(5L))))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECrmError.CRM_013);
         verify(activity, never()).setLinks(any(), any(), anyList());
+    }
+    @Test
+    @SuppressWarnings("unchecked")
+    void movingToAStageWithAnotherNamePublishesLeadMovedToTheOwner() {
+        TestLogin.as(10L, "CRM_MANAGE");
+        Stage won = new Stage();
+        won.setId(3L);
+        won.setPipelineId(1L);
+        won.setKind(EStageKind.LEAD);
+        won.setName("Qualified");
+        when(setup.requireStageOf(3L, 1L, EStageKind.LEAD)).thenReturn(won);
+        when(setup.stageNames(anyCollection())).thenReturn(Map.of(2L, "New"));
+        when(leads.findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(10L, 1L))
+                .thenReturn(List.of(lead));
+
+        service.move(7L, new MoveForm(3L, null));
+
+        verify(outbox).publish(eq(10L), eq("crm.lead.moved"), eq("LEAD"), eq(7L),
+                argThat(x -> {
+                    Map<String, Object> m = (Map<String, Object>) x;
+                    return "New".equals(m.get("fromStage")) && "Qualified".equals(m.get("toStage"))
+                            && List.of("12").equals(m.get("recipientUserIds"));
+                }));
+    }
+
+    @Test
+    void changingTheOwnerPublishesLeadAssignedOnlyThen() {
+        TestLogin.as(10L, "CRM_MANAGE");
+        service.update(7L, new LeadService.LeadForm(1L, null, "Test Prospect", "prospect@example.com",
+                "Wants a 20-seat plan", 12L, null, null, null));
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
+
+        service.update(7L, new LeadService.LeadForm(1L, null, "Test Prospect", "prospect@example.com",
+                "Wants a 20-seat plan", 13L, null, null, null));
+        verify(outbox).publish(eq(10L), eq("crm.lead.assigned"), eq("LEAD"), eq(7L), any());
     }
 }

@@ -12,11 +12,10 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * commerce-service as the caller (their token, so commerce applies its own permission and company checks: the caller
- * needs SALES_VIEW / PURCHASE_VIEW to read, PAYMENT_CLEAR to apply a payment). SALES = sales invoices and returns
+ * needs SALES_VIEW / PURCHASE_VIEW to read). Cleared payments reach commerce as events (outbox), not through here. SALES = sales invoices and returns
  * (customers), PURCHASE = purchase invoices and returns (vendors).
  */
 @Component
@@ -82,12 +81,6 @@ public class CommerceClient {
             out.add(invoice(side, n));
         }
         return out;
-    }
-
-    /** Idempotent per (invoice, paymentId) on the commerce side: a retry takes nothing off twice. */
-    public void applyPayment(ESide side, Long invoiceId, Long paymentId, BigDecimal amount) {
-        http.call(c -> c.post().uri(side.invoices + "/{id}/payments", invoiceId)
-                .body(Map.of("paymentId", paymentId, "amount", amount)));
     }
 
     public ReturnDoc returnDoc(ESide side, Long id) {

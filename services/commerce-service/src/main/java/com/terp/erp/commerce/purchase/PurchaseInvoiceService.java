@@ -14,11 +14,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
+import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -40,12 +43,14 @@ import java.util.Map;
 public class PurchaseInvoiceService {
     static final String STOCK_SOURCE = "PURCHASE_INVOICE";
     static final String PREFIX = "PI";
+    static final String EVENT_POSTED = "purchase.invoice.posted";
 
     private final PurchaseInvoiceRepository invoices;
     private final Numbering numbering;
     private final InventoryClient inventory;
     private final AccountingClient accounting;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record LineForm(
             @Schema(description = "Item id of inventory-service", example = "12", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -89,6 +94,11 @@ public class PurchaseInvoiceService {
                              LocalDate invoiceDate, LocalDate dueDate, BigDecimal subtotal, BigDecimal discount,
                              BigDecimal tax, BigDecimal total, BigDecimal balance, PurchaseInvoice.EStatus status,
                              @Schema(description = "Posted or partly paid past its due date") boolean overdue,
+                             @Schema(description = "Accounting journal, written asynchronously after posting - "
+                                     + "PENDING, POSTED or FAILED; null = draft / nothing to journal")
+                             EJournalStatus journalStatus,
+                             @Schema(description = "Accounting error code when journalStatus = FAILED",
+                                     example = "ACC_070") String journalErrorCode,
                              Instant createdDate, Instant updatedDate) {
         static InvoiceRow of(PurchaseInvoice d, LocalDate today) {
             boolean overdue = d.getDueDate().isBefore(today) && (d.getStatus() == PurchaseInvoice.EStatus.POSTED
@@ -96,7 +106,8 @@ public class PurchaseInvoiceService {
             return new InvoiceRow(d.getId().toString(), d.getNumber(), d.getVendorId().toString(), d.getVendorName(),
                     d.getWarehouseId() == null ? null : d.getWarehouseId().toString(), d.getInvoiceDate(),
                     d.getDueDate(), d.getSubtotal(), d.getDiscountTotal(), d.getTaxTotal(), d.getTotal(),
-                    d.getBalance(), d.getStatus(), overdue, d.getCreatedDate(), d.getUpdatedDate());
+                    d.getBalance(), d.getStatus(), overdue, d.getJournalStatus(), d.getJournalErrorCode(),
+                    d.getCreatedDate(), d.getUpdatedDate());
         }
     }
 
@@ -130,11 +141,12 @@ public class PurchaseInvoiceService {
 
     @Transactional(readOnly = true)
     public Page<InvoiceRow> search(Long companyId, Long vendorId, Long warehouseId, LocalDate from, LocalDate to,
-                                   String keyword, PurchaseInvoice.EStatus status, boolean overdue, Pageable pageable) {
+                                   String keyword, PurchaseInvoice.EStatus status, boolean overdue,
+                                   EJournalStatus journalStatus, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
         LocalDate today = today();
-        return invoices.search(company, vendorId, warehouseId, from, to, like(keyword), status, overdue, today,
-                pageable).map(d -> InvoiceRow.of(d, today));
+        return invoices.search(company, vendorId, warehouseId, from, to, like(keyword), status, overdue,
+                journalStatus, today, pageable).map(d -> InvoiceRow.of(d, today));
     }
 
     @Transactional(readOnly = true)
@@ -180,9 +192,10 @@ public class PurchaseInvoiceService {
     }
 
     /**
-     * DRAFT → POSTED: stocked lines go into the receiving warehouse and the invoice is journalled in
-     * accounting-service (Dr 156 goods, Dr 6428 services, Dr 1331 VAT / Cr 331 total), in the order of
-     * {@link Postings}; a closed year (ACC_070) is relayed and the invoice stays a draft.
+     * DRAFT → POSTED: stocked lines go into the receiving warehouse and the invoice journal (Dr 156 goods, Dr 6428
+     * services, Dr 1331 VAT / Cr 331 total) is requested from accounting-service through the outbox, in the order of
+     * {@link Postings}; a closed year (ACC_070) is relayed and the invoice stays a draft. The journal itself appears
+     * asynchronously: journalStatus PENDING → POSTED | FAILED.
      */
     @Transactional
     public InvoiceDetail post(Long id) {
@@ -192,6 +205,37 @@ public class PurchaseInvoiceService {
         if (!moves.isEmpty() && d.getWarehouseId() == null) {
             throw ApiException.badRequest(EPurchaseError.PUR_005);
         }
+        d.setJournalStatus(Postings.run(accounting, outbox, d.getCompanyId(), posting(d),
+                () -> inventory.move(STOCK_SOURCE, d.getId(), moves)));
+        d.setJournalErrorCode(null);
+        d.setStatus(PurchaseInvoice.EStatus.POSTED);
+        d.setPostedAt(Instant.now(clock));
+        d.setBalance(d.getTotal().subtract(d.getPaidAmount()));
+        // Notifications (webhook NEW_PURCHASE_INVOICE).
+        outbox.publish(d.getCompanyId(), EVENT_POSTED, STOCK_SOURCE, d.getId(), Payload.of(
+                "invoiceId", d.getId(), "number", d.getNumber(), "vendorId", d.getVendorId(),
+                "vendorName", d.getVendorName(), "invoiceDate", d.getInvoiceDate(), "dueDate", d.getDueDate(),
+                "total", d.getTotal()));
+        return InvoiceDetail.of(d, today());
+    }
+
+    /**
+     * Re-post of a journal accounting refused after posting (journalStatus FAILED): validated again synchronously,
+     * then requested again; journalStatus → PENDING. Stock is not moved again.
+     */
+    @Transactional
+    public InvoiceDetail retryJournal(Long id) {
+        PurchaseInvoice d = require(id);
+        if (d.getJournalStatus() != EJournalStatus.FAILED) {
+            throw ApiException.badRequest(EPurchaseError.PUR_017);
+        }
+        Postings.retry(accounting, outbox, d.getCompanyId(), posting(d));
+        d.setJournalStatus(EJournalStatus.PENDING);
+        d.setJournalErrorCode(null);
+        return InvoiceDetail.of(d, today());
+    }
+
+    static AccountingClient.Posting posting(PurchaseInvoice d) {
         BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO;
         for (PurchaseInvoice.Line l : d.getLines()) {
             BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
@@ -201,14 +245,8 @@ public class PurchaseInvoiceService {
                 service = service.add(net);
             }
         }
-        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, d.getId(), d.getInvoiceDate(),
-                d.getNumber(), "Purchase invoice " + d.getNumber() + " - " + d.getVendorName(), goods, service,
-                d.getTaxTotal(), null);
-        Postings.run(accounting, posting, () -> inventory.move(STOCK_SOURCE, d.getId(), moves));
-        d.setStatus(PurchaseInvoice.EStatus.POSTED);
-        d.setPostedAt(Instant.now(clock));
-        d.setBalance(d.getTotal().subtract(d.getPaidAmount()));
-        return InvoiceDetail.of(d, today());
+        return new AccountingClient.Posting(STOCK_SOURCE, d.getId(), d.getInvoiceDate(), d.getNumber(),
+                "Purchase invoice " + d.getNumber() + " - " + d.getVendorName(), goods, service, d.getTaxTotal(), null);
     }
 
     /** For returns: a posted (or paid) invoice of the caller's company. */

@@ -1,6 +1,8 @@
 package com.terp.erp.support.ticket;
 
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.TenantGuard;
 import com.terp.erp.support.common.ESupportError;
@@ -37,6 +39,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class TicketService {
+    static final String EVENT_CREATED = "support.ticket.created";
+    static final String EVENT_REPLIED = "support.ticket.replied";
+
     public record TicketRow(String id, String ticketNumber, EAccountType accountType, String name, String email,
                             String categoryId, String categoryName, String subject, EStatus status,
                             boolean fromPortal, Instant createdDate, Instant updatedDate) {
@@ -102,6 +107,7 @@ public class TicketService {
     private final TicketNumbers numbers;
     private final Attachments attachments;
     private final TicketFieldService fields;
+    private final OutboxPublisher outbox;
 
     @Transactional(readOnly = true)
     public Page<TicketRow> list(Long requestedCompanyId, EStatus status, Long categoryId, EAccountType accountType,
@@ -202,7 +208,14 @@ public class TicketService {
         t.setAttachments(attachments.write(files));
         t.setTrackingTokenHash(TrackingTokens.hash(token));
         t.setFromPortal(fromPortal);
-        return new Created(tickets.save(t), token);
+        Ticket saved = tickets.save(t);
+        Ticket ref = saved == null ? t : saved;
+        // Notification SUPPORT_TICKET_CREATED to the requester's email (the tracking token never leaves this service).
+        outbox.publish(companyId, EVENT_CREATED, "TICKET", String.valueOf(ref.getId()), Payload.of(
+                "ticketId", ref.getId(), "ticketNumber", t.getTicketNumber(), "subject", t.getSubject(),
+                "name", t.getName(), "categoryId", categoryId, "fromPortal", fromPortal,
+                "recipientEmail", t.getEmail()));
+        return new Created(saved, token);
     }
 
     /** Refuses a CLOSED ticket (SUP_006) whoever replies. */
@@ -219,6 +232,11 @@ public class TicketService {
         TicketReply saved = replies.save(r);
         // The list orders by last activity: touch the ticket.
         t.setUpdatedDate(Instant.now());
+        // Notification SUPPORT_TICKET_REPLY: a staff reply goes to the requester; a customer's reply has no
+        // recipient yet. TODO(assumption): notify the assigned staff once tickets have an assignee.
+        outbox.publish(t.getCompanyId(), EVENT_REPLIED, "TICKET", String.valueOf(t.getId()), Payload.of(
+                "ticketId", t.getId(), "ticketNumber", t.getTicketNumber(), "subject", t.getSubject(),
+                "senderType", sender, "recipientEmail", sender == ESender.STAFF ? t.getEmail() : null));
         return saved;
     }
 

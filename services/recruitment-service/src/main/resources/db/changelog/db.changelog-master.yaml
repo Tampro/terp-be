@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261120330000_career_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122900000_recruitment_flow_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123100000_outbox_changelog.mysql.sql

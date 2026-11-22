@@ -31,6 +31,21 @@ public class PurchaseInvoicePaymentService {
         PurchaseInvoice d = documents.lockById(invoiceId)
                 .orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), EPurchaseError.PUR_001);
+        return apply(d, f);
+    }
+
+    /**
+     * From the event accounting.vendor_payment.cleared (no user: the company comes from the event, and an invoice of
+     * another company is "not found"). Same idempotency per (invoice, paymentId).
+     */
+    @Transactional
+    public InvoiceDetail applyCleared(Long companyId, Long invoiceId, InvoicePaymentForm f) {
+        PurchaseInvoice d = documents.lockById(invoiceId).filter(x -> x.getCompanyId().equals(companyId))
+                .orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_001));
+        return apply(d, f);
+    }
+
+    private InvoiceDetail apply(PurchaseInvoice d, InvoicePaymentForm f) {
         Optional<PurchaseInvoicePayment> done = payments.findByInvoiceIdAndPaymentId(d.getId(), f.paymentId());
         if (done.isPresent()) {
             if (done.get().getAmount().compareTo(f.amount()) != 0) {

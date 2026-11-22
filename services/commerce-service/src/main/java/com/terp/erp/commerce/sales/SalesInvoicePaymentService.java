@@ -31,6 +31,22 @@ public class SalesInvoicePaymentService {
         SalesDocument d = documents.lockById(invoiceId).filter(x -> x.getKind() == EDocumentKind.INVOICE)
                 .orElseThrow(() -> ApiException.notFound(ECommerceError.SAL_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), ECommerceError.SAL_001);
+        return apply(d, f);
+    }
+
+    /**
+     * From the event accounting.customer_payment.cleared (no user: the company comes from the event, and an invoice
+     * of another company is "not found"). Same idempotency per (invoice, paymentId).
+     */
+    @Transactional
+    public DocumentDetail applyCleared(Long companyId, Long invoiceId, InvoicePaymentForm f) {
+        SalesDocument d = documents.lockById(invoiceId).filter(x -> x.getKind() == EDocumentKind.INVOICE)
+                .filter(x -> x.getCompanyId().equals(companyId))
+                .orElseThrow(() -> ApiException.notFound(ECommerceError.SAL_001));
+        return apply(d, f);
+    }
+
+    private DocumentDetail apply(SalesDocument d, InvoicePaymentForm f) {
         Optional<SalesInvoicePayment> done = payments.findByInvoiceIdAndPaymentId(d.getId(), f.paymentId());
         if (done.isPresent()) {
             if (done.get().getAmount().compareTo(f.amount()) != 0) {

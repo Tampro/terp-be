@@ -1,0 +1,79 @@
+# Every secret comes from the environment with no default; non-secret values have local defaults.
+server:
+  port: ${NOTIFICATION_PORT:8097}
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/erp_notification?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${NOTIFICATION_DB_USERNAME}
+    password: ${NOTIFICATION_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    connection-timeout: 5s
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # A message whose intake keeps failing (IAM down…) is retried in-process, then rejected without requeue,
+        # so the queue dead-letters it to erp.events.dlq.
+        default-requeue-rejected: false
+        prefetch: 10
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+erp:
+  notification:
+    iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    exchange: ${NOTIFICATION_EXCHANGE:erp.events}
+    queue: ${NOTIFICATION_QUEUE:erp.notification.events}
+    dead-letter-queue: ${NOTIFICATION_DLQ:erp.events.dlq}
+    max-attempts: ${NOTIFICATION_MAX_ATTEMPTS:5}
+    initial-backoff: ${NOTIFICATION_INITIAL_BACKOFF:1m}
+    max-backoff: ${NOTIFICATION_MAX_BACKOFF:1h}
+    retry-batch-size: ${NOTIFICATION_RETRY_BATCH_SIZE:50}
+    retry-interval-ms: ${NOTIFICATION_RETRY_INTERVAL_MS:30000}
+    service-account:
+      token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token
+      client-id: ${NOTIFICATION_SERVICE_CLIENT_ID:erp-notification-service}
+      # Secret: no default.
+      client-secret: ${NOTIFICATION_SERVICE_CLIENT_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

@@ -45,10 +45,11 @@ class PurchaseServiceTest {
     private final Numbering numbering = mock(Numbering.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
     private final AccountingClient accounting = mock(AccountingClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final PurchaseInvoiceService invoices = new PurchaseInvoiceService(invoiceRepo, numbering, inventory,
-            accounting, clock);
+            accounting, clock, outbox);
     private final PurchaseReturnService returns = new PurchaseReturnService(returnRepo, invoices, numbering, inventory,
-            accounting, clock);
+            accounting, clock, outbox);
 
     @BeforeEach
     void setUp() {
@@ -94,17 +95,28 @@ class PurchaseServiceTest {
         var posted = invoices.post(40L);
         assertThat(posted.invoice().status()).isEqualTo(PurchaseInvoice.EStatus.POSTED);
         assertThat(posted.invoice().balance()).isEqualByComparingTo("350");
+        verify(outbox).publish(eq(10L), eq("purchase.invoice.posted"), eq("PURCHASE_INVOICE"), eq(40L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> ((java.util.Map<?, ?>) p).get("number")
+                        .equals("PI-2026-11-001")));
         verify(inventory).move(eq("PURCHASE_INVOICE"), eq(40L), argThat(lines -> lines.size() == 1
                 && lines.get(0).quantity().compareTo(new BigDecimal("5")) == 0 && lines.get(0).warehouseId() == 2L));
         // Dr 156 300 + Dr 6428 20 + Dr 1331 30 = Cr 331 350, validated before the stock move
-        var order = org.mockito.Mockito.inOrder(accounting, inventory);
-        order.verify(accounting).journal(any(), eq(true));
-        order.verify(inventory).move(eq("PURCHASE_INVOICE"), eq(40L), anyList());
-        order.verify(accounting).journal(argThat(p -> p.sourceType().equals("PURCHASE_INVOICE") && p.sourceId() == 40L
+        var order = org.mockito.Mockito.inOrder(accounting, inventory, outbox);
+        order.verify(accounting).validate(argThat(p -> p.sourceType().equals("PURCHASE_INVOICE") && p.sourceId() == 40L
                 && p.goodsAmount().compareTo(new BigDecimal("300")) == 0
                 && p.serviceAmount().compareTo(new BigDecimal("20")) == 0
                 && p.taxAmount().compareTo(new BigDecimal("30")) == 0 && p.costAmount() == null
-                && p.date().equals(TODAY)), eq(false));
+                && p.date().equals(TODAY)));
+        order.verify(inventory).move(eq("PURCHASE_INVOICE"), eq(40L), anyList());
+        // the entry itself goes through the outbox in the posting transaction (no second HTTP call)
+        order.verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("PURCHASE_INVOICE"), eq(40L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> {
+                    var m = (java.util.Map<?, ?>) p;
+                    return "40".equals(m.get("sourceId")) && m.get("costAmount") == null
+                            && new BigDecimal("300").compareTo((BigDecimal) m.get("goodsAmount")) == 0;
+                }));
+        verify(accounting, org.mockito.Mockito.times(1)).validate(any());
+        assertThat(saved.getJournalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
         assertThatThrownBy(() -> invoices.post(40L))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_002);
         assertThat(saved.getStatus()).isEqualTo(PurchaseInvoice.EStatus.POSTED);
@@ -163,9 +175,13 @@ class PurchaseServiceTest {
         verify(inventory).move(eq("PURCHASE_RETURN"), eq(70L), argThat(lines -> lines.size() == 1
                 && lines.get(0).quantity().compareTo(new BigDecimal("-2")) == 0));
         // Dr 331 132 / Cr 156 120 + Cr 1331 12
-        verify(accounting).journal(argThat(p -> p.sourceType().equals("PURCHASE_RETURN") && p.sourceId() == 70L
+        verify(accounting).validate(argThat(p -> p.sourceType().equals("PURCHASE_RETURN") && p.sourceId() == 70L
                 && p.goodsAmount().compareTo(new BigDecimal("120")) == 0 && p.serviceAmount().signum() == 0
-                && p.taxAmount().compareTo(new BigDecimal("12")) == 0), eq(false));
+                && p.taxAmount().compareTo(new BigDecimal("12")) == 0));
+        verify(outbox).publish(any(), eq("commerce.journal.requested"), eq("PURCHASE_RETURN"), eq(70L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> new BigDecimal("12")
+                        .compareTo((BigDecimal) ((java.util.Map<?, ?>) p).get("taxAmount")) == 0));
+        assertThat(saved.getJournalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
         // the returnable quantity was checked with the invoice row locked
         verify(invoiceRepo, org.mockito.Mockito.atLeastOnce()).lockById(40L);
     }
@@ -235,10 +251,38 @@ class PurchaseServiceTest {
         invoices.create(form(2L, List.of(new LineForm(1L, new BigDecimal("5"), null, null))));
         PurchaseInvoice saved = stored();
         var closed = new com.terp.erp.commerce.client.RemoteApiException(HttpStatus.BAD_REQUEST, "ACC_070", "closed");
-        org.mockito.Mockito.doThrow(closed).when(accounting).journal(any(), eq(true));
+        org.mockito.Mockito.doThrow(closed).when(accounting).validate(any());
 
         assertThatThrownBy(() -> invoices.post(40L)).isSameAs(closed);
         verify(inventory, never()).move(anyString(), anyLong(), anyList());
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
         assertThat(saved.getStatus()).isEqualTo(PurchaseInvoice.EStatus.DRAFT);
+        assertThat(saved.getJournalStatus()).isNull();
+    }
+
+    @Test
+    void purchaseJournalRetryOnlyForFailedAndOnlyInTheCompany() {
+        TestLogin.as(10L, "PURCHASE_MANAGE", "PURCHASE_POST");
+        invoices.create(form(2L, List.of(new LineForm(1L, new BigDecimal("5"), null, null))));
+        PurchaseInvoice saved = stored();
+        invoices.post(40L);
+        org.mockito.Mockito.clearInvocations(accounting, outbox, inventory);
+
+        assertThatThrownBy(() -> invoices.retryJournal(40L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_017);
+        saved.setJournalStatus(com.terp.erp.commerce.common.EJournalStatus.FAILED);
+        saved.setJournalErrorCode("ACC_017");
+
+        TestLogin.as(11L, "PURCHASE_POST");
+        assertThatThrownBy(() -> invoices.retryJournal(40L))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EPurchaseError.PUR_001);
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
+
+        TestLogin.as(10L, "PURCHASE_POST");
+        var row = invoices.retryJournal(40L).invoice();
+        assertThat(row.journalStatus()).isEqualTo(com.terp.erp.commerce.common.EJournalStatus.PENDING);
+        verify(accounting).validate(any());
+        verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("PURCHASE_INVOICE"), eq(40L), any());
+        verify(inventory, never()).move(anyString(), anyLong(), anyList());
     }
 }

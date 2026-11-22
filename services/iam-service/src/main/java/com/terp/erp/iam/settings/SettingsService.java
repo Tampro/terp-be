@@ -165,6 +165,25 @@ public class SettingsService {
                 enc, f.encryption(), f.fromAddress(), f.fromName())));
     }
 
+    /**
+     * Decrypted SMTP settings for notification-service (internal endpoint only, never returned to a user): host,
+     * port, credentials and sender identity. null when not configured.
+     */
+    public record SmtpConfig(String host, int port, String username, String password, EMailEncryption encryption,
+                             String fromAddress, String fromName) {
+    }
+
+    @Transactional(readOnly = true)
+    public SmtpConfig platformSmtp() {
+        EmailSettings s = emailStored();
+        if (s.host() == null || s.host().isBlank() || s.fromAddress() == null) {
+            return null;
+        }
+        return new SmtpConfig(s.host(), s.port() == null ? 587 : s.port(), s.username(),
+                s.passwordEnc() == null ? null : cipher.decrypt(s.passwordEnc()), s.encryption(), s.fromAddress(),
+                s.fromName());
+    }
+
     /** A ready SMTP sender with the stored settings and the sender identity, or null when not configured. */
     public record Mailer(JavaMailSenderImpl sender, String fromAddress, String fromName) {
     }

@@ -13,11 +13,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.commerce.client.AccountingClient;
 import com.terp.erp.commerce.client.InventoryClient;
+import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -48,6 +50,7 @@ public class PurchaseReturnService {
     private final InventoryClient inventory;
     private final AccountingClient accounting;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record LineForm(
             @Schema(description = "Id of the invoice line returned", example = "31", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -84,12 +87,19 @@ public class PurchaseReturnService {
 
     public record ReturnRow(String id, String number, String invoiceId, String vendorId, String vendorName,
                             String warehouseId, LocalDate returnDate, BigDecimal total, int items,
-                            PurchaseReturn.EStatus status, Instant createdDate) {
+                            PurchaseReturn.EStatus status,
+                            @Schema(description = "Accounting journal, written asynchronously after completion - "
+                                    + "PENDING, POSTED or FAILED; null = not completed / nothing to journal")
+                            EJournalStatus journalStatus,
+                            @Schema(description = "Accounting error code when journalStatus = FAILED",
+                                    example = "ACC_070") String journalErrorCode,
+                            Instant createdDate) {
         static ReturnRow of(PurchaseReturn r) {
             return new ReturnRow(r.getId().toString(), r.getNumber(), r.getInvoiceId().toString(),
                     r.getVendorId().toString(), r.getVendorName(),
                     r.getWarehouseId() == null ? null : r.getWarehouseId().toString(), r.getReturnDate(), r.getTotal(),
-                    r.getLines().size(), r.getStatus(), r.getCreatedDate());
+                    r.getLines().size(), r.getStatus(), r.getJournalStatus(), r.getJournalErrorCode(),
+                    r.getCreatedDate());
         }
     }
 
@@ -185,6 +195,31 @@ public class PurchaseReturnService {
         if (!moves.isEmpty() && r.getWarehouseId() == null) {
             throw ApiException.badRequest(EPurchaseError.PUR_005);
         }
+        r.setJournalStatus(Postings.run(accounting, outbox, r.getCompanyId(), posting(r),
+                () -> inventory.move(STOCK_SOURCE, r.getId(), moves)));
+        r.setJournalErrorCode(null);
+        r.setStatus(PurchaseReturn.EStatus.COMPLETED);
+        r.setCompletedAt(Instant.now(clock));
+        return ReturnDetail.of(r);
+    }
+
+    /**
+     * Re-post of a journal accounting refused after completion (journalStatus FAILED): validated again, requested
+     * again; journalStatus → PENDING. Stock is not moved again.
+     */
+    @Transactional
+    public ReturnDetail retryJournal(Long id) {
+        PurchaseReturn r = require(id);
+        if (r.getJournalStatus() != EJournalStatus.FAILED) {
+            throw ApiException.badRequest(EPurchaseError.PUR_017);
+        }
+        Postings.retry(accounting, outbox, r.getCompanyId(), posting(r));
+        r.setJournalStatus(EJournalStatus.PENDING);
+        r.setJournalErrorCode(null);
+        return ReturnDetail.of(r);
+    }
+
+    static AccountingClient.Posting posting(PurchaseReturn r) {
         BigDecimal goods = BigDecimal.ZERO, service = BigDecimal.ZERO;
         for (PurchaseReturn.Line l : r.getLines()) {
             BigDecimal net = l.getLineTotal().subtract(l.getTaxAmount());
@@ -194,13 +229,8 @@ public class PurchaseReturnService {
                 service = service.add(net);
             }
         }
-        AccountingClient.Posting posting = new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(),
-                r.getNumber(), "Purchase return " + r.getNumber() + " - " + r.getVendorName(), goods, service,
-                r.getTaxTotal(), null);
-        Postings.run(accounting, posting, () -> inventory.move(STOCK_SOURCE, r.getId(), moves));
-        r.setStatus(PurchaseReturn.EStatus.COMPLETED);
-        r.setCompletedAt(Instant.now(clock));
-        return ReturnDetail.of(r);
+        return new AccountingClient.Posting(STOCK_SOURCE, r.getId(), r.getReturnDate(), r.getNumber(),
+                "Purchase return " + r.getNumber() + " - " + r.getVendorName(), goods, service, r.getTaxTotal(), null);
     }
 
     private void apply(PurchaseReturn r, PurchaseInvoice inv, ReturnForm f, Long excludeId) {
