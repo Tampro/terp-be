@@ -142,18 +142,48 @@ class BudgetServiceTest {
     }
 
     @Test
-    void allocationsOverTheBudgetAmountAreRefused() {
-        Budget b = budget(CO, period(CO, EBudgetPeriodStatus.ACTIVE), EBudgetStatus.DRAFT, "1000");
-        String first = service.addAllocation(b.getId(), new AllocationForm(40L, new BigDecimal("700"), null)).id();
-        assertError(() -> service.addAllocation(b.getId(), new AllocationForm(42L, new BigDecimal("301"), null)),
-                EAccountingError.ACC_094);
-        assertThat(service.addAllocation(b.getId(), new AllocationForm(42L, new BigDecimal("300"), null))
-                .allocated()).isEqualByComparingTo("300");
-        // editing a line counts the others plus its new amount, not its old one
-        assertError(() -> service.updateAllocation(b.getId(), Long.valueOf(first),
-                new AllocationForm(40L, new BigDecimal("701"), null)), EAccountingError.ACC_094);
-        assertThat(service.updateAllocation(b.getId(), Long.valueOf(first),
-                new AllocationForm(40L, new BigDecimal("700"), "same")).notes()).isEqualTo("same");
+    void budgetAmountIsTheSumOfAllocationsRecomputedOnAddEditDelete() {
+        Budget b = budget(CO, period(CO, EBudgetPeriodStatus.ACTIVE), EBudgetStatus.DRAFT, "0");
+        String first = service.addAllocation(b.getId(), new AllocationForm(40L, new BigDecimal("1000"), null)).id();
+        assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("1000");
+        // no cap (reference product: 1000 → 1,000,999 → 5,001,000)
+        String second = service.addAllocation(b.getId(), new AllocationForm(42L, new BigDecimal("999999"), null)).id();
+        assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("1000999");
+        service.updateAllocation(b.getId(), Long.valueOf(second), new AllocationForm(42L, new BigDecimal("5000000"), null));
+        assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("5001000");
+        service.deleteAllocation(b.getId(), Long.valueOf(first));
+        allocationMap.remove(Long.valueOf(first));
+        assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("5000000");
+        assertThat(service.monitoring(b.getId()).budgetAmount()).isEqualByComparingTo("5000000");
+        service.deleteAllocation(b.getId(), Long.valueOf(second));
+        allocationMap.remove(Long.valueOf(second));
+        assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void newBudgetStartsAtZeroIgnoringTheFormAmountAndEmptyMonitoringIsZero() {
+        BudgetPeriod p = period(CO, EBudgetPeriodStatus.ACTIVE);
+        when(budgetRows.save(any())).thenAnswer(i -> {
+            Budget b = i.getArgument(0);
+            b.setId(ids.incrementAndGet());
+            budgetMap.put(b.getId(), b);
+            return b;
+        });
+        var created = service.create(null, new BudgetService.BudgetForm("Ops", p.getId(), EBudgetType.OPERATIONAL,
+                new BigDecimal("123"), null));
+        assertThat(created.amount()).isEqualByComparingTo("0");
+        Long id = Long.valueOf(created.id());
+        service.addAllocation(id, new AllocationForm(40L, new BigDecimal("50"), null));
+        var edited = service.update(id, new BudgetService.BudgetForm("Ops 2", p.getId(), EBudgetType.OPERATIONAL,
+                new BigDecimal("1"), null));
+        assertThat(edited.amount()).isEqualByComparingTo("50");          // edit keeps the derived total
+
+        Budget empty = budget(CO, p, EBudgetStatus.DRAFT, "0");
+        MonitoringDto m = service.monitoring(empty.getId());
+        assertThat(m.budgetAmount()).isEqualByComparingTo("0");
+        assertThat(m.allocated()).isEqualByComparingTo("0");
+        assertThat(m.variancePercent()).isEqualByComparingTo("0");        // no division by zero
+        assertThat(m.overBudget()).isFalse();
     }
 
     @Test
@@ -236,13 +266,11 @@ class BudgetServiceTest {
             String id = service.addAllocation(b.getId(), new AllocationForm(40L, new BigDecimal("600"), null)).id();
             String other = service.addAllocation(b.getId(), new AllocationForm(42L, new BigDecimal("300"), null)).id();
             assertThat(service.monitoring(b.getId()).allocated()).isEqualByComparingTo("900");
-            assertError(() -> service.updateAllocation(b.getId(), Long.valueOf(other),
-                    new AllocationForm(42L, new BigDecimal("401"), null)), EAccountingError.ACC_094); // rule holds
             service.updateAllocation(b.getId(), Long.valueOf(id), new AllocationForm(40L, new BigDecimal("700"), null));
             assertThat(service.monitoring(b.getId()).allocated()).isEqualByComparingTo("1000");
             service.deleteAllocation(b.getId(), Long.valueOf(id));
             org.mockito.Mockito.verify(allocationRows).delete(allocationMap.get(Long.valueOf(id)));
-            assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("1000"); // amount unchanged
+            assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("300"); // sum of what is left
             assertError(() -> service.delete(b.getId()), EAccountingError.ACC_091); // budget itself stays DRAFT-only
         }
         Budget closed = budget(CO, p, EBudgetStatus.CLOSED, "1000");

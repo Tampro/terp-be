@@ -30,14 +30,16 @@ r = await c('POST', '/accounting/goals/' + goal.id + '/contributions', { amount:
 // budgets
 r = await c('POST', '/accounting/budget-periods', { name: 'FY ' + Y, financialYear: Y, startDate: Y + '-01-01', endDate: Y + '-12-31' }, t); const per = r.data; ck('budget period ACTIVE', r.s === 200 && per.status === 'ACTIVE', r.s + ' ' + r.code + ' ' + r.msg);
 r = await c('POST', '/accounting/budget-periods/' + per.id + '/close', null, t); ck('close period before its end → ACC_088', r.code === 'ACC_088', r.s + ' ' + r.code);
-r = await c('POST', '/accounting/budgets', { name: 'Office costs', periodId: Number(per.id), type: 'OPERATIONAL', amount: 1000 }, t); const bud = r.data; ck('budget DRAFT', r.s === 200 && bud.status === 'DRAFT', r.s + ' ' + r.code + ' ' + r.msg);
+r = await c('POST', '/accounting/budgets', { name: 'Office costs', periodId: Number(per.id), type: 'OPERATIONAL', amount: 1000 }, t); const bud = r.data; ck('budget DRAFT, amount 0 (form amount ignored)', r.s === 200 && bud.status === 'DRAFT' && num(bud.amount) === 0, r.s + ' ' + r.code + ' ' + r.msg + ' ' + bud?.amount);
 r = await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: acc('112'), allocated: 100 }, t); ck('non-expense account → ACC_093', r.code === 'ACC_093', r.s + ' ' + r.code);
 r = await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: acc('6428'), allocated: 600 }, t); ck('allocate 600 to 6428', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
 const parent = accts.find(a => Number(a.id) === acc('6428'))?.parentId;
 if (parent) { r = await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: Number(parent), allocated: 100 }, t); ck('parent of an allocated account → ACC_097', r.code === 'ACC_097', r.s + ' ' + r.code + ' ' + r.msg); }
 const other = accts.find(a => a.code.startsWith('641') && a.active !== false) ?? accts.find(a => a.code === '6427');
-r = await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: Number(other.id), allocated: 500 }, t); ck('allocations over the amount → ACC_094', r.code === 'ACC_094', r.s + ' ' + r.code + ' ' + other.code);
-await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: Number(other.id), allocated: 200 }, t);
+r = await c('POST', '/accounting/budgets/' + bud.id + '/allocations', { accountId: Number(other.id), allocated: 500 }, t); const otherLine = r.data; ck('no cap: allocate 500 more', r.s === 200, r.s + ' ' + r.code + ' ' + other.code);
+r = await c('GET', '/accounting/budgets/' + bud.id, null, t); ck('budget amount = sum of allocations (1100)', num(r.data?.amount) === 1100, show(r.data?.amount));
+await c('PUT', '/accounting/budgets/' + bud.id + '/allocations/' + otherLine?.id, { accountId: Number(other.id), allocated: 200 }, t);
+r = await c('GET', '/accounting/budgets/' + bud.id, null, t); ck('edit recomputes the amount (800)', num(r.data?.amount) === 800, show(r.data?.amount));
 r = await c('POST', '/accounting/budgets/' + bud.id + '/activate', null, t); ck('activate before approve → ACC_091', r.code === 'ACC_091', r.s + ' ' + r.code);
 r = await c('POST', '/accounting/budgets/' + bud.id + '/approve', null, t); ck('approve → APPROVED with approvedBy', r.s === 200 && r.data.status === 'APPROVED' && r.data.approvedBy, r.s + ' ' + r.code + ' ' + show(r.data));
 await c('POST', '/accounting/budgets/' + bud.id + '/activate', null, t);

@@ -102,13 +102,16 @@ public class PosController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Receipt PDF")
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "No such order in your company (POS_001)"))
+    @Operation(summary = "Receipt PDF", description = "Receipt (re)print. POS_VIEW prints any order of your company; "
+            + "with only POS_SELL you print only the orders you created.")
+    @ApiResponses({@ApiResponse(responseCode = "403", description = "Neither POS_VIEW nor POS_SELL (COMMON_004)"),
+            @ApiResponse(responseCode = "404", description = "No such order in your company, or (POS_SELL only) "
+                    + "an order another user created (POS_001)")})
     @PreAuthorize("@PermissionChecker.hasAny('POS_VIEW','POS_SELL')")
     @GetMapping("/orders/{id}/pdf")
     public ResponseEntity<byte[]> receipt(@PathVariable Long id) {
-        OrderDetail d = service.get(id);
-        return pdf(service.receiptPdf(id), d.order().receiptNumber() + ".pdf");
+        PosService.Receipt r = service.receipt(id);
+        return pdf(r.pdf(), r.fileName());
     }
 
     @Operation(summary = "Barcode labels PDF", description = "Code 128 of each item's SKU, copies per item; at most "

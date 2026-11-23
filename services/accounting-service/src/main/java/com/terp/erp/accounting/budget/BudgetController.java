@@ -42,7 +42,7 @@ public class BudgetController {
     private static final String NOT_FOUND = "No such budget in your company (ACC_090)";
     private static final String STATE = "Wrong status (ACC_091), period closed (ACC_089)";
     private static final String ALLOC = "Account inactive or not in the company (ACC_020), not an expense account "
-            + "(ACC_093), allocations over the budget amount (ACC_094), account already allocated (ACC_095), parent or child of an allocated account (ACC_097), "
+            + "(ACC_093), account already allocated (ACC_095), parent or child of an allocated account (ACC_097), "
             + "validation (COMMON)";
 
     private final BudgetService service;
@@ -68,7 +68,9 @@ public class BudgetController {
         return ApiMessageDto.ok(service.get(id));
     }
 
-    @Operation(summary = "Create a budget", description = "Starts DRAFT in an ACTIVE period.")
+    @Operation(summary = "Create a budget", description = "Starts DRAFT in an ACTIVE period with amount 0; the "
+            + "amount is the sum of the allocations and is recomputed on every allocation add/edit/delete. "
+            + "`amount` in the body is deprecated and ignored.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Period closed (ACC_089), super admin without "
                     + "companyId (ACC_001), validation (COMMON)"),
@@ -81,10 +83,9 @@ public class BudgetController {
         return ApiMessageDto.ok(service.create(companyId, form));
     }
 
-    @Operation(summary = "Edit a draft budget", description = "Full replacement; DRAFT only; the amount cannot "
-            + "fall below the allocations.")
-    @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", below allocations (ACC_094), "
-            + "validation (COMMON)"),
+    @Operation(summary = "Edit a draft budget", description = "Full replacement of name, period, type and "
+            + "description; DRAFT only. `amount` is deprecated and ignored: it stays the sum of the allocations.")
+    @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", validation (COMMON)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + "; period (ACC_086)")})
     @PreAuthorize("@PermissionChecker.has('BUDGET_MANAGE')")
     @PutMapping("/{id}")
@@ -147,8 +148,8 @@ public class BudgetController {
         return ApiMessageDto.ok(service.allocations(id));
     }
 
-    @Operation(summary = "Add an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED); expense accounts only; the sum "
-            + "of allocations may not exceed the budget amount (unchanged; allocated total is recalculated from the lines).")
+    @Operation(summary = "Add an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED); expense accounts only; no cap: "
+            + "the budget amount is recomputed as the sum of the allocations.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", " + ALLOC),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('BUDGET_MANAGE')")
@@ -158,7 +159,7 @@ public class BudgetController {
         return ApiMessageDto.ok(service.addAllocation(id, form));
     }
 
-    @Operation(summary = "Edit an allocation", description = "Full replacement; DRAFT, APPROVED or ACTIVE budgets (not CLOSED); sum stays within the budget amount.")
+    @Operation(summary = "Edit an allocation", description = "Full replacement; DRAFT, APPROVED or ACTIVE budgets (not CLOSED); the budget amount is recomputed as the sum of the allocations.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", " + ALLOC),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + ", allocation not on the budget "
                     + "(ACC_092)")})
@@ -169,7 +170,8 @@ public class BudgetController {
         return ApiMessageDto.ok(service.updateAllocation(id, allocationId, form));
     }
 
-    @Operation(summary = "Delete an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED).")
+    @Operation(summary = "Delete an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED); the "
+            + "budget amount is recomputed as the sum of the remaining allocations.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + ", allocation not on the budget "
                     + "(ACC_092)")})

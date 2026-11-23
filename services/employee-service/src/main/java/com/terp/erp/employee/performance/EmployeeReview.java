@@ -20,7 +20,7 @@ import java.time.LocalDate;
 @Table(name = "employee_review")
 public class EmployeeReview extends BaseAuditableEntity {
     /** Manual 16: Pending -> In Progress -> Completed (SCHEDULED rows were migrated to PENDING, 20261122800100). */
-    public enum EStatus { PENDING, IN_PROGRESS, COMPLETED }
+    public enum EStatus { PENDING, IN_PROGRESS, COMPLETED, CANCELLED }
 
     @Column(name = "company_id", nullable = false)
     private Long companyId;

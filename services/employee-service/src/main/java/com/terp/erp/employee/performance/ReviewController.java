@@ -64,7 +64,7 @@ public class ReviewController {
                 service.search(companyId, keyword, cycleId, from, to, status, pageable)));
     }
 
-    @Operation(summary = "Counts of the status tabs (All, Pending, In Progress, Completed)")
+    @Operation(summary = "Counts of the status tabs (All, Pending, In Progress, Completed, Cancelled)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (EMP_019)"))
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_VIEW')")
     @GetMapping("/status-counts")
@@ -99,11 +99,11 @@ public class ReviewController {
         return ApiMessageDto.ok(service.schedule(form));
     }
 
-    @Operation(summary = "Edit the schedule", description = "Full replacement while not completed (reopen a "
+    @Operation(summary = "Edit the schedule", description = "Full replacement while not completed or cancelled (reopen a "
             + "completed review through Update Status first); status omitted = kept and only moves forward. Ratings "
-            + "are kept.")
+            + "are kept. status CANCELLED is refused here (EMP_096): use Update Status.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), status moved back (EMP_096), "
+            @ApiResponse(responseCode = "400", description = "Completed or cancelled (EMP_077), status moved back or CANCELLED (EMP_096), "
                     + "EMP_076, EMP_058, EMP_073, EMP_054, EMP_079"),
             @ApiResponse(responseCode = "404", description = "No such review (EMP_075) or employee (EMP_001)")})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
@@ -116,7 +116,7 @@ public class ReviewController {
             + "listed indicators plus the overall comments, pros and cons (replaced); the overall rating is the weighted average of the rated "
             + "indicators. submit = false moves a PENDING review to IN_PROGRESS; true completes it.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Completed (EMP_077), rating outside 1–5 (COMMON_001), "
+            @ApiResponse(responseCode = "400", description = "Completed or cancelled (EMP_077), rating outside 1–5 (COMMON_001), "
                     + "indicator not in the review (EMP_078), submit with an unrated indicator or none at all (EMP_079)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
@@ -127,10 +127,12 @@ public class ReviewController {
 
     @Operation(summary = "Update Status", description = "PENDING -> IN_PROGRESS -> COMPLETED; COMPLETED -> "
             + "IN_PROGRESS reopens the review (edit and conduct work again; completedAt cleared). COMPLETED needs every "
-            + "indicator rated. Any move back to PENDING is refused (EMP_096).")
+            + "indicator rated. Any move back to PENDING is refused (EMP_096). PENDING or IN_PROGRESS -> CANCELLED "
+            + "(final: read-only, can still be deleted); COMPLETED -> CANCELLED and any move out of CANCELLED are "
+            + "refused (EMP_096).")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Not every indicator rated (EMP_079), "
-                    + "status moved back to PENDING (EMP_096)"),
+                    + "status moved back to PENDING, out of CANCELLED or COMPLETED -> CANCELLED (EMP_096)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}/status")
@@ -138,7 +140,7 @@ public class ReviewController {
         return ApiMessageDto.ok(service.changeStatus(id, form.status()));
     }
 
-    @Operation(summary = "Delete a review", description = "Not once completed.")
+    @Operation(summary = "Delete a review", description = "Not once completed (EMP_077); a cancelled review can be deleted.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Completed (EMP_077)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})

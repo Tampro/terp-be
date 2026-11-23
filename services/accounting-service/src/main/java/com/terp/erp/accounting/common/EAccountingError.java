@@ -86,6 +86,7 @@ public enum EAccountingError implements ErrorCode {
     ACC_091("The budget must be {0} for this action."),
     ACC_092("The budget allocation does not exist."),
     ACC_093("Account {0} is not an expense account: only accounts of the expenses category can be budgeted."),
+    // No longer thrown: the budget amount is the sum of its allocations (reference product + PO 2026-11-24). Kept, never reuse.
     ACC_094("Allocations would total {0}, more than the budget amount {1}."),
     ACC_095("Account {0} already has an allocation in this budget."),
     ACC_096("The budget period has budgets and cannot be deleted."),

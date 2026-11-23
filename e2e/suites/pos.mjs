@@ -59,6 +59,12 @@ r = await c('GET', '/pos/reports/sales?from=2026-01-01&to=2027-06-01', null, t);
 // isolation & permissions
 r = await c('GET', '/pos/orders/' + o1.order.id, null, B.t); ck('company B reads A order → 404 POS_001', r.s === 404 && r.code === 'POS_001', r.s + ' ' + r.code);
 pd = await raw('GET', '/pos/orders/' + o1.order.id + '/pdf', null, B.t); ck('company B receipt PDF → 404', pd.s === 404, pd.s);
+// receipt reprint: POS_SELL without POS_VIEW prints only the orders it created (after the reports so totals stay)
+const sellRole = (await c('POST', '/iam/roles', { code: 'SELLONLY_' + x, name: 'Sell only', permissions: ['POS_SELL'] }, t)).data;
+const st = await mkUser('ps.seller.' + x.toLowerCase(), [Number(sellRole.id)]);
+pd = await raw('GET', '/pos/orders/' + o1.order.id + '/pdf', null, st); ck('sell-only: another cashier receipt PDF → 404', pd.s === 404, pd.s);
+r = await c('POST', '/pos/orders', { warehouseId: Number(wh.id), bankAccountId: Number(bank.id), lines: [{ itemId: Number(wrap.id), quantity: 1 }] }, st); ck('sell-only checkout', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
+if (r.s === 200) { pd = await raw('GET', '/pos/orders/' + r.data.order.id + '/pdf', null, st); ck('sell-only: own receipt PDF', pd.s === 200 && pd.buf.subarray(0, 4).toString() === '%PDF', pd.s); pd = await raw('GET', '/pos/orders/' + r.data.order.id + '/pdf', null, ct); ck('POS_VIEW: another cashier receipt PDF', pd.s === 200, pd.s); }
 r = await c('POST', '/pos/orders', cart({ bankAccountId: Number(bank.id) }), B.t); ck('company B sells from A warehouse/bank → 404', r.s === 404, r.s + ' ' + r.code);
 r = await c('POST', '/accounting/bank-accounts/' + bank.id + '/income', { sourceType: 'POS_ORDER', sourceId: 999, amount: 1 }, B.t); ck('company B income into A account → 404 ACC_006', r.s === 404 && r.code === 'ACC_006', r.s + ' ' + r.code);
 r = await c('GET', '/accounting/bank-accounts/' + bank.id, null, B.t); ck('company B reads A bank account → 404', r.s === 404, r.s + ' ' + r.code);

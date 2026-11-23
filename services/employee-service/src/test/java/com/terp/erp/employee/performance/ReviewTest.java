@@ -164,6 +164,49 @@ class ReviewTest {
     }
 
     @Test
+    void pendingReviewCanBeCancelledThenIsReadOnlyAndFinal() {
+        service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, null));
+        var cancelled = service.changeStatus(9L, EStatus.CANCELLED);
+        assertThat(cancelled.status()).isEqualTo(EStatus.CANCELLED);
+        assertCode(() -> service.update(9L, new ScheduleForm(1L, 2L, 3L, DAY.plusDays(1), null)),
+                EEmployeeError.EMP_077);
+        assertCode(() -> service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 3, null)), null, null, null,
+                false)), EEmployeeError.EMP_077);
+        assertCode(() -> service.changeStatus(9L, EStatus.IN_PROGRESS), EEmployeeError.EMP_096);
+        assertCode(() -> service.changeStatus(9L, EStatus.PENDING), EEmployeeError.EMP_096);
+        assertCode(() -> service.changeStatus(9L, EStatus.COMPLETED), EEmployeeError.EMP_096);
+        // deletable like a pending review
+        service.delete(9L);
+        assertThat(reviewRepo.findByIdAndDeletedFalse(9L).orElseThrow().isDeleted()).isTrue();
+    }
+
+    @Test
+    void inProgressReviewCanBeCancelledButCompletedCannot() {
+        service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, null));
+        service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 5, null)), null, null, null, false));
+        assertThat(service.changeStatus(9L, EStatus.CANCELLED).status()).isEqualTo(EStatus.CANCELLED);
+        assertCode(() -> ReviewService.assertTransition(EStatus.COMPLETED, EStatus.CANCELLED), EEmployeeError.EMP_096);
+        assertCode(() -> ReviewService.assertTransition(EStatus.CANCELLED, EStatus.IN_PROGRESS),
+                EEmployeeError.EMP_096);
+        ReviewService.assertTransition(EStatus.PENDING, EStatus.CANCELLED);
+        ReviewService.assertTransition(EStatus.IN_PROGRESS, EStatus.CANCELLED);
+    }
+
+    @Test
+    void completedReviewCannotBeCancelled() {
+        service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, null));
+        service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 5, null), new RatingForm(8L, 2, null)), null,
+                null, null, true));
+        assertCode(() -> service.changeStatus(9L, EStatus.CANCELLED), EEmployeeError.EMP_096);
+    }
+
+    @Test
+    void scheduleFormCannotCancel() {
+        assertCode(() -> service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, EStatus.CANCELLED)),
+                EEmployeeError.EMP_096);
+    }
+
+    @Test
     void firstConductStartsAPendingReview() {
         service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, null));
         var r = service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 3, null)), null, "Kind", " ", false));
