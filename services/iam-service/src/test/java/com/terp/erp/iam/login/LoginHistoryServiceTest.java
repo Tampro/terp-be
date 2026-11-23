@@ -35,8 +35,10 @@ class LoginHistoryServiceTest {
 
     private final LoginHistoryRepository history = mock(LoginHistoryRepository.class);
     private final UserAccountRepository users = mock(UserAccountRepository.class);
+    // Unstubbed mock: lookup returns Optional.empty(), so geo fields stay null unless a test stubs it.
+    private final GeoIpLookup geoIp = mock(GeoIpLookup.class);
     private final LoginHistoryService service = new LoginHistoryService(history, users,
-            Clock.fixed(Instant.parse("2026-11-23T03:00:00Z"), ZoneOffset.UTC));
+            Clock.fixed(Instant.parse("2026-11-23T03:00:00Z"), ZoneOffset.UTC), geoIp);
 
     @AfterEach
     void tearDown() {
@@ -81,6 +83,22 @@ class LoginHistoryServiceTest {
         assertThat(h.getCity()).isNull();
         assertThat(h.getCountry()).isNull();
         assertThat(h.getIsp()).isNull();
+    }
+
+    @Test
+    void geoFieldsComeFromTheLookupOfTheClientIp() {
+        when(users.findByUsernameAndDeletedFalse("test.user")).thenReturn(Optional.empty());
+        when(geoIp.lookup("203.0.113.10"))
+                .thenReturn(Optional.of(new GeoIpLookup.Geo("Test City", "Testland", "Example Net")));
+
+        service.record("test.user", request(IPHONE, null, null));
+
+        ArgumentCaptor<LoginHistory> saved = ArgumentCaptor.forClass(LoginHistory.class);
+        verify(history).save(saved.capture());
+        LoginHistory h = saved.getValue();
+        assertThat(h.getCity()).isEqualTo("Test City");
+        assertThat(h.getCountry()).isEqualTo("Testland");
+        assertThat(h.getIsp()).isEqualTo("Example Net");
     }
 
     @Test

@@ -71,7 +71,7 @@ public class LoginHistory {
     @Column(name = "role_at_login", length = 255)
     private String roleAtLogin;
 
-    // TODO(assumption): fill city/country/isp once a GeoIP source is chosen (MaxMind GeoLite2 DB or a gateway header)
+    // Filled from offline GeoLite2 files (login/GeoIpLookup); isp = ASN organization (GeoLite2 has no ISP database).
     @Column(name = "city", length = 100)
     private String city;
 

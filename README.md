@@ -144,6 +144,8 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 # optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,
 #   SAAS_BANK_ACCOUNT_NUMBER, SAAS_BANK_ACCOUNT_NAME, *_DB_USERNAME (default erp_<service>)
 #   DB_POOL_SIZE (Hikari pool per service, default 5; MySQL runs with --max-connections=400)
+#   GEOIP_CITY_DB, GEOIP_ASN_DB (iam-service; compose mounts deploy/geoip read-only — put GeoLite2-City.mmdb and
+#                                 GeoLite2-ASN.mmdb there for login city/country/ISP, see deploy/geoip/README.md)
 docker compose up -d --build       # compose project "erp": containers erp-*, volumes erp_*, host ports +10000
 ```
 

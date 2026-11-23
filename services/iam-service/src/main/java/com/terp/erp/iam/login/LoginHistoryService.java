@@ -34,7 +34,8 @@ import java.util.stream.Collectors;
  * never breaks the login when recording fails. The IP is X-Client-IP, which the gateway sets from the connection
  * (replacing any client-sent value; X-Forwarded-For is passed on as sent, so it is not trusted); browser / OS come from
  * the User-Agent, as does the device type; language from Accept-Language, timezone from the optional X-Client-Timezone
- * header the FE may send. No geo-IP lookup is made (privacy / no egress), so city, country and ISP stay empty.
+ * header the FE may send. City, country and ISP come from the offline GeoLite2 files of {@link GeoIpLookup} (no IP is
+ * sent anywhere); without them, or for a private address, they stay empty.
  */
 @Slf4j
 @Service
@@ -43,6 +44,7 @@ public class LoginHistoryService {
     private final LoginHistoryRepository history;
     private final UserAccountRepository users;
     private final Clock clock;
+    private final GeoIpLookup geoIp;
 
     public record LoginDto(String id, String userId, String companyId, String username, EUserType userType,
                            String ipAddress, String browser, String os, EDeviceType deviceType, String language,
@@ -60,6 +62,11 @@ public class LoginHistoryService {
             h.setCompanyId(account.map(a -> a.getCompanyId()).orElse(null));
             h.setUserType(account.isPresent() ? EUserType.COMPANY_USER : EUserType.SUPER_ADMIN);
             h.setIpAddress(clientIp(request.getHeader("X-Client-IP"), request.getRemoteAddr()));
+            geoIp.lookup(h.getIpAddress()).ifPresent(g -> {
+                h.setCity(g.city());
+                h.setCountry(g.country());
+                h.setIsp(g.isp());
+            });
             String ua = request.getHeader("User-Agent");
             h.setUserAgent(ua == null ? null : ua.length() > 500 ? ua.substring(0, 500) : ua);
             h.setBrowser(browser(ua));
