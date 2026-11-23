@@ -15,6 +15,7 @@ import com.terp.erp.crm.client.MediaClient;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -33,6 +34,8 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class ContractService {
+    static final String VIEW = "CRM_CONTRACT_VIEW";
+    static final String MANAGE = "CRM_CONTRACT_MANAGE";
     private final ContractRepository contracts;
     private final ContractTypeService typeService;
     private final ContractSettingService settings;
@@ -157,15 +160,20 @@ public class ContractService {
         Long company = TenantGuard.resolveCompany(companyId, EContractError.CTR_001);
         String kw = keyword == null || keyword.isBlank() ? null : "%" + keyword.trim().toLowerCase() + "%";
         LocalDate today = LocalDate.now(clock);
-        return contracts.search(company, customerId, contractTypeId, status, startFrom, startTo, endFrom, endTo, kw,
-                pageable).map(c -> row(c, today));
+        Page<Contract> page = ownView()
+                ? contracts.searchOwn(company, customerId, contractTypeId, status, startFrom, startTo, endFrom, endTo,
+                kw, OwnScope.sub(), pageable)
+                : contracts.search(company, customerId, contractTypeId, status, startFrom, startTo, endFrom, endTo, kw,
+                pageable);
+        return page.map(c -> row(c, today));
     }
 
     @Transactional(readOnly = true)
     public StatusCounts statusCounts(Long companyId) {
         Long company = TenantGuard.resolveCompany(companyId, EContractError.CTR_001);
         Map<Contract.EStatus, Long> m = new EnumMap<>(Contract.EStatus.class);
-        for (Object[] r : contracts.countByStatus(company)) {
+        for (Object[] r : ownView() ? contracts.countByStatusOwn(company, OwnScope.sub())
+                : contracts.countByStatus(company)) {
             m.put((Contract.EStatus) r[0], ((Number) r[1]).longValue());
         }
         long total = m.values().stream().mapToLong(Long::longValue).sum();
@@ -176,7 +184,11 @@ public class ContractService {
 
     @Transactional(readOnly = true)
     public ContractDetail get(Long id) {
-        return detail(require(id));
+        Contract c = requireInCompany(id);
+        if (ownView()) {
+            OwnScope.assertMine(mine(c), EContractError.CTR_002);
+        }
+        return detail(c);
     }
 
     @Transactional
@@ -403,10 +415,32 @@ public class ContractService {
                 attachments.findByContractIdAndDeletedFalseOrderByIdAsc(id).stream().map(AttachmentDto::of).toList());
     }
 
+    /** Every caller but {@link #get} writes: with CRM_CONTRACT_MANAGE_OWN only, another user's contract is 404. */
     private Contract require(Long id) {
+        Contract c = requireInCompany(id);
+        if (!CurrentUser.get().has(MANAGE)) {
+            OwnScope.assertMine(mine(c), EContractError.CTR_002);
+        }
+        return c;
+    }
+
+    private Contract requireInCompany(Long id) {
         Contract c = contracts.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(EContractError.CTR_002));
         TenantGuard.assertSameCompany(c.getCompanyId(), EContractError.CTR_002);
         return c;
+    }
+
+    /**
+     * TODO(assumption): a contract has no assignee field, so "own" = I created it (created_by = my Keycloak sub).
+     * A full CRM_CONTRACT_MANAGE holder also sees every contract.
+     */
+    private static boolean ownView() {
+        ErpPrincipal p = CurrentUser.get();
+        return !(p.has(VIEW) || p.has(MANAGE));
+    }
+
+    private static boolean mine(Contract c) {
+        return java.util.Objects.equals(c.getCreatedBy(), OwnScope.sub());
     }
 
     private ContractRenewal requireRenewal(Long contractId, Long renewalId) {

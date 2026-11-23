@@ -24,7 +24,8 @@ public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Lo
             + "and (:customerId is null or d.customerId = :customerId) "
             + "and (:warehouseId is null or d.warehouseId = :warehouseId) "
             + "and (:from is null or d.docDate >= :from) and (:to is null or d.docDate <= :to) "
-            + "and (:kw is null or lower(d.number) like :kw or lower(d.customerName) like :kw)";
+            + "and (:kw is null or lower(d.number) like :kw or lower(d.customerName) like :kw) "
+            + "and (:createdBy is null or d.createdBy = :createdBy)";
 
     /** overdue = invoices posted or partly paid whose due date has passed. */
     @Query("select d " + FILTERS + " and (:status is null or d.status = :status) "
@@ -36,18 +37,28 @@ public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Lo
                                @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("kw") String keyword,
                                @Param("status") EDocumentStatus status, @Param("overdue") boolean overdue,
                                @Param("journalStatus") com.terp.erp.commerce.common.EJournalStatus journalStatus,
-                               @Param("today") LocalDate today, Pageable pageable);
+                               @Param("today") LocalDate today, @Param("createdBy") String createdBy,
+                               Pageable pageable);
 
     @Query("select d.status, count(d) " + FILTERS + " group by d.status")
     List<Object[]> countByStatus(@Param("companyId") Long companyId, @Param("kind") EDocumentKind kind,
                                  @Param("customerId") Long customerId, @Param("warehouseId") Long warehouseId,
-                                 @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("kw") String keyword);
+                                 @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("kw") String keyword,
+                                 @Param("createdBy") String createdBy);
 
     /** Unified calendar: documents of a kind falling due in [from, to]. */
     @Query("select d from SalesDocument d where d.companyId = :companyId and d.kind = :kind and d.deleted = false "
-            + "and d.dueDate between :from and :to order by d.dueDate, d.id")
+            + "and d.dueDate between :from and :to and (:createdBy is null or d.createdBy = :createdBy) "
+            + "order by d.dueDate, d.id")
     List<SalesDocument> dueBetween(@Param("companyId") Long companyId, @Param("kind") EDocumentKind kind,
-                                   @Param("from") LocalDate from, @Param("to") LocalDate to);
+                                   @Param("from") LocalDate from, @Param("to") LocalDate to,
+                                   @Param("createdBy") String createdBy);
+
+    /** Client portal: documents of one customer, drafts excluded. */
+    @Query("select d from SalesDocument d where d.companyId = :companyId and d.kind = :kind and d.deleted = false "
+            + "and d.customerId = :customerId and d.status <> com.terp.erp.commerce.sales.EDocumentStatus.DRAFT")
+    Page<SalesDocument> forCustomer(@Param("companyId") Long companyId, @Param("kind") EDocumentKind kind,
+                                    @Param("customerId") Long customerId, Pageable pageable);
 
     /** Highest version number in a quotation family (the first version and every version made of it). */
     @Query("select max(d.versionNo) from SalesDocument d where d.id = :rootId or d.versionOfId = :rootId")

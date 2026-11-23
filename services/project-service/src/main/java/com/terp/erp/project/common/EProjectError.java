@@ -32,7 +32,8 @@ public enum EProjectError implements ErrorCode {
     PRJ_022("The attachment does not exist."),
     PRJ_023("The date range is invalid: from must not be after to, at most 366 days."),
     PRJ_024("The stage is not a stage of this board."),
-    PRJ_025("The due date must not be before the start date.");
+    PRJ_025("The due date must not be before the start date."),
+    PRJ_026("Your account is not linked to a customer.");
 
     private final String message;
 }

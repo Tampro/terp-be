@@ -3,10 +3,16 @@ package com.terp.erp.crm.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.stereotype.Component;
 import com.terp.erp.crm.common.ECrmError;
 import com.terp.erp.crm.config.CrmProperties;
+import com.terp.erp.exception.ApiException;
+import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.ErpPrincipal;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,6 +25,9 @@ public class AccountingClient {
 
     private final CallerHttp http;
     private final ObjectMapper mapper;
+    /** (companyId:userId) -> accounting customer id; a failed lookup throws out of the loader, so it is never cached. */
+    private final Cache<String, Long> myCustomer = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofSeconds(60)).maximumSize(10_000).build();
 
     public AccountingClient(CrmProperties props, ObjectMapper mapper) {
         this.http = new CallerHttp(props.accountingServiceUrl(), mapper, ECrmError.CRM_015, "accounting-service");
@@ -43,5 +52,21 @@ public class AccountingClient {
         body.put("shippingSameAsBilling", true);
         JsonNode data = http.call(c -> c.post().uri("/api/v1/accounting/customers").body(body)).path("data");
         return mapper.convertValue(data, Customer.class);
+    }
+
+    /**
+     * The accounting customer linked to the caller (client portal), from GET /api/v1/accounting/me/party with the
+     * caller's token. Not linked: accounting's 404 ACC_098 is relayed; linked only as a vendor: CRM_022 (404).
+     * Never taken from the request.
+     */
+    public Long myCustomerId() {
+        ErpPrincipal p = CurrentUser.get();
+        return myCustomer.get(p.companyId() + ":" + p.userId(), k -> {
+            JsonNode id = http.call(c -> c.get().uri("/api/v1/accounting/me/party")).path("data").path("customerId");
+            if (!(id.isTextual() || id.isNumber()) || id.asText().isBlank()) {
+                throw ApiException.notFound(ECrmError.CRM_022);
+            }
+            return Long.valueOf(id.asText());
+        });
     }
 }

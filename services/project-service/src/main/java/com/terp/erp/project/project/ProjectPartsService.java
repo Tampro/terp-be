@@ -79,7 +79,7 @@ public class ProjectPartsService {
 
     @Transactional
     public MilestoneDto addMilestone(Long projectId, MilestoneForm f) {
-        Project p = projects.require(projectId);
+        Project p = projects.requireManaged(projectId);
         Milestone m = new Milestone();
         m.setCompanyId(p.getCompanyId());
         m.setProjectId(p.getId());
@@ -93,6 +93,7 @@ public class ProjectPartsService {
     @Transactional
     public MilestoneDto updateMilestone(Long id, MilestoneForm f) {
         Milestone m = requireMilestone(id);
+        projects.requireManaged(m.getProjectId());
         apply(m, f);
         activity.log(m.getCompanyId(), m.getProjectId(), "MILESTONE_UPDATED", m.getTitle());
         return MilestoneDto.of(m);
@@ -102,6 +103,7 @@ public class ProjectPartsService {
     @Transactional
     public void deleteMilestone(Long id) {
         Milestone m = requireMilestone(id);
+        projects.requireManaged(m.getProjectId());
         m.setDeleted(true);
         tasks.findByProjectIdAndDeletedFalseOrderByPositionAscIdAsc(m.getProjectId()).stream()
                 .filter(t -> id.equals(t.getMilestoneId())).forEach(t -> t.setMilestoneId(null));
@@ -128,7 +130,7 @@ public class ProjectPartsService {
     /** Attaching the same file twice is a no-op answer of the existing row. */
     @Transactional
     public AttachmentDto attach(Long projectId, AttachmentForm f) {
-        Project p = projects.require(projectId);
+        Project p = projects.requireManaged(projectId);
         if (attachments.existsByProjectIdAndFileId(p.getId(), f.fileId())) {
             return attachments.findByProjectIdOrderByIdAsc(p.getId()).stream()
                     .filter(a -> a.getFileId().equals(f.fileId())).findFirst().map(AttachmentDto::of).orElseThrow();
@@ -149,7 +151,7 @@ public class ProjectPartsService {
     public void detach(Long attachmentId) {
         Attachment a = attachments.findById(attachmentId).orElseThrow(() -> ApiException.notFound(EProjectError.PRJ_022));
         TenantGuard.assertSameCompany(a.getCompanyId(), EProjectError.PRJ_022);
-        Project p = projects.require(a.getProjectId());
+        Project p = projects.requireManaged(a.getProjectId());
         attachments.delete(a);
         activity.log(p.getCompanyId(), p.getId(), "FILE_DETACHED", a.getName());
     }

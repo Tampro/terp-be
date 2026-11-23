@@ -17,5 +17,8 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
 
     Optional<Vendor> findByIdAndDeletedFalse(Long id);
 
+    /** The party a portal user is linked to; a user is linked to at most one (ACC_003 / create checks). */
+    Optional<Vendor> findFirstByCompanyIdAndUserIdAndDeletedFalse(Long companyId, Long userId);
+
     boolean existsByCompanyIdAndUserIdAndDeletedFalseAndIdNot(Long companyId, Long userId, Long id);
 }

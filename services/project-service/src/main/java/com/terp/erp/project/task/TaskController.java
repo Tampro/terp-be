@@ -44,8 +44,8 @@ import java.util.List;
 @RequestMapping("/api/v1/projects")
 @SecurityRequirement(name = "bearerAuth")
 public class TaskController {
-    private static final String VIEW = "@PermissionChecker.has('PROJECT_VIEW')";
-    private static final String MANAGE = "@PermissionChecker.has('PROJECT_TASK_MANAGE')";
+    private static final String VIEW = "@PermissionChecker.hasAny('PROJECT_VIEW','PROJECT_VIEW_OWN')";
+    private static final String MANAGE = "@PermissionChecker.hasAny('PROJECT_TASK_MANAGE','PROJECT_TASK_MANAGE_OWN')";
     private static final String NOT_FOUND = "Task (PRJ_016) or project (PRJ_006) not found or of another company";
     private final TaskService service;
 
@@ -72,7 +72,8 @@ public class TaskController {
 
     @Operation(summary = "Tasks due in [from, to] across the caller's company (unified calendar)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Bad range or over 366 days (PRJ_023), PRJ_001"))
-    @PreAuthorize(VIEW)
+    // Company-wide: not opened to PROJECT_VIEW_OWN (it would list tasks of projects the caller cannot see).
+    @PreAuthorize("@PermissionChecker.has('PROJECT_VIEW')")
     @GetMapping("/tasks/calendar")
     public ApiMessageDto<List<TaskCalendarItem>> calendar(
             @Parameter(description = "Super admin only: the company") @RequestParam(required = false) Long companyId,

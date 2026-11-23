@@ -46,7 +46,7 @@ public class PurchaseInvoiceController {
 
     @Operation(summary = "Purchase invoices", description = "Number PI-YYYY-MM-NNN. overdue = posted or partly paid "
             + "past the due date.")
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_VIEW','PURCHASE_VIEW_OWN')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<InvoiceRow>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -67,7 +67,7 @@ public class PurchaseInvoiceController {
             description = "Invoices with dueDate in [from, to] (at most 62 days), by due date; every status.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Period reversed or longer than 62 days "
             + "(PUR_013), super admin without companyId (PUR_003)"))
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_VIEW','PURCHASE_VIEW_OWN')")
     @GetMapping("/calendar")
     public ApiMessageDto<java.util.List<PurchaseInvoiceService.CalendarEntry>> calendar(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -77,7 +77,7 @@ public class PurchaseInvoiceController {
     }
 
     @Operation(summary = "Count per status", description = "Same filters as the list, without status.")
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_VIEW','PURCHASE_VIEW_OWN')")
     @GetMapping("/status-counts")
     public ApiMessageDto<Map<PurchaseInvoice.EStatus, Long>> statusCounts(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -90,7 +90,7 @@ public class PurchaseInvoiceController {
 
     @Operation(summary = "Purchase invoice with its lines")
     @ApiResponses(@ApiResponse(responseCode = "404", description = "No such invoice in your company (PUR_001)"))
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_VIEW','PURCHASE_VIEW_OWN')")
     @GetMapping("/{id}")
     public ApiMessageDto<InvoiceDetail> get(@PathVariable Long id) {
         return ApiMessageDto.ok(service.get(id));
@@ -99,7 +99,7 @@ public class PurchaseInvoiceController {
     @Operation(summary = "Create a purchase invoice (DRAFT)", description = "Unit price defaults to the item's "
             + "purchase price.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = WRITE_ERRORS))
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_MANAGE','PURCHASE_MANAGE_OWN')")
     @PostMapping
     public ApiMessageDto<InvoiceDetail> create(@Valid @RequestBody InvoiceForm form) {
         return ApiMessageDto.ok(service.create(form));
@@ -108,7 +108,7 @@ public class PurchaseInvoiceController {
     @Operation(summary = "Edit a draft", description = "Full replacement; the number stays.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = WRITE_ERRORS),
             @ApiResponse(responseCode = "404", description = "PUR_001")})
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_MANAGE','PURCHASE_MANAGE_OWN')")
     @PutMapping("/{id}")
     public ApiMessageDto<InvoiceDetail> update(@PathVariable Long id, @Valid @RequestBody InvoiceForm form) {
         return ApiMessageDto.ok(service.update(id, form));
@@ -117,7 +117,7 @@ public class PurchaseInvoiceController {
     @Operation(summary = "Delete a draft")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "Not a draft (PUR_002)"),
             @ApiResponse(responseCode = "404", description = "PUR_001")})
-    @PreAuthorize("@PermissionChecker.has('PURCHASE_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('PURCHASE_MANAGE','PURCHASE_MANAGE_OWN')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {
         service.delete(id);

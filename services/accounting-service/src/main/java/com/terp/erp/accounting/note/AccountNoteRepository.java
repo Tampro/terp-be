@@ -29,6 +29,12 @@ public interface AccountNoteRepository extends JpaRepository<AccountNote, Long> 
                              @Param("partyId") Long partyId, @Param("status") ENoteStatus status,
                              @Param("from") LocalDate from, @Param("to") LocalDate to, Pageable pageable);
 
+    /** Notes a party sees in its portal: approved or later, never drafts. */
+    @Query("select n from AccountNote n where n.companyId = :companyId and n.kind = :kind and n.deleted = false "
+            + "and n.partyId = :partyId and n.status <> com.terp.erp.accounting.note.ENoteStatus.DRAFT")
+    Page<AccountNote> issuedToParty(@Param("companyId") Long companyId, @Param("kind") ENoteKind kind,
+                                    @Param("partyId") Long partyId, Pageable pageable);
+
     /** Approved notes in [from, to] (any status but DRAFT), for the customer / vendor report. */
     @Query("select n from AccountNote n where n.companyId = :companyId and n.kind = :kind and n.deleted = false "
             + "and n.partyId = :partyId and n.status <> com.terp.erp.accounting.note.ENoteStatus.DRAFT "

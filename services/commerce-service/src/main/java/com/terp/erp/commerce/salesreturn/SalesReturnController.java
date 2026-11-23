@@ -45,7 +45,7 @@ public class SalesReturnController {
     private final SalesReturnService service;
 
     @Operation(summary = "Sales returns", description = "Number SR-YYYY-MM-NNN.")
-    @PreAuthorize("@PermissionChecker.has('SALES_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_VIEW','SALES_VIEW_OWN')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<ReturnRow>> list(
             @Parameter(description = "Super admin only: the company to act on") @RequestParam(required = false) Long companyId,
@@ -61,7 +61,7 @@ public class SalesReturnController {
 
     @Operation(summary = "Return with its lines")
     @ApiResponses(@ApiResponse(responseCode = "404", description = "No such return in your company (SAL_012)"))
-    @PreAuthorize("@PermissionChecker.has('SALES_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_VIEW','SALES_VIEW_OWN')")
     @GetMapping("/{id}")
     public ApiMessageDto<ReturnDetail> get(@PathVariable Long id) {
         return ApiMessageDto.ok(service.get(id));
@@ -70,7 +70,7 @@ public class SalesReturnController {
     @Operation(summary = "Lines of a posted invoice with the quantity still returnable")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "Invoice not posted (SAL_010)"),
             @ApiResponse(responseCode = "404", description = "No such invoice (SAL_001)")})
-    @PreAuthorize("@PermissionChecker.has('SALES_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_VIEW','SALES_VIEW_OWN')")
     @GetMapping("/returnable")
     public ApiMessageDto<List<ReturnableLine>> returnable(@RequestParam Long invoiceId) {
         return ApiMessageDto.ok(service.returnable(invoiceId));
@@ -78,7 +78,7 @@ public class SalesReturnController {
 
     @Operation(summary = "Create a return (DRAFT)")
     @ApiResponses(@ApiResponse(responseCode = "400", description = WRITE_ERRORS))
-    @PreAuthorize("@PermissionChecker.has('SALES_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_MANAGE','SALES_MANAGE_OWN')")
     @PostMapping
     public ApiMessageDto<ReturnDetail> create(@Valid @RequestBody ReturnForm form) {
         return ApiMessageDto.ok(service.create(form));
@@ -87,7 +87,7 @@ public class SalesReturnController {
     @Operation(summary = "Edit a draft return", description = "Full replacement.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = WRITE_ERRORS),
             @ApiResponse(responseCode = "404", description = "SAL_012")})
-    @PreAuthorize("@PermissionChecker.has('SALES_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_MANAGE','SALES_MANAGE_OWN')")
     @PutMapping("/{id}")
     public ApiMessageDto<ReturnDetail> update(@PathVariable Long id, @Valid @RequestBody ReturnForm form) {
         return ApiMessageDto.ok(service.update(id, form));
@@ -96,7 +96,7 @@ public class SalesReturnController {
     @Operation(summary = "Delete a draft return")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "Not a draft (SAL_013)"),
             @ApiResponse(responseCode = "404", description = "SAL_012")})
-    @PreAuthorize("@PermissionChecker.has('SALES_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SALES_MANAGE','SALES_MANAGE_OWN')")
     @DeleteMapping("/{id}")
     public ApiMessageDto<Void> delete(@PathVariable Long id) {
         service.delete(id);

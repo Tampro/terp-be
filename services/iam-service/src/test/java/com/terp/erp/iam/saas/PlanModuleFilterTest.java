@@ -23,7 +23,7 @@ public class PlanModuleFilterTest {
             "DOCUMENT", "EMPLOYEE", "EVENT", "HELPDESK", "IAM", "LEAVE", "LIFECYCLE", "MEDIA", "MEETING", "NOTIFICATION",
             "ORG", "PAYROLL", "PERFORMANCE", "RECRUITMENT", "SAAS", "TRAINING", "ZOOM", "INVENTORY", "SALES", "CUSTOMER",
             "QUOTATION", "CRM", "CRM_CONTRACT", "PURCHASE", "VENDOR", "POS", "BANK", "PROJECT", "FORM", "COA", "REVENUE", "EXPENSE", "PAYMENT", "NOTE", "ACCOUNTING_REPORT", "LEDGER", "GOAL", "BUDGET",
-            "SUPPORT", "MESSENGER");
+            "SUPPORT", "MESSENGER", "PORTAL");
 
     /** A filter for a company without a plan: every permission passes (used by other tests). */
     public static PlanModuleFilter noPlan() {
@@ -84,6 +84,17 @@ public class PlanModuleFilterTest {
         assertThat(EPlanModule.PROJECT.available()).isTrue();
         assertThat(EPlanModule.SUPPORT_TICKET.available()).isTrue();
         assertThat(EPlanModule.SLACK.available()).isFalse();
+    }
+
+    @Test
+    void ownVariantFollowsThePlanModuleOfItsBaseAndPortalIsAlwaysOn() {
+        Plan plan = new Plan();
+        plan.getModules().add(EPlanModule.ACCOUNTING);
+        List<Permission> perms = List.of(perm("CRM_VIEW_OWN", "CRM"), perm("PROJECT_VIEW_OWN", "PROJECT"),
+                perm("SALES_VIEW_OWN", "SALES"), perm("PORTAL_CLIENT", "PORTAL"));
+
+        assertThat(filterFor(plan).allowed(new Company(), perms))
+                .containsExactlyInAnyOrder("SALES_VIEW_OWN", "PORTAL_CLIENT");
     }
 
     private static Permission perm(String code, String module) {

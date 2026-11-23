@@ -72,7 +72,7 @@ final class CrmControllers {
         private final LeadService service;
 
         @Operation(summary = "Leads", description = "followUpOverdue = follow-up date passed.")
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping
         public ApiMessageDto<ResponseListDto<LeadRow>> list(
                 @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -88,7 +88,7 @@ final class CrmControllers {
 
         @Operation(summary = "Lead board of a pipeline (one column per lead stage)")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "Pipeline (CRM_002)"))
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping("/board")
         public ApiMessageDto<List<LeadService.Column>> board(@RequestParam Long pipelineId) {
             return ApiMessageDto.ok(service.board(pipelineId));
@@ -96,7 +96,7 @@ final class CrmControllers {
 
         @Operation(summary = "Lead with its tabs (users, labels, sources, products, tasks, calls, discussions, emails, files, activity)")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "No such lead in your company (CRM_006)"))
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping("/{id}")
         public ApiMessageDto<LeadDetail> get(@PathVariable Long id) {
             return ApiMessageDto.ok(service.get(id));
@@ -106,7 +106,7 @@ final class CrmControllers {
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Stage not of the pipeline (CRM_008), "
                 + "pipeline without lead stage (CRM_010), validation (COMMON_001)"),
                 @ApiResponse(responseCode = "404", description = "Pipeline (CRM_002), stage (CRM_003)")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping
         public ApiMessageDto<LeadDetail> create(@Valid @RequestBody LeadForm form) {
             return ApiMessageDto.ok(service.create(form));
@@ -114,7 +114,7 @@ final class CrmControllers {
 
         @Operation(summary = "Edit a lead", description = "Full replacement of the fields; pipelineId and stageId are ignored (use move).")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "CRM_006"))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}")
         public ApiMessageDto<LeadDetail> update(@PathVariable Long id, @Valid @RequestBody LeadForm form) {
             return ApiMessageDto.ok(service.update(id, form));
@@ -122,7 +122,7 @@ final class CrmControllers {
 
         @Operation(summary = "Delete a lead")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "CRM_006"))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @DeleteMapping("/{id}")
         public ApiMessageDto<Void> delete(@PathVariable Long id) {
             service.delete(id);
@@ -132,7 +132,7 @@ final class CrmControllers {
         @Operation(summary = "Move a lead to a stage / position (kanban drag)")
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Stage not a lead stage of the pipeline (CRM_008)"),
                 @ApiResponse(responseCode = "404", description = "CRM_006, CRM_003")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}/stage")
         public ApiMessageDto<LeadDetail> move(@PathVariable Long id, @Valid @RequestBody MoveForm form) {
             return ApiMessageDto.ok(service.move(id, form));
@@ -141,7 +141,7 @@ final class CrmControllers {
         @Operation(summary = "Replace the users, labels, sources or products of a lead", description = LINK_KINDS)
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Label of another pipeline (CRM_004), clients on a lead (CRM_013)"),
                 @ApiResponse(responseCode = "404", description = "CRM_006; label, source or item not found (CRM_004, CRM_005, INV_ relayed)")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}/{kind:members|labels|sources|products}")
         public ApiMessageDto<List<LinkDto>> links(@PathVariable Long id, @PathVariable String kind,
                                                  @Valid @RequestBody LinksForm form) {
@@ -153,7 +153,7 @@ final class CrmControllers {
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Already converted (CRM_011), client missing "
                 + "or both given (CRM_018), pipeline without deal stage (CRM_010)"),
                 @ApiResponse(responseCode = "404", description = "CRM_006; customer (ACC_ relayed)")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/{id}/convert")
         public ApiMessageDto<Map<String, String>> convert(@PathVariable Long id, @Valid @RequestBody ConvertForm form) {
             return ApiMessageDto.ok(service.convert(id, form));
@@ -169,7 +169,7 @@ final class CrmControllers {
         private final DealService service;
 
         @Operation(summary = "Deals")
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping
         public ApiMessageDto<ResponseListDto<DealRow>> list(
                 @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
@@ -182,7 +182,7 @@ final class CrmControllers {
 
         @Operation(summary = "Deal board of a pipeline (columns with count and total price)")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "Pipeline (CRM_002)"))
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping("/board")
         public ApiMessageDto<List<DealService.Column>> board(@RequestParam Long pipelineId) {
             return ApiMessageDto.ok(service.board(pipelineId));
@@ -190,7 +190,7 @@ final class CrmControllers {
 
         @Operation(summary = "Deal with its tabs")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "No such deal in your company (CRM_007)"))
-        @PreAuthorize("@PermissionChecker.has('CRM_VIEW')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_VIEW','CRM_VIEW_OWN')")
         @GetMapping("/{id}")
         public ApiMessageDto<DealDetail> get(@PathVariable Long id) {
             return ApiMessageDto.ok(service.get(id));
@@ -199,7 +199,7 @@ final class CrmControllers {
         @Operation(summary = "Create a deal")
         @ApiResponses({@ApiResponse(responseCode = "400", description = "CRM_008, CRM_010, validation (COMMON_001)"),
                 @ApiResponse(responseCode = "404", description = "CRM_002, CRM_003; customer (ACC_ relayed)")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping
         public ApiMessageDto<DealDetail> create(@Valid @RequestBody DealForm form) {
             return ApiMessageDto.ok(service.create(form));
@@ -207,7 +207,7 @@ final class CrmControllers {
 
         @Operation(summary = "Edit a deal", description = "Full replacement; clientIds replaces the clients when given.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "CRM_007"))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}")
         public ApiMessageDto<DealDetail> update(@PathVariable Long id, @Valid @RequestBody DealForm form) {
             return ApiMessageDto.ok(service.update(id, form));
@@ -215,7 +215,7 @@ final class CrmControllers {
 
         @Operation(summary = "Delete a deal")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "CRM_007"))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @DeleteMapping("/{id}")
         public ApiMessageDto<Void> delete(@PathVariable Long id) {
             service.delete(id);
@@ -224,7 +224,7 @@ final class CrmControllers {
 
         @Operation(summary = "Set the deal status: ACTIVE, WON or LOSS")
         @ApiResponses(@ApiResponse(responseCode = "404", description = "CRM_007"))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}/status")
         public ApiMessageDto<DealDetail> status(@PathVariable Long id, @Valid @RequestBody StatusForm form) {
             return ApiMessageDto.ok(service.status(id, form));
@@ -233,7 +233,7 @@ final class CrmControllers {
         @Operation(summary = "Move a deal to a stage / position (kanban drag)")
         @ApiResponses({@ApiResponse(responseCode = "400", description = "CRM_008"),
                 @ApiResponse(responseCode = "404", description = "CRM_007, CRM_003")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}/stage")
         public ApiMessageDto<DealDetail> move(@PathVariable Long id, @Valid @RequestBody MoveForm form) {
             return ApiMessageDto.ok(service.move(id, form));
@@ -242,7 +242,7 @@ final class CrmControllers {
         @Operation(summary = "Replace the users, clients, labels, sources or products of a deal", description = LINK_KINDS)
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Label of another pipeline (CRM_004)"),
                 @ApiResponse(responseCode = "404", description = "CRM_007; CRM_004, CRM_005, INV_ / ACC_ relayed")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/{id}/{kind:members|clients|labels|sources|products}")
         public ApiMessageDto<List<LinkDto>> links(@PathVariable Long id, @PathVariable String kind,
                                                  @Valid @RequestBody LinksForm form) {
@@ -261,7 +261,7 @@ final class CrmControllers {
 
         @Operation(summary = "Add a task")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/tasks")
         public ApiMessageDto<TaskDto> addTask(@PathVariable String subject, @PathVariable Long id, @Valid @RequestBody TaskForm form) {
             return ApiMessageDto.ok(service.addTask(service.require(subject(subject), id), form));
@@ -269,7 +269,7 @@ final class CrmControllers {
 
         @Operation(summary = "Edit a task", description = "Full replacement.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/tasks/{taskId}")
         public ApiMessageDto<TaskDto> updateTask(@PathVariable String subject, @PathVariable Long id, @PathVariable Long taskId,
                                                  @Valid @RequestBody TaskForm form) {
@@ -278,7 +278,7 @@ final class CrmControllers {
 
         @Operation(summary = "Delete a task")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @DeleteMapping("/tasks/{taskId}")
         public ApiMessageDto<Void> deleteTask(@PathVariable String subject, @PathVariable Long id, @PathVariable Long taskId) {
             service.deleteTask(service.require(subject(subject), id), taskId);
@@ -287,7 +287,7 @@ final class CrmControllers {
 
         @Operation(summary = "Log a call")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/calls")
         public ApiMessageDto<CallDto> addCall(@PathVariable String subject, @PathVariable Long id, @Valid @RequestBody CallForm form) {
             return ApiMessageDto.ok(service.addCall(service.require(subject(subject), id), form));
@@ -295,7 +295,7 @@ final class CrmControllers {
 
         @Operation(summary = "Edit a call", description = "Full replacement.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PutMapping("/calls/{callId}")
         public ApiMessageDto<CallDto> updateCall(@PathVariable String subject, @PathVariable Long id, @PathVariable Long callId,
                                                  @Valid @RequestBody CallForm form) {
@@ -304,7 +304,7 @@ final class CrmControllers {
 
         @Operation(summary = "Delete a call")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @DeleteMapping("/calls/{callId}")
         public ApiMessageDto<Void> deleteCall(@PathVariable String subject, @PathVariable Long id, @PathVariable Long callId) {
             service.deleteCall(service.require(subject(subject), id), callId);
@@ -313,7 +313,7 @@ final class CrmControllers {
 
         @Operation(summary = "Add a discussion comment")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/discussions")
         public ApiMessageDto<EntryDto> discussion(@PathVariable String subject, @PathVariable Long id,
                                                   @Valid @RequestBody DiscussionForm form) {
@@ -322,7 +322,7 @@ final class CrmControllers {
 
         @Operation(summary = "Log an email", description = "Kept on the record; nothing is sent.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/emails")
         public ApiMessageDto<EntryDto> email(@PathVariable String subject, @PathVariable Long id, @Valid @RequestBody EmailForm form) {
             return ApiMessageDto.ok(service.addEmail(service.require(subject(subject), id), form));
@@ -332,7 +332,7 @@ final class CrmControllers {
         @ApiResponses({@ApiResponse(responseCode = "400", description = "Not a file of your company (CRM_014)"),
                 @ApiResponse(responseCode = "404", description = NOT_FOUND),
                 @ApiResponse(responseCode = "503", description = "Media unavailable (CRM_016)")})
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @PostMapping("/files")
         public ApiMessageDto<EntryDto> file(@PathVariable String subject, @PathVariable Long id, @Valid @RequestBody FileForm form) {
             return ApiMessageDto.ok(service.addFile(service.require(subject(subject), id), form));
@@ -340,7 +340,7 @@ final class CrmControllers {
 
         @Operation(summary = "Delete a discussion, email or file")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
-        @PreAuthorize("@PermissionChecker.has('CRM_MANAGE')")
+        @PreAuthorize("@PermissionChecker.hasAny('CRM_MANAGE','CRM_MANAGE_OWN')")
         @DeleteMapping("/entries/{entryId}")
         public ApiMessageDto<Void> deleteEntry(@PathVariable String subject, @PathVariable Long id, @PathVariable Long entryId) {
             service.deleteEntry(service.require(subject(subject), id), entryId);

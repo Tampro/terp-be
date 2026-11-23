@@ -50,8 +50,8 @@ public class ContractController {
     private static final String WRITE_ERRORS = "End before start (CTR_006), inactive type (CTR_007), "
             + "super admin without companyId (CTR_001), validation (COMMON_001)";
     private static final String NOT_FOUND = "No such contract in your company (CTR_002)";
-    private static final String VIEW = "@PermissionChecker.has('CRM_CONTRACT_VIEW')";
-    private static final String MANAGE = "@PermissionChecker.has('CRM_CONTRACT_MANAGE')";
+    private static final String VIEW = "@PermissionChecker.hasAny('CRM_CONTRACT_VIEW','CRM_CONTRACT_VIEW_OWN')";
+    private static final String MANAGE = "@PermissionChecker.hasAny('CRM_CONTRACT_MANAGE','CRM_CONTRACT_MANAGE_OWN')";
     private final ContractService service;
 
     @Operation(summary = "Contracts", description = "Number from the configured prefix (CON0001). Each row carries "

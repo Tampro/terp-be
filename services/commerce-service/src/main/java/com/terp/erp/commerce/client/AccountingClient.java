@@ -92,6 +92,21 @@ public class AccountingClient {
         http.call(c -> c.post().uri("/api/v1/accounting/journal-postings").body(body));
     }
 
+    /** The customer and / or vendor linked to the caller's account (ids null when not linked on that side). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Party(String customerId, String customerCode, String customerName,
+                        String vendorId, String vendorCode, String vendorName) {
+    }
+
+    /**
+     * GET /accounting/me/party as the caller: resolved by accounting from the caller's own token, never from an id
+     * the client sends. Not linked at all: accounting's 404 ACC_098 is relayed.
+     */
+    public Party myParty() {
+        JsonNode data = http.call(c -> c.get().uri("/api/v1/accounting/me/party")).path("data");
+        return mapper.convertValue(data, Party.class);
+    }
+
     public Vendor vendor(Long id) {
         JsonNode data = http.call(c -> c.get().uri("/api/v1/accounting/vendors/{id}", id)).path("data");
         return mapper.convertValue(data, Vendor.class);

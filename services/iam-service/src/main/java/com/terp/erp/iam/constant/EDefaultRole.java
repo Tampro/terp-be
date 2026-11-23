@@ -15,7 +15,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public enum EDefaultRole {
     COMPANY_ADMIN("Company administrator",
-            union(union(union(union(union(union(IamPermissions.ALL, SupportPermissions.ALL), SalesPermissions.ALL),
+            union(union(union(union(union(union(union(IamPermissions.ALL, SupportPermissions.ALL), SalesPermissions.ALL),
+                                    union(OwnPermissions.ALL, PortalPermissions.ALL)),
                             com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
                     com.terp.erp.iam.saas.SaasPermissions.ALL), MediaPermissions.ALL),
                     union(union(NotificationPermissions.ALL, EmployeePermissions.ALL),
@@ -38,17 +39,28 @@ public enum EDefaultRole {
                                                     union(MeetingPermissions.ALL,
                                                             union(EventPermissions.ALL,
                                                                     union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
-    MANAGER("Manager", Set.of()),
+    // TODO(assumption): a manager works their own sales, quotations, purchases, leads/deals, contracts, projects,
+    // tasks and tickets (OwnScope: rows they created or are assigned to); full codes stay with COMPANY_ADMIN — confirm.
+    MANAGER("Manager", union(union(OwnPermissions.SALES, OwnPermissions.PURCHASE),
+            union(union(OwnPermissions.CRM, OwnPermissions.PROJECT), OwnPermissions.SUPPORT))),
     // TODO(assumption): every employee clocks in/out, reads their own profile (ERP manual 15) and chats with
-    // colleagues (ERP manual 18, Messenger) — confirm with BA.
-    EMPLOYEE("Employee", Set.of("ATTENDANCE_SELF", "EMPLOYEE_SELF", SupportPermissions.MESSENGER_USE)),
-    EXECUTIVE("Executive board", Set.of()),
+    // colleagues (ERP manual 18, Messenger) — confirm with BA. Also (assumption) sees projects they are a member of,
+    // works their own tasks and raises / follows their own support tickets.
+    EMPLOYEE("Employee", Set.of("ATTENDANCE_SELF", "EMPLOYEE_SELF", SupportPermissions.MESSENGER_USE,
+            OwnPermissions.PROJECT_VIEW_OWN, OwnPermissions.PROJECT_TASK_MANAGE_OWN,
+            OwnPermissions.SUPPORT_TICKET_VIEW_OWN, OwnPermissions.SUPPORT_TICKET_MANAGE_OWN)),
+    // TODO(assumption): the executive board reads its own sales, CRM, contracts and projects (view only) — confirm
+    // with BA whether it should rather read everything (full *_VIEW codes).
+    EXECUTIVE("Executive board", Set.of(OwnPermissions.SALES_VIEW_OWN, OwnPermissions.QUOTATION_VIEW_OWN,
+            OwnPermissions.CRM_VIEW_OWN, OwnPermissions.CRM_CONTRACT_VIEW_OWN, OwnPermissions.PROJECT_VIEW_OWN)),
     ACCOUNTANT("Accountant", Set.of()),
-    // TODO(assumption): a client sees only its own invoices, payments, credit notes, deals and tickets, and a vendor
-    // its own purchase invoices, payments and debit notes (docs/erp/analysis/07 §1). Those permissions come with the
-    // accounting/commerce services; until then both roles grant nothing.
-    CLIENT("Client", Set.of()),
-    VENDOR("Vendor", Set.of());
+    // TODO(assumption): a client sees only its own invoices, payments, credit notes, contracts, projects and tickets,
+    // and a vendor its own purchase invoices, payments and debit notes (docs/erp/analysis/07 §1), all through the
+    // /api/v1/portal/** endpoints (PORTAL_*) resolved to the customer / vendor linked to the user. A client raises
+    // and follows its own tickets; messenger stays off for clients — confirm with BA.
+    CLIENT("Client", Set.of(PortalPermissions.CLIENT, OwnPermissions.SUPPORT_TICKET_VIEW_OWN,
+            OwnPermissions.SUPPORT_TICKET_MANAGE_OWN)),
+    VENDOR("Vendor", Set.of(PortalPermissions.VENDOR));
 
     private static Set<String> union(Set<String> a, Set<String> b) {
         java.util.Set<String> all = new java.util.HashSet<>(a);

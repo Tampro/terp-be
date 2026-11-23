@@ -21,4 +21,17 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             + " and (:q is null or lower(p.name) like lower(concat('%', :q, '%')))")
     Page<Project> search(@Param("company") Long company, @Param("status") EProjectStatus status,
                          @Param("q") String q, Pageable pageable);
+
+    /** {@link #search} limited to projects I am on the team of or created (PROJECT_VIEW_OWN). */
+    @Query("select p from Project p where p.companyId = :company and p.deleted = false"
+            + " and (:me member of p.userIds or p.createdBy = :sub)"
+            + " and (:status is null or p.status = :status)"
+            + " and (:q is null or lower(p.name) like lower(concat('%', :q, '%')))")
+    Page<Project> searchOwn(@Param("company") Long company, @Param("status") EProjectStatus status,
+                            @Param("q") String q, @Param("me") Long me, @Param("sub") String sub, Pageable pageable);
+
+    /** Live projects with this accounting customer among their clients (client portal). */
+    @Query("select p from Project p where p.companyId = :company and p.deleted = false"
+            + " and :customer member of p.clientIds")
+    Page<Project> findOfClient(@Param("company") Long company, @Param("customer") Long customerId, Pageable pageable);
 }

@@ -49,7 +49,8 @@ public enum ESupportError implements ErrorCode {
     SUP_039("The field \"{0}\": \"{1}\" is not one of its options."),
     SUP_040("A SELECT field needs at least one option."),
     SUP_041("The width must be 3, 4, 6 or 12."),
-    SUP_042("The ticket field does not exist.");
+    SUP_042("The ticket field does not exist."),
+    SUP_043("Your account has no email address, so it cannot raise a ticket.");
 
     private final String message;
 }

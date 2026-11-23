@@ -26,6 +26,7 @@ import com.terp.erp.crm.setup.Stage;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.outbox.OutboxPublisher;
 import com.terp.erp.outbox.Payload;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -116,7 +117,10 @@ public class LeadService {
     public Page<LeadRow> search(Long companyId, Long pipelineId, Long stageId, Long ownerUserId, LocalDate followFrom,
                                 LocalDate followTo, String keyword, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, ECrmError.CRM_001);
-        Page<Lead> page = leads.search(company, pipelineId, stageId, ownerUserId, followFrom, followTo, like(keyword), pageable);
+        Page<Lead> page = CrmScope.ownView()
+                ? leads.searchOwn(company, pipelineId, stageId, ownerUserId, followFrom, followTo, like(keyword),
+                OwnScope.userId(), OwnScope.sub(), pageable)
+                : leads.search(company, pipelineId, stageId, ownerUserId, followFrom, followTo, like(keyword), pageable);
         List<LeadRow> rows = rows(page.getContent());
         return page.map(l -> rows.get(page.getContent().indexOf(l)));
     }
@@ -125,8 +129,9 @@ public class LeadService {
     @Transactional(readOnly = true)
     public List<Column> board(Long pipelineId) {
         Pipeline p = setup.requirePipeline(pipelineId);
+        boolean own = CrmScope.ownView();
         List<LeadRow> rows = rows(leads.findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(
-                p.getCompanyId(), p.getId()));
+                p.getCompanyId(), p.getId()).stream().filter(l -> !own || CrmScope.mine(l)).toList());
         List<Column> out = new ArrayList<>();
         for (Stage s : setup.stagesOf(p.getId(), EStageKind.LEAD)) {
             out.add(new Column(s.getId().toString(), s.getName(),
@@ -138,6 +143,13 @@ public class LeadService {
     @Transactional(readOnly = true)
     public LeadDetail get(Long id) {
         Lead l = require(id);
+        if (CrmScope.ownView()) {
+            OwnScope.assertMine(CrmScope.mine(l), ECrmError.CRM_006);
+        }
+        return detail(l);
+    }
+
+    private LeadDetail detail(Lead l) {
         return new LeadDetail(rows(List.of(l)).get(0), l.getNotes(), activity.activity(subject(l)));
     }
 
@@ -156,30 +168,30 @@ public class LeadService {
         leads.save(l);
         activity.log(subject(l), "Lead created", l.getName());
         assigned(l);
-        return get(l.getId());
+        return detail(l);
     }
 
     /** Full replacement of the lead's fields; the pipeline and stage change only through move. */
     @Transactional
     public LeadDetail update(Long id, LeadForm f) {
-        Lead l = require(id);
+        Lead l = requireManaged(id);
         Long owner = l.getOwnerUserId();
         apply(l, f);
         if (!java.util.Objects.equals(owner, l.getOwnerUserId())) {
             assigned(l);
         }
-        return get(l.getId());
+        return detail(l);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireManaged(id).setDeleted(true);
     }
 
     /** Kanban drag: another lead stage of the same pipeline; cards after the position shift down. */
     @Transactional
     public LeadDetail move(Long id, MoveForm f) {
-        Lead l = require(id);
+        Lead l = requireManaged(id);
         Stage to = setup.requireStageOf(f.stageId(), l.getPipelineId(), EStageKind.LEAD);
         String fromName = setup.stageNames(List.of(l.getStageId())).get(l.getStageId());
         List<Lead> column = leads.findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(
@@ -203,7 +215,7 @@ public class LeadService {
                     "fromStage", fromName, "toStage", to.getName(), "ownerUserId", l.getOwnerUserId(),
                     "recipientUserIds", Payload.ids(java.util.Collections.singletonList(l.getOwnerUserId()))));
         }
-        return get(l.getId());
+        return detail(l);
     }
 
     @Transactional
@@ -211,7 +223,7 @@ public class LeadService {
         if (type == ELinkType.CLIENT) {
             throw ApiException.badRequest(ECrmError.CRM_013);
         }
-        return activity.setLinks(subject(require(id)), type, f.ids());
+        return activity.setLinks(subject(requireManaged(id)), type, f.ids());
     }
 
     /**
@@ -220,7 +232,7 @@ public class LeadService {
      */
     @Transactional
     public Map<String, String> convert(Long id, ConvertForm f) {
-        Lead l = require(id);
+        Lead l = requireManaged(id);
         if (l.getConvertedDealId() != null) {
             throw ApiException.badRequest(ECrmError.CRM_011, l.getConvertedDealId().toString());
         }
@@ -253,6 +265,15 @@ public class LeadService {
         activity.log(from, "Converted to deal", d.getName());
         activity.log(to, "Created from lead", l.getName());
         return Map.of("dealId", d.getId().toString(), "customerId", client.id());
+    }
+
+    /** For writes: with CRM_MANAGE_OWN only, another user's lead answers 404 like one of another company. */
+    Lead requireManaged(Long id) {
+        Lead l = require(id);
+        if (CrmScope.ownManage()) {
+            OwnScope.assertMine(CrmScope.mine(l), ECrmError.CRM_006);
+        }
+        return l;
     }
 
     Lead require(Long id) {

@@ -16,6 +16,8 @@ import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
+import com.terp.erp.commerce.common.Ownership;
+import com.terp.erp.commerce.common.Ownership.Access;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
@@ -122,13 +124,14 @@ public class PurchaseReturnService {
                                   Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
         String kw = keyword == null || keyword.isBlank() ? null : "%" + keyword.trim().toLowerCase() + "%";
-        return returns.search(company, invoiceId, vendorId, warehouseId, status, from, to, kw, pageable)
+        return returns.search(company, invoiceId, vendorId, warehouseId, status, from, to, kw,
+                        Ownership.owner(PurchaseInvoiceService.PURCHASE, Access.VIEW), pageable)
                 .map(ReturnRow::of);
     }
 
     @Transactional(readOnly = true)
     public ReturnDetail get(Long id) {
-        return ReturnDetail.of(require(id));
+        return ReturnDetail.of(require(id, Access.VIEW));
     }
 
     /** Lines of a posted invoice with their returnable quantity; PUR_012 when nothing is left to return. */
@@ -159,7 +162,7 @@ public class PurchaseReturnService {
     /** Full replacement of a draft return; the invoice may change too. */
     @Transactional
     public ReturnDetail update(Long id, ReturnForm f) {
-        PurchaseReturn r = requireDraft(id);
+        PurchaseReturn r = requireDraft(id, Access.MANAGE);
         PurchaseInvoice inv = invoices.lockPosted(f.invoiceId());
         apply(r, inv, f, r.getId());
         return ReturnDetail.of(r);
@@ -167,12 +170,12 @@ public class PurchaseReturnService {
 
     @Transactional
     public void delete(Long id) {
-        requireDraft(id).setDeleted(true);
+        requireDraft(id, Access.MANAGE).setDeleted(true);
     }
 
     @Transactional
     public ReturnDetail approve(Long id) {
-        PurchaseReturn r = requireDraft(id);
+        PurchaseReturn r = requireDraft(id, Access.POST);
         r.setStatus(PurchaseReturn.EStatus.APPROVED);
         return ReturnDetail.of(r);
     }
@@ -185,7 +188,7 @@ public class PurchaseReturnService {
      */
     @Transactional
     public ReturnDetail complete(Long id) {
-        PurchaseReturn r = require(id);
+        PurchaseReturn r = require(id, Access.POST);
         if (r.getStatus() != PurchaseReturn.EStatus.APPROVED) {
             throw ApiException.badRequest(EPurchaseError.PUR_010);
         }
@@ -209,7 +212,7 @@ public class PurchaseReturnService {
      */
     @Transactional
     public ReturnDetail retryJournal(Long id) {
-        PurchaseReturn r = require(id);
+        PurchaseReturn r = require(id, Access.POST);
         if (r.getJournalStatus() != EJournalStatus.FAILED) {
             throw ApiException.badRequest(EPurchaseError.PUR_017);
         }
@@ -290,15 +293,17 @@ public class PurchaseReturnService {
         r.setTotal(subtotal.subtract(discount).add(tax));
     }
 
-    private PurchaseReturn require(Long id) {
+    private PurchaseReturn require(Long id, Access access) {
         PurchaseReturn r = returns.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_008));
         TenantGuard.assertSameCompany(r.getCompanyId(), EPurchaseError.PUR_008);
+        Ownership.check(Ownership.owner(PurchaseInvoiceService.PURCHASE, access), r.getCreatedBy(),
+                EPurchaseError.PUR_008);
         return r;
     }
 
-    private PurchaseReturn requireDraft(Long id) {
-        PurchaseReturn r = require(id);
+    private PurchaseReturn requireDraft(Long id, Access access) {
+        PurchaseReturn r = require(id, access);
         if (r.getStatus() != PurchaseReturn.EStatus.DRAFT) {
             throw ApiException.badRequest(EPurchaseError.PUR_009);
         }

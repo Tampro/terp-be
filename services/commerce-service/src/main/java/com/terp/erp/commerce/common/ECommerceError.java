@@ -32,7 +32,8 @@ public enum ECommerceError implements ErrorCode {
     SAL_022("The payment amount {0} is more than the invoice balance {1}."),
     SAL_023("Payment {0} was already applied to this invoice with a different amount."),
     SAL_024("The warehouse is inactive."),
-    SAL_025("Only a document whose accounting journal failed can have its journal posted again.");
+    SAL_025("Only a document whose accounting journal failed can have its journal posted again."),
+    SAL_026("Your account is not linked to a customer.");
 
     private final String message;
 }

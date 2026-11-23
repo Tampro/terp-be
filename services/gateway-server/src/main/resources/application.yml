@@ -75,23 +75,23 @@ spring:
             - id: commerce-service
               uri: ${COMMERCE_SERVICE_URL:http://localhost:8092}
               predicates:
-                - Path=/api/v1/sales/**,/api/v1/purchase/**,/api/v1/pos/**
+                - Path=/api/v1/sales/**,/api/v1/purchase/**,/api/v1/pos/**,/api/v1/portal/client/invoices/**,/api/v1/portal/client/invoices,/api/v1/portal/client/returns/**,/api/v1/portal/client/returns,/api/v1/portal/client/proposals/**,/api/v1/portal/client/proposals,/api/v1/portal/client/quotations/**,/api/v1/portal/client/quotations,/api/v1/portal/vendor/purchase-invoices/**,/api/v1/portal/vendor/purchase-invoices,/api/v1/portal/vendor/purchase-returns/**,/api/v1/portal/vendor/purchase-returns
             - id: accounting-service
               uri: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
               predicates:
-                - Path=/api/v1/accounting/**
+                - Path=/api/v1/accounting/**,/api/v1/portal/client/payments/**,/api/v1/portal/client/payments,/api/v1/portal/client/credit-notes/**,/api/v1/portal/client/credit-notes,/api/v1/portal/vendor/payments/**,/api/v1/portal/vendor/payments,/api/v1/portal/vendor/debit-notes/**,/api/v1/portal/vendor/debit-notes
             - id: crm-service
               uri: ${CRM_SERVICE_URL:http://localhost:8094}
               predicates:
-                - Path=/api/v1/crm/**
+                - Path=/api/v1/crm/**,/api/v1/portal/client/contracts/**,/api/v1/portal/client/contracts,/api/v1/portal/client/deals/**,/api/v1/portal/client/deals
             - id: project-service
               uri: ${PROJECT_SERVICE_URL:http://localhost:8095}
               predicates:
-                - Path=/api/v1/projects/**,/api/v1/forms/**,/api/v1/public/forms/**
+                - Path=/api/v1/projects/**,/api/v1/forms/**,/api/v1/public/forms/**,/api/v1/portal/client/projects/**,/api/v1/portal/client/projects
             - id: support-service
               uri: ${SUPPORT_SERVICE_URL:http://localhost:8096}
               predicates:
-                - Path=/api/v1/support/**,/api/v1/messenger/**,/api/v1/public/support/**
+                - Path=/api/v1/support/**,/api/v1/messenger/**,/api/v1/public/support/**,/api/v1/portal/client/tickets/**,/api/v1/portal/client/tickets
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8097}
               predicates:

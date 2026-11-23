@@ -22,11 +22,20 @@ public interface SalesReturnRepository extends JpaRepository<SalesReturn, Long> 
               and (:warehouseId is null or r.warehouseId = :warehouseId)
               and (:status is null or r.status = :status)
               and (:from is null or r.returnDate >= :from) and (:to is null or r.returnDate <= :to)
-              and (:kw is null or lower(r.number) like :kw or lower(r.customerName) like :kw)""")
+              and (:kw is null or lower(r.number) like :kw or lower(r.customerName) like :kw)
+              and (:createdBy is null or r.createdBy = :createdBy)""")
     Page<SalesReturn> search(@Param("companyId") Long companyId, @Param("invoiceId") Long invoiceId,
                              @Param("customerId") Long customerId, @Param("warehouseId") Long warehouseId,
                              @Param("status") SalesReturn.EStatus status, @Param("from") LocalDate from,
-                             @Param("to") LocalDate to, @Param("kw") String keyword, Pageable pageable);
+                             @Param("to") LocalDate to, @Param("kw") String keyword,
+                             @Param("createdBy") String createdBy, Pageable pageable);
+
+    /** Client portal: returns of one customer, drafts excluded. */
+    @Query("""
+            select r from SalesReturn r where r.companyId = :companyId and r.deleted = false
+              and r.customerId = :customerId and r.status <> com.terp.erp.commerce.salesreturn.SalesReturn.EStatus.DRAFT""")
+    Page<SalesReturn> forCustomer(@Param("companyId") Long companyId, @Param("customerId") Long customerId,
+                                  Pageable pageable);
 
     /** Quantity already returned per invoice line, every non-deleted return counted (draft included). */
     @Query("""

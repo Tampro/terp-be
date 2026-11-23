@@ -17,6 +17,8 @@ import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.EPurchaseError;
 import com.terp.erp.commerce.common.Money;
+import com.terp.erp.commerce.common.Ownership;
+import com.terp.erp.commerce.common.Ownership.Access;
 import com.terp.erp.commerce.common.Numbering;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.exception.ApiException;
@@ -125,6 +127,7 @@ public class PurchaseInvoiceService {
 
     /** The unified calendar (report-service) shows a month with the weeks around it. */
     public static final int MAX_CALENDAR_DAYS = 62;
+    static final String PURCHASE = "PURCHASE";
 
     /** TODO(assumption): a purchase invoice is placed on its due date (when it must be paid), drafts included. */
     @Transactional(readOnly = true)
@@ -133,7 +136,7 @@ public class PurchaseInvoiceService {
             throw ApiException.badRequest(EPurchaseError.PUR_013, MAX_CALENDAR_DAYS);
         }
         Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
-        return invoices.dueBetween(company, from, to).stream()
+        return invoices.dueBetween(company, from, to, Ownership.owner(PURCHASE, Access.VIEW)).stream()
                 .map(d -> new CalendarEntry(d.getId().toString(), d.getNumber(), d.getVendorName(),
                         d.getInvoiceDate(), d.getDueDate(), d.getStatus(), d.getTotal(), d.getBalance()))
                 .toList();
@@ -144,20 +147,22 @@ public class PurchaseInvoiceService {
                                    String keyword, PurchaseInvoice.EStatus status, boolean overdue,
                                    EJournalStatus journalStatus, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
+        String owner = Ownership.owner(PURCHASE, Access.VIEW);
         LocalDate today = today();
         return invoices.search(company, vendorId, warehouseId, from, to, like(keyword), status, overdue,
-                journalStatus, today, pageable).map(d -> InvoiceRow.of(d, today));
+                journalStatus, today, owner, pageable).map(d -> InvoiceRow.of(d, today));
     }
 
     @Transactional(readOnly = true)
     public Map<PurchaseInvoice.EStatus, Long> statusCounts(Long companyId, Long vendorId, Long warehouseId,
                                                            LocalDate from, LocalDate to, String keyword) {
         Long company = TenantGuard.resolveCompany(companyId, EPurchaseError.PUR_003);
+        String owner = Ownership.owner(PURCHASE, Access.VIEW);
         Map<PurchaseInvoice.EStatus, Long> counts = new EnumMap<>(PurchaseInvoice.EStatus.class);
         for (PurchaseInvoice.EStatus s : PurchaseInvoice.EStatus.values()) {
             counts.put(s, 0L);
         }
-        for (Object[] r : invoices.countByStatus(company, vendorId, warehouseId, from, to, like(keyword))) {
+        for (Object[] r : invoices.countByStatus(company, vendorId, warehouseId, from, to, like(keyword), owner)) {
             counts.put((PurchaseInvoice.EStatus) r[0], ((Number) r[1]).longValue());
         }
         return counts;
@@ -165,7 +170,7 @@ public class PurchaseInvoiceService {
 
     @Transactional(readOnly = true)
     public InvoiceDetail get(Long id) {
-        return InvoiceDetail.of(require(id), today());
+        return InvoiceDetail.of(require(id, Access.VIEW), today());
     }
 
     @Transactional
@@ -181,14 +186,14 @@ public class PurchaseInvoiceService {
     /** Full replacement of a draft; the number never changes. */
     @Transactional
     public InvoiceDetail update(Long id, InvoiceForm f) {
-        PurchaseInvoice d = requireDraft(id);
+        PurchaseInvoice d = requireDraft(id, Access.MANAGE);
         apply(d, f);
         return InvoiceDetail.of(d, today());
     }
 
     @Transactional
     public void delete(Long id) {
-        requireDraft(id).setDeleted(true);
+        requireDraft(id, Access.MANAGE).setDeleted(true);
     }
 
     /**
@@ -199,7 +204,7 @@ public class PurchaseInvoiceService {
      */
     @Transactional
     public InvoiceDetail post(Long id) {
-        PurchaseInvoice d = requireDraft(id);
+        PurchaseInvoice d = requireDraft(id, Access.POST);
         List<InventoryClient.MoveLine> moves = d.getLines().stream().filter(PurchaseInvoice.Line::stocked)
                 .map(l -> new InventoryClient.MoveLine(l.getItemId(), d.getWarehouseId(), l.getQuantity())).toList();
         if (!moves.isEmpty() && d.getWarehouseId() == null) {
@@ -225,7 +230,7 @@ public class PurchaseInvoiceService {
      */
     @Transactional
     public InvoiceDetail retryJournal(Long id) {
-        PurchaseInvoice d = require(id);
+        PurchaseInvoice d = require(id, Access.POST);
         if (d.getJournalStatus() != EJournalStatus.FAILED) {
             throw ApiException.badRequest(EPurchaseError.PUR_017);
         }
@@ -249,10 +254,13 @@ public class PurchaseInvoiceService {
                 "Purchase invoice " + d.getNumber() + " - " + d.getVendorName(), goods, service, d.getTaxTotal(), null);
     }
 
-    /** For returns: a posted (or paid) invoice of the caller's company. */
+    /**
+     * For returns: a posted (or paid) invoice of the caller's company; a caller holding only *_OWN purchase codes
+     * reaches only invoices they created (the Access.POST rule).
+     */
     @Transactional(readOnly = true)
     public PurchaseInvoice requirePosted(Long id) {
-        PurchaseInvoice d = require(id);
+        PurchaseInvoice d = require(id, Access.POST);
         if (d.getStatus() == PurchaseInvoice.EStatus.DRAFT) {
             throw ApiException.badRequest(EPurchaseError.PUR_006);
         }
@@ -267,21 +275,23 @@ public class PurchaseInvoiceService {
     public PurchaseInvoice lockPosted(Long id) {
         PurchaseInvoice d = invoices.lockById(id).orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), EPurchaseError.PUR_001);
+        Ownership.check(Ownership.owner(PURCHASE, Access.POST), d.getCreatedBy(), EPurchaseError.PUR_001);
         if (d.getStatus() == PurchaseInvoice.EStatus.DRAFT) {
             throw ApiException.badRequest(EPurchaseError.PUR_006);
         }
         return d;
     }
 
-    PurchaseInvoice require(Long id) {
+    PurchaseInvoice require(Long id, Access access) {
         PurchaseInvoice d = invoices.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> ApiException.notFound(EPurchaseError.PUR_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), EPurchaseError.PUR_001);
+        Ownership.check(Ownership.owner(PURCHASE, access), d.getCreatedBy(), EPurchaseError.PUR_001);
         return d;
     }
 
-    private PurchaseInvoice requireDraft(Long id) {
-        PurchaseInvoice d = require(id);
+    private PurchaseInvoice requireDraft(Long id, Access access) {
+        PurchaseInvoice d = require(id, access);
         if (d.getStatus() != PurchaseInvoice.EStatus.DRAFT) {
             throw ApiException.badRequest(EPurchaseError.PUR_002);
         }

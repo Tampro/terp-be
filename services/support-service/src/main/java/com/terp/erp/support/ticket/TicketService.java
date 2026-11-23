@@ -4,6 +4,7 @@ import com.terp.erp.exception.ApiException;
 import com.terp.erp.outbox.OutboxPublisher;
 import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 import com.terp.erp.support.common.ESupportError;
 import com.terp.erp.support.common.HtmlSanitizer;
@@ -113,7 +114,10 @@ public class TicketService {
     public Page<TicketRow> list(Long requestedCompanyId, EStatus status, Long categoryId, EAccountType accountType,
                                 String keyword, Pageable pageable) {
         Long companyId = Texts.company(requestedCompanyId);
-        Page<Ticket> page = tickets.search(companyId, status, categoryId, accountType, Texts.kw(keyword), pageable);
+        Page<Ticket> page = TicketScope.ownView()
+                ? tickets.searchOwn(companyId, status, categoryId, accountType, Texts.kw(keyword), OwnScope.sub(),
+                TicketScope.myEmail(), pageable)
+                : tickets.search(companyId, status, categoryId, accountType, Texts.kw(keyword), pageable);
         Map<Long, String> names = categoryNames(page.getContent());
         return page.map(t -> row(t, names));
     }
@@ -121,7 +125,10 @@ public class TicketService {
     @Transactional(readOnly = true)
     public StatusCounts statusCounts(Long requestedCompanyId) {
         Map<EStatus, Long> by = new HashMap<>();
-        for (Object[] r : tickets.countByStatus(Texts.company(requestedCompanyId))) {
+        Long companyId = Texts.company(requestedCompanyId);
+        for (Object[] r : TicketScope.ownView()
+                ? tickets.countByStatusOwn(companyId, OwnScope.sub(), TicketScope.myEmail())
+                : tickets.countByStatus(companyId)) {
             by.put((EStatus) r[0], ((Number) r[1]).longValue());
         }
         long in = by.getOrDefault(EStatus.IN_PROGRESS, 0L);
@@ -132,7 +139,11 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public TicketDto get(Long id) {
-        return dto(require(id));
+        Ticket t = require(id);
+        if (TicketScope.ownView()) {
+            OwnScope.assertMine(TicketScope.mine(t), ESupportError.SUP_004);
+        }
+        return dto(t);
     }
 
     @Transactional
@@ -150,7 +161,7 @@ public class TicketService {
     /** Full replacement of the ticket's fields; status null keeps the current one; the tracking token stays. */
     @Transactional
     public TicketDto update(Long id, TicketForm f) {
-        Ticket t = require(id);
+        Ticket t = requireManaged(id);
         categories.requireForTicket(f.categoryId(), t.getCompanyId());
         Map<Long, String> custom = fields.validate(t.getCompanyId(), f.customFields());
         t.setAccountType(f.accountType());
@@ -170,20 +181,20 @@ public class TicketService {
 
     @Transactional
     public TicketRow changeStatus(Long id, StatusForm f) {
-        Ticket t = require(id);
+        Ticket t = requireManaged(id);
         t.setStatus(f.status());
         return row(t, categoryNames(List.of(t)));
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireManaged(id).setDeleted(true);
     }
 
     /** Staff reply; the sender name is the caller's username. */
     @Transactional
     public ReplyDto reply(Long id, ReplyForm f) {
-        Ticket t = require(id);
+        Ticket t = requireManaged(id);
         List<Attachment> files = attachments.resolve(f.attachmentFileIds(), t.getCompanyId());
         return replyDto(addReply(t, ESender.STAFF, CurrentUser.get().username(), f.description(), files));
     }
@@ -257,6 +268,15 @@ public class TicketService {
     }
 
     // ----
+
+    /** For staff writes: with SUPPORT_TICKET_MANAGE_OWN only, a ticket that is not mine answers 404 (SUP_004). */
+    private Ticket requireManaged(Long id) {
+        Ticket t = require(id);
+        if (TicketScope.ownManage()) {
+            OwnScope.assertMine(TicketScope.mine(t), ESupportError.SUP_004);
+        }
+        return t;
+    }
 
     private Ticket require(Long id) {
         Ticket t = tickets.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(ESupportError.SUP_004));

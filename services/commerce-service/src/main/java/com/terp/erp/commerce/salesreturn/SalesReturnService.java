@@ -17,6 +17,8 @@ import com.terp.erp.commerce.common.ECommerceError;
 import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Ownership;
+import com.terp.erp.commerce.common.Ownership.Access;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.commerce.sales.EInvoiceType;
 import com.terp.erp.commerce.sales.SalesDocument;
@@ -45,6 +47,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalesReturnService {
     static final String STOCK_SOURCE = "SALES_RETURN";
+    /** Returns use the sales codes: SALES_VIEW / SALES_MANAGE (and their _OWN), SALES_POST to approve / complete. */
+    private static final String SALES = "SALES";
 
     private final SalesReturnRepository returns;
     private final SalesDocumentService documents;
@@ -123,13 +127,14 @@ public class SalesReturnService {
                                   Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
         String kw = keyword == null || keyword.isBlank() ? null : "%" + keyword.trim().toLowerCase() + "%";
-        return returns.search(company, invoiceId, customerId, warehouseId, status, from, to, kw, pageable)
+        return returns.search(company, invoiceId, customerId, warehouseId, status, from, to, kw,
+                        Ownership.owner(SALES, Access.VIEW), pageable)
                 .map(ReturnRow::of);
     }
 
     @Transactional(readOnly = true)
     public ReturnDetail get(Long id) {
-        return ReturnDetail.of(require(id));
+        return ReturnDetail.of(require(id, Access.VIEW));
     }
 
     @Transactional(readOnly = true)
@@ -155,7 +160,7 @@ public class SalesReturnService {
     /** Full replacement of a draft return; the invoice may change too. */
     @Transactional
     public ReturnDetail update(Long id, ReturnForm f) {
-        SalesReturn r = requireDraft(id);
+        SalesReturn r = requireDraft(id, Access.MANAGE);
         SalesDocument inv = documents.lockPostedInvoice(f.invoiceId());
         apply(r, inv, f, r.getId());
         return ReturnDetail.of(r);
@@ -163,12 +168,12 @@ public class SalesReturnService {
 
     @Transactional
     public void delete(Long id) {
-        requireDraft(id).setDeleted(true);
+        requireDraft(id, Access.MANAGE).setDeleted(true);
     }
 
     @Transactional
     public ReturnDetail approve(Long id) {
-        SalesReturn r = requireDraft(id);
+        SalesReturn r = requireDraft(id, Access.POST);
         r.setStatus(SalesReturn.EStatus.APPROVED);
         return ReturnDetail.of(r);
     }
@@ -182,7 +187,7 @@ public class SalesReturnService {
      */
     @Transactional
     public ReturnDetail complete(Long id) {
-        SalesReturn r = require(id);
+        SalesReturn r = require(id, Access.POST);
         if (r.getStatus() != SalesReturn.EStatus.APPROVED) {
             throw ApiException.badRequest(ECommerceError.SAL_014);
         }
@@ -206,7 +211,7 @@ public class SalesReturnService {
      */
     @Transactional
     public ReturnDetail retryJournal(Long id) {
-        SalesReturn r = require(id);
+        SalesReturn r = require(id, Access.POST);
         if (r.getJournalStatus() != EJournalStatus.FAILED) {
             throw ApiException.badRequest(ECommerceError.SAL_025);
         }
@@ -301,14 +306,15 @@ public class SalesReturnService {
         r.setTotal(subtotal.subtract(discount).add(tax));
     }
 
-    private SalesReturn require(Long id) {
+    private SalesReturn require(Long id, Access access) {
         SalesReturn r = returns.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(ECommerceError.SAL_012));
         TenantGuard.assertSameCompany(r.getCompanyId(), ECommerceError.SAL_012);
+        Ownership.check(Ownership.owner(SALES, access), r.getCreatedBy(), ECommerceError.SAL_012);
         return r;
     }
 
-    private SalesReturn requireDraft(Long id) {
-        SalesReturn r = require(id);
+    private SalesReturn requireDraft(Long id, Access access) {
+        SalesReturn r = require(id, access);
         if (r.getStatus() != SalesReturn.EStatus.DRAFT) {
             throw ApiException.badRequest(ECommerceError.SAL_013);
         }

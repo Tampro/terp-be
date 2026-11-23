@@ -226,7 +226,7 @@ class PurchaseServiceTest {
         d.setDueDate(TODAY.plusDays(30));
         LocalDate from = TODAY;
         LocalDate to = from.plusDays(61);
-        when(invoiceRepo.dueBetween(10L, from, to)).thenReturn(List.of(d));
+        when(invoiceRepo.dueBetween(10L, from, to, null)).thenReturn(List.of(d));
         assertThat(invoices.calendar(99L, from, to)).singleElement()
                 .satisfies(e -> assertThat(e.number()).isEqualTo("PI-2026-11-001"));
         assertThatThrownBy(() -> invoices.calendar(null, from, to.plusDays(1)))

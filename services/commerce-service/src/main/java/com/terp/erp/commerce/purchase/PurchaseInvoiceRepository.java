@@ -22,17 +22,26 @@ public interface PurchaseInvoiceRepository extends JpaRepository<PurchaseInvoice
 
     /** Unified calendar: invoices falling due in [from, to]. */
     @Query("select d from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
-            + "and d.dueDate between :from and :to order by d.dueDate, d.id")
+            + "and d.dueDate between :from and :to and (:createdBy is null or d.createdBy = :createdBy) "
+            + "order by d.dueDate, d.id")
     java.util.List<PurchaseInvoice> dueBetween(
             @org.springframework.data.repository.query.Param("companyId") Long companyId,
             @org.springframework.data.repository.query.Param("from") java.time.LocalDate from,
-            @org.springframework.data.repository.query.Param("to") java.time.LocalDate to);
+            @org.springframework.data.repository.query.Param("to") java.time.LocalDate to,
+            @Param("createdBy") String createdBy);
+
+    /** Vendor portal: purchase invoices of one vendor, drafts excluded. */
+    @Query("select d from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
+            + "and d.vendorId = :vendorId and d.status <> com.terp.erp.commerce.purchase.PurchaseInvoice.EStatus.DRAFT")
+    Page<PurchaseInvoice> forVendor(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
+                                    Pageable pageable);
 
     String FILTERS = "from PurchaseInvoice d where d.companyId = :companyId and d.deleted = false "
             + "and (:vendorId is null or d.vendorId = :vendorId) "
             + "and (:warehouseId is null or d.warehouseId = :warehouseId) "
             + "and (:from is null or d.invoiceDate >= :from) and (:to is null or d.invoiceDate <= :to) "
-            + "and (:kw is null or lower(d.number) like :kw or lower(d.vendorName) like :kw)";
+            + "and (:kw is null or lower(d.number) like :kw or lower(d.vendorName) like :kw) "
+            + "and (:createdBy is null or d.createdBy = :createdBy)";
 
     /** overdue = posted or partly paid past the due date. */
     @Query("select d " + FILTERS + " and (:status is null or d.status = :status) "
@@ -44,10 +53,12 @@ public interface PurchaseInvoiceRepository extends JpaRepository<PurchaseInvoice
                                  @Param("to") LocalDate to, @Param("kw") String keyword,
                                  @Param("status") PurchaseInvoice.EStatus status, @Param("overdue") boolean overdue,
                                  @Param("journalStatus") com.terp.erp.commerce.common.EJournalStatus journalStatus,
-                                 @Param("today") LocalDate today, Pageable pageable);
+                                 @Param("today") LocalDate today, @Param("createdBy") String createdBy,
+                                 Pageable pageable);
 
     @Query("select d.status, count(d) " + FILTERS + " group by d.status")
     List<Object[]> countByStatus(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
                                  @Param("warehouseId") Long warehouseId, @Param("from") LocalDate from,
-                                 @Param("to") LocalDate to, @Param("kw") String keyword);
+                                 @Param("to") LocalDate to, @Param("kw") String keyword,
+                                 @Param("createdBy") String createdBy);
 }

@@ -27,6 +27,22 @@ public interface LeadRepository extends JpaRepository<Lead, Long> {
                       @Param("followFrom") LocalDate followFrom, @Param("followTo") LocalDate followTo,
                       @Param("kw") String keyword, Pageable pageable);
 
+    /** {@link #search} limited to leads I own (assigned to me) or created (CRM_VIEW_OWN). */
+    @Query("""
+            select l from Lead l where l.companyId = :companyId and l.deleted = false
+              and (l.ownerUserId = :me or l.createdBy = :sub)
+              and (:pipelineId is null or l.pipelineId = :pipelineId)
+              and (:stageId is null or l.stageId = :stageId)
+              and (:ownerUserId is null or l.ownerUserId = :ownerUserId)
+              and (:followFrom is null or l.followUpDate >= :followFrom)
+              and (:followTo is null or l.followUpDate <= :followTo)
+              and (:kw is null or lower(l.name) like :kw or lower(l.email) like :kw or lower(l.subject) like :kw)""")
+    Page<Lead> searchOwn(@Param("companyId") Long companyId, @Param("pipelineId") Long pipelineId,
+                         @Param("stageId") Long stageId, @Param("ownerUserId") Long ownerUserId,
+                         @Param("followFrom") LocalDate followFrom, @Param("followTo") LocalDate followTo,
+                         @Param("kw") String keyword, @Param("me") Long me, @Param("sub") String sub,
+                         Pageable pageable);
+
     List<Lead> findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(Long companyId, Long pipelineId);
 
     boolean existsByStageIdAndDeletedFalse(Long stageId);

@@ -14,6 +14,8 @@ import com.terp.erp.project.project.ProjectEnums.EPriority;
 import com.terp.erp.project.project.ProjectEnums.EStageKind;
 import com.terp.erp.project.project.ProjectService;
 import com.terp.erp.project.task.StageService.StageDto;
+import com.terp.erp.project.project.ProjectScope;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.time.Instant;
@@ -89,7 +91,7 @@ public class BugService {
     /** Full replacement of the fields; the stage changes only through move (stageId here is ignored). */
     @Transactional
     public BugDto update(Long id, BugForm f) {
-        Bug b = require(id);
+        Bug b = requireManaged(id);
         Project p = projects.require(b.getProjectId());
         apply(p, b, f);
         activity.log(p.getCompanyId(), p.getId(), "BUG_UPDATED", b.getTitle());
@@ -98,7 +100,7 @@ public class BugService {
 
     @Transactional
     public BugDto move(Long id, TaskService.MoveForm f) {
-        Bug b = require(id);
+        Bug b = requireManaged(id);
         Stage target = stages.require(f.stageId(), EStageKind.BUG, b.getCompanyId());
         Long from = b.getStageId();
         List<Bug> column = new ArrayList<>(bugs.findByProjectIdAndStageIdAndDeletedFalseOrderByPositionAscIdAsc(
@@ -118,7 +120,7 @@ public class BugService {
 
     @Transactional
     public void delete(Long id) {
-        Bug b = require(id);
+        Bug b = requireManaged(id);
         b.setDeleted(true);
         activity.log(b.getCompanyId(), b.getProjectId(), "BUG_DELETED", b.getTitle());
     }
@@ -132,6 +134,15 @@ public class BugService {
             projects.require(b.getProjectId());
         } catch (ApiException e) {
             throw ApiException.notFound(EProjectError.PRJ_020);
+        }
+        return b;
+    }
+
+    /** For bug writes: with PROJECT_TASK_MANAGE_OWN only, a bug neither assigned to me nor created by me is 404. */
+    public Bug requireManaged(Long id) {
+        Bug b = require(id);
+        if (!ProjectScope.managesAllTasks()) {
+            OwnScope.assertMine(ProjectScope.ownsBug(b.getAssigneeUserId(), b.getCreatedBy()), EProjectError.PRJ_020);
         }
         return b;
     }

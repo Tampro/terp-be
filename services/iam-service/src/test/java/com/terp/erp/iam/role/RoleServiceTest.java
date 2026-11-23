@@ -144,7 +144,17 @@ class RoleServiceTest {
         });
         Role client = saved.getAllValues().stream().filter(r -> "CLIENT".equals(r.getCode())).findFirst().orElseThrow();
         assertThat(client.getName()).isEqualTo("Client");
-        assertThat(client.getPermissions()).isEmpty();
+        assertThat(client.getPermissions()).extracting(Permission::getCode).containsExactlyInAnyOrder(
+                "PORTAL_CLIENT", "SUPPORT_TICKET_VIEW_OWN", "SUPPORT_TICKET_MANAGE_OWN");
+    }
+
+    @Test
+    void holdingTheFullCodeDoesNotLetYouGrantItsOwnVariant() {
+        login(1L, 10L, IamPermissions.ROLE_CREATE, "SALES_VIEW");
+        RoleForm form = new RoleForm("SELLER", "Seller", null, Set.of("SALES_VIEW_OWN"));
+
+        assertThatThrownBy(() -> service.create(null, form))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(EIamError.IAM_015);
     }
 
     @Test

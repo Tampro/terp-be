@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import com.terp.erp.crm.record.CrmEnums.EDealStatus;
+import com.terp.erp.crm.record.CrmEnums.ELinkType;
+import com.terp.erp.crm.record.CrmEnums.ESubject;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +25,30 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
     Page<Deal> search(@Param("companyId") Long companyId, @Param("pipelineId") Long pipelineId,
                       @Param("stageId") Long stageId, @Param("status") EDealStatus status, @Param("kw") String keyword,
                       Pageable pageable);
+
+    /** {@link #search} limited to deals I created or am a MEMBER of (CRM_VIEW_OWN). */
+    @Query("""
+            select d from Deal d where d.companyId = :companyId and d.deleted = false
+              and (d.createdBy = :sub or exists (select k.id from CrmLink k where k.subjectType = :dealType
+                   and k.subjectId = d.id and k.linkType = :memberType and k.refId = :me))
+              and (:pipelineId is null or d.pipelineId = :pipelineId)
+              and (:stageId is null or d.stageId = :stageId)
+              and (:status is null or d.status = :status)
+              and (:kw is null or lower(d.name) like :kw)""")
+    Page<Deal> searchOwn(@Param("companyId") Long companyId, @Param("pipelineId") Long pipelineId,
+                         @Param("stageId") Long stageId, @Param("status") EDealStatus status,
+                         @Param("kw") String keyword, @Param("me") Long me, @Param("sub") String sub,
+                         @Param("dealType") ESubject dealType, @Param("memberType") ELinkType memberType,
+                         Pageable pageable);
+
+    /** Deals whose CLIENT link is this accounting customer (client portal). */
+    @Query("""
+            select d from Deal d where d.companyId = :companyId and d.deleted = false
+              and exists (select k.id from CrmLink k where k.subjectType = :dealType and k.subjectId = d.id
+                   and k.linkType = :clientType and k.refId = :customerId)""")
+    Page<Deal> findOfClient(@Param("companyId") Long companyId, @Param("customerId") Long customerId,
+                            @Param("dealType") ESubject dealType, @Param("clientType") ELinkType clientType,
+                            Pageable pageable);
 
     List<Deal> findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(Long companyId, Long pipelineId);
 
