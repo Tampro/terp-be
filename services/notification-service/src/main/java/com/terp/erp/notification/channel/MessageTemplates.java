@@ -2,6 +2,7 @@ package com.terp.erp.notification.channel;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.terp.erp.notification.event.EEventRoute;
+import org.springframework.web.util.HtmlUtils;
 
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -10,8 +11,8 @@ import java.util.regex.Pattern;
 /**
  * Plain-text subject + body per email code, in English and Vietnamese, with {key} filled from the event's data.
  * Language: the company's default language when it is en or vi; vi when none; en for any other language.
- * TODO(assumption): short built-in texts; the company-editable templates of IAM (EmailTemplate) cover only the
- * platform emails today — use them here once BA writes the business event templates.
+ * These are the defaults: a company's own texts (IAM company_notification_template, sent in the notification-config
+ * answer) replace them through customEmail / customChat. TODO(assumption): short built-in texts until BA writes them.
  */
 public final class MessageTemplates {
     public record Message(String subject, String body) {
@@ -142,6 +143,38 @@ public final class MessageTemplates {
     private static final Map<String, String> CHAT_NAMES = Map.of(
             "crm.lead.emailed", "Lead email sent",
             "crm.deal.emailed", "Deal email sent");
+
+    /**
+     * A company's own email (IAM company_notification_template, already sanitised HTML there): {key} from the event
+     * data, a missing key = empty, values HTML-escaped in the body and kept on one line in the subject. No
+     * expressions: a value is never read as a placeholder or markup.
+     */
+    public static Message customEmail(String subject, String htmlBody, JsonNode data) {
+        return new Message(oneLine(fill(subject == null ? "" : subject, data)), fillHtml(htmlBody, data));
+    }
+
+    /** A company's own Slack / Telegram / SMS text: values on one line, the text's own line breaks kept. */
+    public static String customChat(String text, JsonNode data) {
+        Matcher m = KEY.matcher(text == null ? "" : text);
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            String v = data == null ? "" : data.path(m.group(1)).asText("");
+            m.appendReplacement(sb, Matcher.quoteReplacement(v.replaceAll("[\\r\\n]+", " ")));
+        }
+        m.appendTail(sb);
+        return sb.toString().trim();
+    }
+
+    static String fillHtml(String template, JsonNode data) {
+        Matcher m = KEY.matcher(template == null ? "" : template);
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            String v = data == null ? "" : data.path(m.group(1)).asText("");
+            m.appendReplacement(sb, Matcher.quoteReplacement(HtmlUtils.htmlEscape(v)));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
 
     static String fill(String template, JsonNode data) {
         Matcher m = KEY.matcher(template);

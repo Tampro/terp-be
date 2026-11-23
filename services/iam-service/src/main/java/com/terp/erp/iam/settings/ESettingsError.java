@@ -28,7 +28,11 @@ public enum ESettingsError implements ErrorCode {
     SETTINGS_018("Unknown integration: {0}."),
     SETTINGS_019("The value of {0} is not valid."),
     SETTINGS_020("Unknown notification channel: {0}."),
-    SETTINGS_021("Unknown notification event: {0}.");
+    SETTINGS_021("Unknown notification event: {0}."),
+    SETTINGS_022("The {0} integration must be configured first."),
+    SETTINGS_023("Nothing to preview: the template is not customised and the request has no text."),
+    SETTINGS_024("The text is too long for {0}: at most {1} characters."),
+    SETTINGS_025("Unknown placeholder: {0}.");
 
     private final String message;
 }

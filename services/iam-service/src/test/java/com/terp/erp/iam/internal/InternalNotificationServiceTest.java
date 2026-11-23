@@ -39,7 +39,8 @@ class InternalNotificationServiceTest {
     private final com.terp.erp.iam.integration.ChannelEventService channelEvents =
             mock(com.terp.erp.iam.integration.ChannelEventService.class);
     private final InternalNotificationService service = new InternalNotificationService(companies, toggles,
-            companyEmail, settings, integrations, webhooks, channelEvents, mock(UserAccountRepository.class), cipher);
+            companyEmail, settings, integrations, webhooks, channelEvents, mock(UserAccountRepository.class), cipher,
+            mock(com.terp.erp.iam.template.NotificationTemplateService.class));
 
     @Test
     void returnsTheChannelsOfTheCompanyWithSecretsDecrypted() {
