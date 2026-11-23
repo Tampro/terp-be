@@ -205,6 +205,9 @@ class PaymentServiceTest {
                 "Test Supplier", DAY, DAY.plusDays(30), BigDecimal.ZERO, new BigDecimal("800"),
                 new BigDecimal("800"), "PARTIAL"));
         when(mapping.require(10L, ESystemAccount.PAYABLE)).thenReturn(331L);
+        com.terp.erp.accounting.vendor.Vendor v = new com.terp.erp.accounting.vendor.Vendor();
+        v.setEmail("supplier@example.com");
+        when(vendors.require(p.getPartyId())).thenReturn(v);
 
         assertThat(service.clear(EPaymentKind.VENDOR, 31L).status()).isEqualTo(EPaymentStatus.CLEARED);
 
@@ -214,6 +217,9 @@ class PaymentServiceTest {
                 org.mockito.ArgumentMatchers.<Object>argThat(x -> ((java.util.Map<?, ?>) x).get("allocations")
                         .equals(List.of(com.terp.erp.outbox.Payload.of("invoiceId", 9L, "amount",
                                 new BigDecimal("500"))))));
+        verify(outbox).publish(eq(10L), eq("accounting.vendor_payment.cleared"), eq("VENDOR_PAYMENT"), eq(31L),
+                org.mockito.ArgumentMatchers.<Object>argThat(x -> "supplier@example.com"
+                        .equals(((java.util.Map<?, ?>) x).get("recipientEmail"))));
     }
 
     @Test

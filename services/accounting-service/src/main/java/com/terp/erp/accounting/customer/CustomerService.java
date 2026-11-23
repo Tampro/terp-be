@@ -2,6 +2,8 @@ package com.terp.erp.accounting.customer;
 
 import com.terp.erp.accounting.common.EAccountingError;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -31,6 +33,7 @@ public class CustomerService {
 
     private final CustomerRepository customers;
     private final CustomerCodeSequenceRepository sequences;
+    private final OutboxPublisher outbox;
 
     public record AddressForm(
             @Schema(example = "Example Trading Co.") @Size(max = 255) String name,
@@ -90,7 +93,13 @@ public class CustomerService {
         c.setCompanyId(companyId);
         apply(c, form);
         c.setCustomerCode(nextCode(companyId));
-        return dto(customers.save(c));
+        Customer saved = customers.save(c);
+        // webhook NEW_CUSTOMER; no recipient (nobody is emailed about a new customer)
+        outbox.publish(companyId, "accounting.customer.created", "CUSTOMER", saved.getId(), Payload.of(
+                "customerId", saved.getId(), "title", saved.getCustomerCode() + " - " + saved.getCompanyName(),
+                "customerCode", saved.getCustomerCode(), "companyName", saved.getCompanyName(),
+                "contactPerson", saved.getContactPerson(), "email", saved.getEmail()));
+        return dto(saved);
     }
 
     /** Full replacement; the code never changes. */

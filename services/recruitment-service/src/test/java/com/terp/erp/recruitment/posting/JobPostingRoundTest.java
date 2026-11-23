@@ -1,5 +1,6 @@
 package com.terp.erp.recruitment.posting;
 
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class JobPostingRoundTest {
@@ -49,9 +51,10 @@ class JobPostingRoundTest {
     private final com.terp.erp.recruitment.interview.InterviewRepository interviews = mock(com.terp.erp.recruitment.interview.InterviewRepository.class);
     private final CatalogService catalog = new CatalogService(items, postings, candidates, interviews);
     private final JobLocationService locationService = new JobLocationService(locations, postings);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final JobPostingService service = new JobPostingService(postings, catalog, items, locationService, locations,
             new CustomQuestionService(questions), questions, org,
-            Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC), candidates);
+            Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC), candidates, outbox);
     private final InterviewRoundService roundService = new InterviewRoundService(rounds, postings, service, interviews);
 
     @AfterEach
@@ -129,6 +132,14 @@ class JobPostingRoundTest {
         var d = service.setPublished(1L, true);
         assertThat(d.status()).isEqualTo(JobPosting.EStatus.PUBLISHED);
         assertThat(d.publishDate()).isNotNull();
+        service.setPublished(1L, true); // already published: no second event
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("recruitment.job_posting.published"), eq("JOB_POSTING"),
+                eq(1L), payload.capture());
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> m = (java.util.Map<String, Object>) payload.getValue();
+        assertThat(m).containsKeys("jobPostingId", "title", "jobCode", "branchName", "departmentName", "positions",
+                "applicationDeadline").doesNotContainKeys("minSalary", "maxSalary");
         assertThat(service.setPublished(1L, false).status()).isEqualTo(JobPosting.EStatus.DRAFT);
         TestLogin.as(11L, "RECRUITMENT_VIEW");
         assertError(() -> service.get(1L), ERecruitmentError.REC_006);

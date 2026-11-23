@@ -61,6 +61,13 @@ public interface SalesDocumentRepository extends JpaRepository<SalesDocument, Lo
                                     @Param("customerId") Long customerId, Pageable pageable);
 
     /** Highest version number in a quotation family (the first version and every version made of it). */
+    /** Every company: posted / partly paid invoices past their due date with something left to pay (reminder job). */
+    @Query("select d from SalesDocument d where d.kind = com.terp.erp.commerce.sales.EDocumentKind.INVOICE "
+            + "and d.deleted = false and d.status in :statuses and d.balance > 0 and d.dueDate < :today "
+            + "order by d.id")
+    List<SalesDocument> overdueInvoices(@Param("statuses") java.util.Collection<EDocumentStatus> statuses,
+                                        @Param("today") java.time.LocalDate today);
+
     @Query("select max(d.versionNo) from SalesDocument d where d.id = :rootId or d.versionOfId = :rootId")
     Integer maxVersion(@Param("rootId") Long rootId);
 }

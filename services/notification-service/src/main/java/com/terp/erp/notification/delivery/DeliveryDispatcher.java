@@ -8,6 +8,7 @@ import com.terp.erp.notification.channel.ChatChannel;
 import com.terp.erp.notification.channel.EmailChannel;
 import com.terp.erp.notification.channel.MessageTemplates;
 import com.terp.erp.notification.channel.SendResult;
+import com.terp.erp.notification.channel.SmsChannel;
 import com.terp.erp.notification.channel.WebhookChannel;
 import com.terp.erp.notification.client.IamInternalClient;
 import com.terp.erp.notification.client.IamInternalClient.NotificationConfig;
@@ -50,6 +51,7 @@ public class DeliveryDispatcher {
     private final EmailChannel email;
     private final ChatChannel chat;
     private final WebhookChannel webhook;
+    private final SmsChannel sms;
     private final NotificationProperties props;
     private final ObjectMapper mapper;
     private final Clock clock;
@@ -92,7 +94,8 @@ public class DeliveryDispatcher {
         } catch (JsonProcessingException e) {
             return Optional.empty();
         }
-        NotificationConfig cfg = iam.config(d.getCompanyId(), route.get().emailCode, route.get().webhookCode);
+        NotificationConfig cfg = iam.config(d.getCompanyId(), d.getEventType(), route.get().emailCode,
+                route.get().webhookCode);
         return Optional.of(new Context(env, route.get(), cfg));
     }
 
@@ -117,10 +120,25 @@ public class DeliveryDispatcher {
                 yield email.send(cfg.smtp(), to, m.subject(), m.body());
             }
             case SLACK -> cfg.slack() == null ? skipped("INTEGRATION_DISABLED")
+                    : !cfg.slackOn() ? skipped(EventIntake.CHANNEL_EVENT_DISABLED)
                     : chat.slack(cfg.slack().webhookUrl(), MessageTemplates.chat(c.route(), lang, data));
             case TELEGRAM -> cfg.telegram() == null ? skipped("INTEGRATION_DISABLED")
+                    : !cfg.telegramOn() ? skipped(EventIntake.CHANNEL_EVENT_DISABLED)
                     : chat.telegram(cfg.telegram().botToken(), cfg.telegram().chatId(),
                     MessageTemplates.chat(c.route(), lang, data));
+            case SMS -> {
+                if (cfg.twilio() == null) {
+                    yield skipped("INTEGRATION_DISABLED");
+                }
+                if (!cfg.smsOn()) {
+                    yield skipped(EventIntake.CHANNEL_EVENT_DISABLED);
+                }
+                String phone = EventIntake.phone(data);
+                if (phone == null) {
+                    yield skipped("NO_RECIPIENT");
+                }
+                yield sms.send(cfg.twilio(), phone, MessageTemplates.chat(c.route(), lang, data));
+            }
             case WEBHOOK -> cfg.webhooks().stream().filter(w -> String.valueOf(d.getWebhookId()).equals(w.id()))
                     .findFirst()
                     .map(w -> webhook.send(w.url(), w.secret(), c.route(), c.envelope()))

@@ -31,7 +31,9 @@ public class InternalNotificationController {
     @Operation(summary = "Channel settings of a company for one event (notification-service)",
             description = "eventCode: an email notification code (ENotificationEvent), optional; webhookEvent: a "
                     + "webhook event code (EWebhookEvent), optional. smtp is null when the email switch is off or "
-                    + "no SMTP is configured; slack / telegram are null when the integration is off.")
+                    + "no SMTP is configured; slack / telegram / twilio are null when the integration is off. eventType: "
+                    + "the event's routing key, optional; slackEnabledForEvent / telegramEnabledForEvent / "
+                    + "smsEnabledForEvent are the company's per-event switches for it (true when not set).")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Unknown eventCode (EMAIL_001) or webhookEvent (SETTINGS_014)"),
             @ApiResponse(responseCode = "401", description = "No or invalid token (COMMON_003)"),
@@ -39,9 +41,10 @@ public class InternalNotificationController {
             @ApiResponse(responseCode = "404", description = "No such company (IAM_001)")})
     @GetMapping("/notification-config")
     public ApiMessageDto<NotificationConfig> notificationConfig(@RequestParam Long companyId,
+                                                                @RequestParam(required = false) String eventType,
                                                                 @RequestParam(required = false) String eventCode,
                                                                 @RequestParam(required = false) String webhookEvent) {
-        return ApiMessageDto.ok(service.config(companyId, eventCode, webhookEvent));
+        return ApiMessageDto.ok(service.config(companyId, eventType, eventCode, webhookEvent));
     }
 
     @Operation(summary = "Name and email of a user, to address a notification (notification-service)")

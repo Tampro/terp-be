@@ -52,6 +52,13 @@ public class SalesDocument extends BaseAuditableEntity implements JournalTracked
     @Column(name = "customer_name", nullable = false)
     private String customerName;
 
+    /**
+     * Copied from accounting-service with the name: the daily payment reminder runs without a user token and cannot
+     * ask accounting for it. TODO(assumption): a later change of the customer's email is not reflected here.
+     */
+    @Column(name = "customer_email")
+    private String customerEmail;
+
     @Column(name = "warehouse_id")
     private Long warehouseId;
 

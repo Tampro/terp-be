@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.employee.announcement.AnnouncementDtos.AnnouncementDto;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.employee.announcement.AnnouncementDtos.AnnouncementForm;
 import com.terp.erp.employee.announcement.AnnouncementDtos.AttachmentDto;
 import com.terp.erp.employee.announcement.AnnouncementDtos.CategoryDto;
@@ -68,6 +70,7 @@ public class AnnouncementService {
     private final EmployeeRepository employees;
     private final MediaClient media;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     // ------------------------------------------------------------------ admin
 
@@ -107,6 +110,9 @@ public class AnnouncementService {
         a.setStatus(form.status() == null ? EAnnouncementStatus.ACTIVE : form.status());
         apply(a, form);
         announcements.save(a);
+        if (a.getStatus() == EAnnouncementStatus.ACTIVE) {
+            published(a);
+        }
         return detail(a, stats(a));
     }
 
@@ -127,8 +133,20 @@ public class AnnouncementService {
     @Transactional
     public AnnouncementDto activate(Long id) {
         Announcement a = require(id);
-        a.setStatus(EAnnouncementStatus.ACTIVE);
+        if (a.getStatus() != EAnnouncementStatus.ACTIVE) {
+            a.setStatus(EAnnouncementStatus.ACTIVE);
+            published(a);
+        }
         return detail(a, stats(a));
+    }
+
+    /** Webhook NEW_ANNOUNCEMENT when an announcement becomes ACTIVE (created active or activated); no content. */
+    private void published(Announcement a) {
+        outbox.publish(a.getCompanyId(), "employee.announcement.published", "ANNOUNCEMENT", a.getId(), Payload.of(
+                "announcementId", a.getId(), "title", a.getTitle(), "shortDescription", a.getShortDescription(),
+                "categoryId", a.getCategoryId(), "startDate", a.getStartDate(), "endDate", a.getEndDate(),
+                "highPriority", a.isHighPriority(), "companyWide", a.isCompanyWide(),
+                "branchIds", Payload.ids(a.getBranchIds()), "departmentIds", Payload.ids(a.getDepartmentIds())));
     }
 
     /** Hidden from employees at once; views are kept. */

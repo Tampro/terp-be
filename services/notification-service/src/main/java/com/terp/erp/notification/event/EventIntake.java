@@ -27,7 +27,8 @@ import java.util.Optional;
 /**
  * Turns one broker event into its delivery rows, once: the processed_event row (key = eventId) and the deliveries
  * are written in one transaction, so a redelivered message creates nothing. Rows that cannot be sent at all are
- * SKIPPED right away with a code (email switch off, no recipient, no SMTP); a channel that is off gets no row.
+ * SKIPPED right away with a code (email switch off, no recipient, no SMTP, chat channel switched off for the
+ * event: CHANNEL_EVENT_DISABLED); a channel that is off for the company gets no row, SMS none without a phone.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,6 +37,7 @@ public class EventIntake {
     static final Duration FIRST_SEND_GRACE = Duration.ofMinutes(1);
     public static final String PAYLOAD_RECIPIENT = "payload";
     public static final String USER_RECIPIENT = "user:";
+    public static final String CHANNEL_EVENT_DISABLED = "CHANNEL_EVENT_DISABLED";
 
     private final ProcessedEventRepository processed;
     private final DeliveryRepository deliveries;
@@ -64,7 +66,7 @@ public class EventIntake {
             processed.saveAndFlush(pe);
             return List.of();
         }
-        NotificationConfig cfg = iam.config(e.companyId(), route.get().emailCode, route.get().webhookCode);
+        NotificationConfig cfg = iam.config(e.companyId(), e.eventType(), route.get().emailCode, route.get().webhookCode);
         List<Delivery> rows = plan(e, route.get(), cfg, now);
         processed.saveAndFlush(pe);
         deliveries.saveAll(rows);
@@ -92,10 +94,14 @@ public class EventIntake {
             }
         }
         if (cfg.slack() != null) {
-            rows.add(row(e, EChannel.SLACK, "hooks.slack.com", EStatus.PENDING, null, now));
+            rows.add(chatRow(e, EChannel.SLACK, "hooks.slack.com", cfg.slackOn(), now));
         }
         if (cfg.telegram() != null) {
-            rows.add(row(e, EChannel.TELEGRAM, "api.telegram.org", EStatus.PENDING, null, now));
+            rows.add(chatRow(e, EChannel.TELEGRAM, "api.telegram.org", cfg.telegramOn(), now));
+        }
+        String phone = phone(e.data());
+        if (cfg.twilio() != null && phone != null) {
+            rows.add(chatRow(e, EChannel.SMS, Targets.maskPhone(phone), cfg.smsOn(), now));
         }
         if (route.webhookCode != null) {
             for (IamInternalClient.Webhook w : cfg.webhooks()) {
@@ -105,6 +111,18 @@ public class EventIntake {
             }
         }
         return rows;
+    }
+
+    /** Switched off for this event: a SKIPPED row, so the delivery log shows why nothing was sent. */
+    private static Delivery chatRow(EventEnvelope e, EChannel channel, String target, boolean on, Instant now) {
+        return on ? row(e, channel, target, EStatus.PENDING, null, now)
+                : row(e, channel, target, EStatus.SKIPPED, CHANNEL_EVENT_DISABLED, now);
+    }
+
+    /** data.recipientPhone when it is E.164; null otherwise. */
+    public static String phone(JsonNode data) {
+        String v = data == null ? "" : data.path("recipientPhone").asText("").trim();
+        return v.matches("\\+[1-9][0-9]{6,14}") ? v : null;
     }
 
     /** "payload" for data.recipientEmail, "user:&lt;id&gt;" per data.recipientUserIds (distinct, in order). */

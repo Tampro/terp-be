@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261123200000_journal_status_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123300000_own_scope_index_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123400000_payment_reminder_changelog.mysql.sql

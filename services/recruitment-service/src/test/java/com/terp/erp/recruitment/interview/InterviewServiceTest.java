@@ -48,8 +48,9 @@ class InterviewServiceTest {
     private final InterviewRoundRepository rounds = mock(InterviewRoundRepository.class);
     private final CatalogItemRepository items = mock(CatalogItemRepository.class);
     private final EmployeeClient employees = mock(EmployeeClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final InterviewService service = new InterviewService(interviews, feedbacks, candidateService, candidates,
-            postings, rounds, new CatalogService(items, postings, candidates, interviews), items, employees);
+            postings, rounds, new CatalogService(items, postings, candidates, interviews), items, employees, outbox);
 
     private Candidate candidate;
 
@@ -99,6 +100,16 @@ class InterviewServiceTest {
         assertThat(d.feedbackSummary().count()).isZero();
         assertThat(d.feedbackSummary().overall()).isNull();
         assertThat(candidate.getStatus()).isEqualTo(Candidate.EStatus.INTERVIEW);
+        org.mockito.ArgumentCaptor<Object> payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(org.mockito.ArgumentMatchers.eq(10L),
+                org.mockito.ArgumentMatchers.eq("recruitment.interview.scheduled"),
+                org.mockito.ArgumentMatchers.eq("INTERVIEW"), org.mockito.ArgumentMatchers.eq(100L), payload.capture());
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> m = (java.util.Map<String, Object>) payload.getValue();
+        assertThat(m).containsKeys("interviewId", "title", "candidateId", "candidateName", "jobPostingId", "jobTitle",
+                        "date", "startTime", "durationMinutes", "location", "meetingLink")
+                .containsEntry("recipientEmail", candidate.getEmail())
+                .doesNotContainKey("interviewers");
     }
 
     @Test

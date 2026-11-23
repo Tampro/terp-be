@@ -33,8 +33,9 @@ class CompanyEventServiceTest {
     private final CompanyEventRepository events = mock(CompanyEventRepository.class);
     private final EventTypeRepository types = mock(EventTypeRepository.class);
     private final EmployeeClient employees = mock(EmployeeClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final CompanyEventService service = new CompanyEventService(events, types, employees,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), outbox);
     private final EventType party = new EventType();
 
     @BeforeEach
@@ -63,6 +64,14 @@ class CompanyEventServiceTest {
     @Test
     void createPendingThenApproveAndEditBackToPending() {
         var e = service.create(null, form(Set.of(20L, 21L), LocalTime.of(18, 0), LocalTime.of(22, 0)));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("meeting.event.created"), org.mockito.ArgumentMatchers.eq("COMPANY_EVENT"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("eventId", "title", "startDate", "status");
+        }
         assertThat(e.status()).isEqualTo(CompanyEvent.EStatus.PENDING);
         assertThat(e.departments()).extracting(CompanyEventService.DepartmentRef::name)
                 .containsExactlyInAnyOrder("Engineering", "Sales");

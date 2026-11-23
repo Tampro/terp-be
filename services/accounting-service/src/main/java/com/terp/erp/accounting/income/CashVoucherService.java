@@ -11,6 +11,8 @@ import com.terp.erp.accounting.common.EAccountingError;
 import com.terp.erp.accounting.ledger.DocumentNumbering;
 import com.terp.erp.accounting.ledger.JournalService;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.TenantGuard;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -46,6 +48,7 @@ public class CashVoucherService {
     private final JournalService journal;
     private final DocumentNumbering numbering;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record VoucherForm(
             @Schema(description = "null = today (UTC)", example = "2026-11-22") LocalDate date,
@@ -89,7 +92,15 @@ public class CashVoucherService {
         apply(v, form);
         v.setNumber(numbering.next(companyId, kind == ECategoryKind.REVENUE ? "REV" : "EXP",
                 String.format("%04d-%02d", v.getDate().getYear(), v.getDate().getMonthValue())));
-        return dto(vouchers.save(v), null);
+        CashVoucher saved = vouchers.save(v);
+        if (kind == ECategoryKind.REVENUE) {
+            // webhook NEW_REVENUE (a draft revenue voucher); expenses have no event in the contract
+            outbox.publish(companyId, "accounting.revenue.created", "REVENUE", saved.getId(), Payload.of(
+                    "revenueId", saved.getId(), "title", saved.getNumber(), "number", saved.getNumber(),
+                    "date", saved.getDate(), "amount", saved.getAmount(), "categoryId", saved.getCategoryId(),
+                    "reference", saved.getReference(), "status", saved.getStatus()));
+        }
+        return dto(saved, null);
     }
 
     /** Full replacement; DRAFT only (ACC_029). The number keeps its original period. */

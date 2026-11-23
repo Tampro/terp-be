@@ -34,7 +34,9 @@ class SalesInvoicePaymentServiceTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-22T03:00:00Z"), ZoneOffset.UTC);
     private final SalesDocumentRepository documents = mock(SalesDocumentRepository.class);
     private final SalesInvoicePaymentRepository payments = mock(SalesInvoicePaymentRepository.class);
-    private final SalesInvoicePaymentService service = new SalesInvoicePaymentService(documents, payments, clock);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final SalesInvoicePaymentService service = new SalesInvoicePaymentService(documents, payments, clock,
+            outbox);
     private final PurchaseInvoiceRepository purchaseDocs = mock(PurchaseInvoiceRepository.class);
     private final PurchaseInvoicePaymentRepository purchasePayments = mock(PurchaseInvoicePaymentRepository.class);
     private final PurchaseInvoicePaymentService purchase = new PurchaseInvoicePaymentService(purchaseDocs,
@@ -81,6 +83,29 @@ class SalesInvoicePaymentServiceTest {
         assertThat(d.getBalance()).isEqualByComparingTo("0");
         assertThat(d.getStatus()).isEqualTo(EDocumentStatus.PAID);
         verify(payments).save(any(SalesInvoicePayment.class));
+    }
+
+    @Test
+    void aStatusChangePublishesInvoiceStatusChangedOnce() {
+        TestLogin.as(10L, "PAYMENT_CLEAR");
+        invoice(10L, "500", "500", EDocumentStatus.POSTED);
+        when(payments.findByInvoiceIdAndPaymentId(9L, 31L)).thenReturn(Optional.empty());
+        service.apply(9L, new InvoicePaymentForm(31L, new BigDecimal("100")));
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(org.mockito.ArgumentMatchers.eq(10L),
+                org.mockito.ArgumentMatchers.eq("sales.invoice.status_changed"),
+                org.mockito.ArgumentMatchers.eq("SALES_INVOICE"), org.mockito.ArgumentMatchers.eq(9L),
+                payload.capture());
+        var p = Payloads.map(payload.getValue());
+        assertThat(p.get("title")).isEqualTo("SI-2026-11-001");
+        assertThat(p.get("fromStatus")).isEqualTo(EDocumentStatus.POSTED);
+        assertThat(p.get("status")).isEqualTo(EDocumentStatus.PARTIAL);
+        assertThat(p).containsKeys("invoiceId", "customerName", "balance");
+
+        // PARTIAL -> PARTIAL: no second event
+        when(payments.findByInvoiceIdAndPaymentId(9L, 32L)).thenReturn(Optional.empty());
+        service.apply(9L, new InvoicePaymentForm(32L, new BigDecimal("100")));
+        verify(outbox, org.mockito.Mockito.times(1)).publish(any(), any(), any(), any(), any());
     }
 
     @Test

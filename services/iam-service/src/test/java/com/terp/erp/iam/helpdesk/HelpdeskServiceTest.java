@@ -44,6 +44,8 @@ class HelpdeskServiceTest {
     private CompanyRepository companies;
     private AvatarMediaClient media;
     private HelpdeskService service;
+    private com.terp.erp.outbox.OutboxPublisher outbox;
+    private UserAccountRepository users;
 
     @BeforeEach
     void setUp() {
@@ -52,7 +54,9 @@ class HelpdeskServiceTest {
         categories = mock(HelpdeskCategoryRepository.class);
         companies = mock(CompanyRepository.class);
         media = mock(AvatarMediaClient.class);
-        service = new HelpdeskService(tickets, replies, categories, companies, mock(UserAccountRepository.class), media);
+        outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+        users = mock(UserAccountRepository.class);
+        service = new HelpdeskService(tickets, replies, categories, companies, users, media, outbox);
         when(tickets.save(any(HelpdeskTicket.class))).thenAnswer(inv -> {
             HelpdeskTicket t = inv.getArgument(0);
             t.setId(12L);
@@ -197,6 +201,44 @@ class HelpdeskServiceTest {
 
         service.update(5L, new TicketUpdateForm("T", "<p>x</p>", null, EHelpdeskStatus.OPEN, EHelpdeskPriority.HIGH));
         assertThat(t.getResolvedAt()).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aNewTicketIsPublishedForItsCreatorWithoutTheDescription() {
+        companyUser(10L);
+
+        service.create(new TicketCreateForm(null, "Cannot log in", "<p>secret details</p>", null, null));
+
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("iam.helpdesk.ticket_created"), eq("HELPDESK_TICKET"), eq(12L),
+                payload.capture());
+        Map<String, Object> p = (Map<String, Object>) payload.getValue();
+        assertThat(p).containsEntry("ticketNumber", "00000012").containsEntry("subject", "Cannot log in")
+                .containsEntry("recipientUserIds", List.of("7"));
+        assertThat(p.values()).doesNotContain("<p>secret details</p>");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aPlatformReplyIsPublishedToTheTicketsCreatorAndAnInternalNoteIsNot() {
+        superAdmin();
+        HelpdeskTicket t = ticket(5L, 10L, EHelpdeskStatus.OPEN);
+        t.setCreatedBy("kc-7");
+        when(tickets.findByIdAndDeletedFalse(5L)).thenReturn(Optional.of(t));
+        var creator = new com.terp.erp.iam.model.UserAccount();
+        creator.setId(7L);
+        creator.setCompanyId(10L);
+        when(users.findByKeycloakIdAndDeletedFalse("kc-7")).thenReturn(Optional.of(creator));
+
+        service.reply(5L, new ReplyForm("<p>internal</p>", null, true));
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
+
+        service.reply(5L, new ReplyForm("<p>hi</p>", null, false));
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("iam.helpdesk.ticket_replied"), eq("HELPDESK_TICKET"), eq(5L),
+                payload.capture());
+        assertThat((Map<String, Object>) payload.getValue()).containsEntry("recipientUserIds", List.of("7"));
     }
 
     private static HelpdeskTicket ticket(Long id, Long companyId, EHelpdeskStatus status) {

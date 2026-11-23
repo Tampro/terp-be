@@ -127,3 +127,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261123100000_notification_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261123200000_own_scope_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123300000_outbox_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123300001_company_channel_event_changelog.mysql.sql

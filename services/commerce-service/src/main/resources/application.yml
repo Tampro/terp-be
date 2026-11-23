@@ -68,6 +68,11 @@ erp:
     # Journal results and cleared payments published by accounting-service (bound to erp.events).
     accounting-queue: ${COMMERCE_ACCOUNTING_QUEUE:erp.commerce.accounting}
     accounting-dead-letter-queue: ${COMMERCE_ACCOUNTING_DLQ:erp.commerce.accounting.dlq}
+    # Daily accounting.invoice.payment_reminder for overdue posted invoices (PaymentReminderJob, one instance).
+    payment-reminder:
+      enabled: ${ERP_PAYMENT_REMINDER_ENABLED:true}
+      cron: ${ERP_PAYMENT_REMINDER_CRON:0 0 8 * * *}
+      zone: ${ERP_PAYMENT_REMINDER_ZONE:Asia/Ho_Chi_Minh}
 
 management:
   endpoints:

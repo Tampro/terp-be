@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.employee.common.EEmployeeError;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.employee.employee.Employee;
 import com.terp.erp.employee.lifecycle.EmployeeExit;
 import com.terp.erp.employee.lifecycle.LifecycleSupport;
@@ -67,6 +69,7 @@ public class TrainingSessionService {
     private final LifecycleSupport support;
     private final TrainerService trainerService;
     private final TrainerRepository trainerRepo;
+    private final OutboxPublisher outbox;
 
     public enum EFrequency { DAILY, WEEKLY, MONTHLY }
 
@@ -185,7 +188,9 @@ public class TrainingSessionService {
         apply(first, form, true);
         Recurrence rec = form.recurrence();
         if (rec == null) {
-            return new CreateResult(detail(sessions.save(first)), 1, null);
+            sessions.save(first);
+            trainingCreated(first, 1);
+            return new CreateResult(detail(first), 1, null);
         }
         String series = UUID.randomUUID().toString();
         first.setSeriesId(series);
@@ -207,7 +212,17 @@ public class TrainingSessionService {
             copy.getTrainerIds().addAll(first.getTrainerIds());
             sessions.save(copy);
         }
+        trainingCreated(first, rec.count());
         return new CreateResult(detail(first), rec.count(), series);
+    }
+
+    /** Webhook NEW_TRAINING: one event per create, for the first session (a series carries its size). */
+    private void trainingCreated(TrainingSession s, int occurrences) {
+        outbox.publish(s.getCompanyId(), "employee.training.created", "TRAINING_SESSION", s.getId(), Payload.of(
+                "sessionId", s.getId(), "title", s.getName(), "name", s.getName(), "programId", s.getProgramId(),
+                "startAt", s.getStartAt(), "endAt", s.getEndAt(), "locationType", s.getLocationType(),
+                "location", s.getLocation(), "status", s.getStatus(), "seriesId", s.getSeriesId(),
+                "occurrences", occurrences, "trainerIds", Payload.ids(s.getTrainerIds())));
     }
 
     static LocalDateTime shift(LocalDateTime t, EFrequency f, int n) {

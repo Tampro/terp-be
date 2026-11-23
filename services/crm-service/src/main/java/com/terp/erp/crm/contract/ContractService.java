@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.crm.client.AccountingClient;
 import com.terp.erp.crm.client.MediaClient;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.OwnScope;
@@ -45,6 +47,7 @@ public class ContractService {
     private final ContractAttachmentRepository attachments;
     private final AccountingClient accounting;
     private final MediaClient media;
+    private final OutboxPublisher outbox;
     private final Clock clock;
 
     // ---- forms -------------------------------------------------------------------------------------------------
@@ -198,7 +201,7 @@ public class ContractService {
         c.setCompanyId(company);
         apply(c, f, null);
         c.setNumber(settings.take(company));
-        return detail(contracts.save(c));
+        return detail(created(contracts.save(c)));
     }
 
     /** Full replacement; the number never changes. */
@@ -240,7 +243,18 @@ public class ContractService {
         c.setDescription(src.getDescription());
         c.setStatus(Contract.EStatus.PENDING);
         c.setNumber(settings.take(src.getCompanyId()));
-        return detail(contracts.save(c));
+        return detail(created(contracts.save(c)));
+    }
+
+    /** A duplicate is a new contract too, so it raises crm.contract.created as well. */
+    private Contract created(Contract c) {
+        outbox.publish(c.getCompanyId(), "crm.contract.created", "CONTRACT", c.getId(), Payload.of(
+                "contractId", c.getId(), "title", c.getNumber(), "number", c.getNumber(), "subject", c.getSubject(),
+                "customerId", c.getCustomerId(), "customerName", c.getCustomerName(), "value", c.getValue(),
+                "status", c.getStatus() == null ? null : c.getStatus().name(),
+                "startDate", c.getStartDate() == null ? null : c.getStartDate().toString(),
+                "endDate", c.getEndDate() == null ? null : c.getEndDate().toString()));
+        return c;
     }
 
     // ---- renewals ----------------------------------------------------------------------------------------------

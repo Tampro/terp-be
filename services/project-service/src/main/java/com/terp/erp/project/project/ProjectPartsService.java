@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.project.client.MediaClient;
 import com.terp.erp.project.common.EProjectError;
 import com.terp.erp.project.project.ProjectEnums.EMilestoneStatus;
@@ -33,6 +35,7 @@ public class ProjectPartsService {
     private final TaskRepository tasks;
     private final MediaClient media;
     private final ActivityService activity;
+    private final OutboxPublisher outbox;
 
     public record MilestoneForm(
             @Schema(description = "Title", example = "Design approved", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -86,6 +89,9 @@ public class ProjectPartsService {
         apply(m, f);
         milestones.save(m);
         activity.log(p.getCompanyId(), p.getId(), "MILESTONE_CREATED", m.getTitle());
+        outbox.publish(p.getCompanyId(), "project.milestone.created", "MILESTONE", m.getId(), Payload.of(
+                "milestoneId", m.getId(), "title", m.getTitle(), "projectId", p.getId(), "projectName", p.getName(),
+                "endDate", m.getEndDate() == null ? null : m.getEndDate().toString()));
         return MilestoneDto.of(m);
     }
 

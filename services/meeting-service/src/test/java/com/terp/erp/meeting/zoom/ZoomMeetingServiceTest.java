@@ -41,8 +41,9 @@ class ZoomMeetingServiceTest {
             Base64.getEncoder().encodeToString(new byte[32]), new MeetingProperties.Zoom("o", "a")));
     private final EmployeeClient employees = mock(EmployeeClient.class);
     private final PermissionChecker permissions = mock(PermissionChecker.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final ZoomMeetingService service = new ZoomMeetingService(meetings, settings, zoom, cipher, employees,
-            permissions);
+            permissions, outbox);
     private final Credentials creds = new Credentials(10L, "acc", "cid", "sec");
 
     @BeforeEach
@@ -79,6 +80,15 @@ class ZoomMeetingServiceTest {
     void createStoresTheStartUrlEncryptedAndMasksForViewers() {
         when(permissions.has("ZOOM_MANAGE")).thenReturn(true);
         var dto = service.create(null, form(null));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("meeting.zoom.created"), org.mockito.ArgumentMatchers.eq("ZOOM_MEETING"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("meetingId", "title", "startDate", "startTime");
+            org.assertj.core.api.Assertions.assertThat(p).doesNotContainKeys("passcode", "joinUrl", "startUrl");
+        }
         assertThat(dto.zoomMeetingId()).isEqualTo("81001");
         assertThat(dto.endTime()).isEqualTo(LocalTime.of(10, 15));
         assertThat(dto.startUrl()).isEqualTo("https://z.invalid/s/81001?zak=t");

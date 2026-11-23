@@ -3,6 +3,10 @@ package com.terp.erp.recruitment.offer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
+import com.terp.erp.recruitment.common.ERecruitmentError;
 import com.terp.erp.recruitment.candidate.Candidate;
 import com.terp.erp.recruitment.candidate.CandidateRepository;
 import com.terp.erp.recruitment.career.CareerSettings;
@@ -14,18 +18,20 @@ import com.terp.erp.recruitment.posting.JobPosting;
 import com.terp.erp.recruitment.posting.JobPostingRepository;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Download Offer Letter: an offer template of the offer's company filled from the offer, as a PDF. Values are
- * HTML-escaped by the template fill and the PDF takes text only. Email sending is out of scope (no notification
- * service yet). TODO: email the letter once the notification service exists.
+ * HTML-escaped by the template fill and the PDF takes text only. Send = the same letter as plain text in the
+ * recruitment.offer.letter_sent event; notification-service emails it to the candidate (OFFER_LETTER).
  */
 @Service
 @RequiredArgsConstructor
@@ -41,8 +47,61 @@ public class OfferLetterService {
     private final JobPostingRepository postings;
     private final CareerSettingsRepository careerSettings;
     private final OrgClient org;
+    private final OutboxPublisher outbox;
+
+    static final String EVENT_LETTER_SENT = "recruitment.offer.letter_sent";
+    /** Event payload stays small: the text is cut at this many UTF-8 bytes. */
+    static final int MAX_LETTER_BYTES = 20 * 1024;
+    private static final Set<Offer.EStatus> SENDABLE = EnumSet.of(Offer.EStatus.SENT, Offer.EStatus.NEGOTIATING,
+            Offer.EStatus.ACCEPTED);
 
     public record Letter(String fileName, byte[] pdf) {
+    }
+
+    public record LetterSent(String offerId, String eventId) {
+    }
+
+    /**
+     * Emails the letter: only an offer the candidate is meant to see (SENT, NEGOTIATING, ACCEPTED; else REC_068).
+     * The event is written in this transaction, so it goes out only if nothing failed.
+     */
+    @Transactional
+    public LetterSent send(Long offerId, Long templateId) {
+        Offer o = offerService.require(offerId);
+        if (!SENDABLE.contains(o.getStatus())) {
+            throw ApiException.badRequest(ERecruitmentError.REC_068, o.getStatus().name());
+        }
+        Map<String, String> v = values(o);
+        Generated g = templates.letter(templateId, o.getCompanyId(), v);
+        String text = truncate(String.join("\n\n", OfferPdf.paragraphs(g.content())), MAX_LETTER_BYTES);
+        String eventId = outbox.publish(o.getCompanyId(), EVENT_LETTER_SENT, "OFFER", o.getId(), Payload.of(
+                "offerId", o.getId(), "title", g.name(), "candidateId", o.getCandidateId(),
+                "candidateName", v.get("candidate_name"), "jobTitle", v.get("job_title"), "templateId", templateId,
+                "letterText", text, "recipientEmail", blankToNull(v.get("candidate_email"))));
+        return new LetterSent(o.getId().toString(), eventId);
+    }
+
+    /** At most maxBytes of UTF-8, never splitting a code point. */
+    static String truncate(String s, int maxBytes) {
+        if (s.getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
+            return s;
+        }
+        int bytes = 0;
+        int i = 0;
+        while (i < s.length()) {
+            int cp = s.codePointAt(i);
+            int n = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            if (bytes + n > maxBytes) {
+                break;
+            }
+            bytes += n;
+            i += Character.charCount(cp);
+        }
+        return s.substring(0, i);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     @Transactional(readOnly = true)

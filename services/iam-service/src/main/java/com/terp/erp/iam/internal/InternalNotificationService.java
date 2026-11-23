@@ -6,6 +6,8 @@ import com.terp.erp.iam.email.CompanyEmailNotification;
 import com.terp.erp.iam.email.CompanyEmailNotificationRepository;
 import com.terp.erp.iam.email.EEmailError;
 import com.terp.erp.iam.email.ENotificationEvent;
+import com.terp.erp.iam.integration.ChannelEventService;
+import com.terp.erp.iam.integration.CompanyChannelEvent.EChatChannel;
 import com.terp.erp.iam.integration.CompanyIntegrationService;
 import com.terp.erp.iam.integration.CompanyWebhookRepository;
 import com.terp.erp.iam.integration.EWebhookEvent;
@@ -44,13 +46,22 @@ public class InternalNotificationService {
     public record Telegram(String botToken, String chatId) {
     }
 
+    public record Twilio(String accountSid, String authToken, String fromNumber) {
+    }
+
     /** secret null = unsigned webhook. */
     public record Webhook(String id, String url, String secret) {
     }
 
-    /** emailEnabled: the company's switch of eventCode (no row = on; no eventCode = false). */
+    /**
+     * emailEnabled: the company's switch of eventCode (no row = on; no eventCode = false). twilio: null when SMS is
+     * off. …EnabledForEvent: the per-event chat switch of eventType (company_channel_event; no row or no eventType
+     * = true), given even when the channel itself is off.
+     */
     public record NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
-                                     Slack slack, Telegram telegram, List<Webhook> webhooks) {
+                                     Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
+                                     boolean slackEnabledForEvent, boolean telegramEnabledForEvent,
+                                     boolean smsEnabledForEvent) {
     }
 
     public record Contact(String id, String fullName, String email, String companyId, boolean active) {
@@ -62,11 +73,18 @@ public class InternalNotificationService {
     private final CompanySettingsService companySettings;
     private final CompanyIntegrationService integrations;
     private final CompanyWebhookRepository webhooks;
+    private final ChannelEventService channelEvents;
     private final UserAccountRepository users;
     private final SecretCipher cipher;
 
     @Transactional(readOnly = true)
     public NotificationConfig config(Long companyId, String eventCode, String webhookEvent) {
+        return config(companyId, null, eventCode, webhookEvent);
+    }
+
+    /** eventType: the routing key of the event, for the per-event chat switches; optional. */
+    @Transactional(readOnly = true)
+    public NotificationConfig config(Long companyId, String eventType, String eventCode, String webhookEvent) {
         if (companyId == null || !companies.existsById(Nulls.nonNull(companyId))) {
             throw ApiException.notFound(EIamError.IAM_001);
         }
@@ -92,8 +110,13 @@ public class InternalNotificationService {
         Slack slack = integrations.slackWebhookUrl(companyId).map(Slack::new).orElse(null);
         Telegram telegram = integrations.telegramTarget(companyId)
                 .map(t -> new Telegram(t.botToken(), t.chatId())).orElse(null);
+        Twilio twilio = integrations.twilioTarget(companyId)
+                .map(t -> new Twilio(t.accountSid(), t.authToken(), t.fromNumber())).orElse(null);
         return new NotificationConfig(String.valueOf(companyId), companySettings.defaultLanguageOf(companyId),
-                emailEnabled, smtp, slack, telegram, hooks);
+                emailEnabled, smtp, slack, telegram, twilio, hooks,
+                channelEvents.enabled(companyId, EChatChannel.SLACK, eventType),
+                channelEvents.enabled(companyId, EChatChannel.TELEGRAM, eventType),
+                channelEvents.enabled(companyId, EChatChannel.SMS, eventType));
     }
 
     @Transactional(readOnly = true)

@@ -48,8 +48,9 @@ class CashVoucherServiceTest {
     private final JournalService journal = mock(JournalService.class);
     private final DocumentNumbering numbering = mock(DocumentNumbering.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-22T10:00:00Z"), ZoneOffset.UTC);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final CashVoucherService service = new CashVoucherService(vouchers, categories, accounts, bank, journal,
-            numbering, clock);
+            numbering, clock, outbox);
     private final CashVoucher revenue = new CashVoucher();
 
     @BeforeEach
@@ -146,6 +147,14 @@ class CashVoucherServiceTest {
 
         var dto = service.create(ECategoryKind.REVENUE, null,
                 new VoucherForm(null, 1L, 3L, null, new BigDecimal("10"), null, null));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("accounting.revenue.created"), org.mockito.ArgumentMatchers.eq("REVENUE"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("revenueId", "title", "number", "amount", "date");
+        }
         assertThat(dto.accountId()).isEqualTo("40");
         assertThat(dto.number()).isEqualTo("REV-2026-11-002");
         assertThat(dto.status()).isEqualTo(EVoucherStatus.DRAFT);

@@ -2,6 +2,8 @@ package com.terp.erp.accounting.vendor;
 
 import com.terp.erp.accounting.common.EAccountingError;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.TenantGuard;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -31,6 +33,7 @@ public class VendorService {
 
     private final VendorRepository vendors;
     private final VendorCodeSequenceRepository sequences;
+    private final OutboxPublisher outbox;
 
     public record AddressForm(
             @Schema(example = "Example Trading Co.") @Size(max = 255) String name,
@@ -90,7 +93,13 @@ public class VendorService {
         c.setCompanyId(companyId);
         apply(c, form);
         c.setVendorCode(nextCode(companyId));
-        return dto(vendors.save(c));
+        Vendor saved = vendors.save(c);
+        // webhook NEW_VENDOR; no recipient
+        outbox.publish(companyId, "accounting.vendor.created", "VENDOR", saved.getId(), Payload.of(
+                "vendorId", saved.getId(), "title", saved.getVendorCode() + " - " + saved.getCompanyName(),
+                "vendorCode", saved.getVendorCode(), "companyName", saved.getCompanyName(),
+                "contactPerson", saved.getContactPerson(), "email", saved.getEmail()));
+        return dto(saved);
     }
 
     /** Full replacement; the code never changes. */

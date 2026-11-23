@@ -20,6 +20,8 @@ import com.terp.erp.iam.me.AvatarMediaClient;
 import com.terp.erp.iam.model.Company;
 import com.terp.erp.iam.repository.CompanyRepository;
 import com.terp.erp.iam.repository.UserAccountRepository;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
@@ -53,6 +55,8 @@ public class HelpdeskService {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     static final long ATTACHMENT_MAX_BYTES = 10L * 1024 * 1024;
+    static final String EVENT_TICKET_CREATED = "iam.helpdesk.ticket_created";
+    static final String EVENT_TICKET_REPLIED = "iam.helpdesk.ticket_replied";
 
     private final HelpdeskTicketRepository tickets;
     private final HelpdeskReplyRepository replies;
@@ -60,6 +64,7 @@ public class HelpdeskService {
     private final CompanyRepository companies;
     private final UserAccountRepository users;
     private final AvatarMediaClient media;
+    private final OutboxPublisher outbox;
 
     // ---------- tickets ----------
 
@@ -115,6 +120,9 @@ public class HelpdeskService {
         t.setPriority(f.priority() == null ? EHelpdeskPriority.MEDIUM : f.priority());
         tickets.save(t);
         t.setTicketNumber(number(t.getId()));
+        // The company user who opened it is told it was received. TODO(assumption): nobody on the platform side is
+        // emailed (no platform address list yet); a ticket the super admin opens for a company emails nobody.
+        publish(EVENT_TICKET_CREATED, t, p.superAdmin() || p.userId() == null ? List.of() : List.of(p.userId()));
         return new TicketDetail(rowMapper(List.of(t)).apply(t), t.getDescription(), List.of());
     }
 
@@ -169,7 +177,14 @@ public class HelpdeskService {
         r.setFromPlatform(p.superAdmin());
         r.setAuthorName(authorName(p));
         r.setAttachmentFileIds(new ArrayList<>(files));
-        return ReplyDto.of(replies.save(r));
+        ReplyDto dto = ReplyDto.of(replies.save(r));
+        // An internal note is never announced. A platform reply goes to the ticket's creator; a company reply to
+        // nobody by email (TODO(assumption): no platform recipient yet), but still to the company's chat channels.
+        if (!internal) {
+            List<Long> to = p.superAdmin() ? creator(t) : List.of();
+            publish(EVENT_TICKET_REPLIED, t, to);
+        }
+        return dto;
     }
 
     /** Super admin: removes one message of the conversation. */
@@ -232,6 +247,23 @@ public class HelpdeskService {
     }
 
     // ---------- helpers ----------
+
+    /** Display fields only: never the description or a reply's text (they may hold anything). */
+    private void publish(String eventType, HelpdeskTicket t, List<Long> recipientUserIds) {
+        outbox.publish(t.getCompanyId(), eventType, "HELPDESK_TICKET", t.getId(), Payload.of(
+                "ticketId", t.getId(), "ticketNumber", t.getTicketNumber(), "title", "#" + t.getTicketNumber(),
+                "subject", t.getTitle(), "status", t.getStatus() == null ? null : t.getStatus().name(),
+                "recipientUserIds", Payload.ids(recipientUserIds)));
+    }
+
+    /** The IAM user who opened the ticket (created_by = Keycloak sub); none when unknown or deleted. */
+    private List<Long> creator(HelpdeskTicket t) {
+        if (t.getCreatedBy() == null) {
+            return List.of();
+        }
+        return users.findByKeycloakIdAndDeletedFalse(t.getCreatedBy()).filter(u -> u.getCompanyId() != null
+                && u.getCompanyId().equals(t.getCompanyId())).map(u -> List.of(u.getId())).orElse(List.of());
+    }
 
     private HelpdeskTicket require(Long id) {
         HelpdeskTicket t = tickets.findByIdAndDeletedFalse(id)

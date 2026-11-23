@@ -65,15 +65,15 @@ class EventIntakeTest {
             seen.add(i.<ProcessedEvent>getArgument(0).getEventId());
             return i.getArgument(0);
         });
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null))
-                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, null, List.of(), null, null, null));
 
         intake.accept(ticketCreated("e-1"));
         List<Long> second = intake.accept(ticketCreated("e-1"));
 
         assertThat(second).isEmpty();
         verify(deliveries, times(1)).saveAll(anyIterable());
-        verify(iam, times(1)).config(7L, "SUPPORT_TICKET_CREATED", null);
+        verify(iam, times(1)).config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null);
         assertThat(savedRows()).singleElement().satisfies(d -> {
             assertThat(d.getChannel()).isEqualTo(EChannel.EMAIL);
             assertThat(d.getStatus()).isEqualTo(EStatus.PENDING);
@@ -84,8 +84,8 @@ class EventIntakeTest {
 
     @Test
     void aSwitchedOffEmailIsSkipped() {
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null))
-                .thenReturn(new NotificationConfig("7", "vi", false, null, null, null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "vi", false, null, null, null, null, List.of(), null, null, null));
 
         assertThat(intake.accept(ticketCreated("e-2"))).isEmpty();
 
@@ -99,8 +99,8 @@ class EventIntakeTest {
     @Test
     void aDisabledIntegrationGetsNoRow() {
         // IAM answers slack = null when the integration is off; telegram on is the control.
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null)).thenReturn(new NotificationConfig("7", "en", true,
-                smtp, null, new IamInternalClient.Telegram("123456:abcdefghijklmnopqrstuvwxyz", "42"), List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null)).thenReturn(new NotificationConfig("7", "en", true,
+                smtp, null, new IamInternalClient.Telegram("123456:abcdefghijklmnopqrstuvwxyz", "42"), null, List.of(), null, null, null));
 
         intake.accept(ticketCreated("e-3"));
 
@@ -111,9 +111,9 @@ class EventIntakeTest {
     void slackAndWebhooksOfTheMappedEventGetARowEach() {
         ObjectNode data = mapper.createObjectNode().put("number", "INV-2026-11-001");
         EventEnvelope e = new EventEnvelope("e-4", "sales.invoice.posted", 7L, "SALES_INVOICE", "9", NOW, null, data);
-        when(iam.config(7L, "INVOICE_SENT", "NEW_SALES_INVOICE")).thenReturn(new NotificationConfig("7", "en", true,
-                smtp, new Slack("https://hooks.slack.com/services/x"), null,
-                List.of(new Webhook("3", "https://hooks.example.com/erp", null))));
+        when(iam.config(7L, "sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE")).thenReturn(new NotificationConfig("7", "en", true,
+                smtp, new Slack("https://hooks.slack.com/services/x"), null, null,
+                List.of(new Webhook("3", "https://hooks.example.com/erp", null)), null, null, null));
 
         intake.accept(e);
 
@@ -130,12 +130,51 @@ class EventIntakeTest {
         ObjectNode data = mapper.createObjectNode().put("name", "Test Prospect");
         data.putArray("recipientUserIds").add("12").add("12").add("13");
         EventEnvelope e = new EventEnvelope("e-5", "crm.lead.assigned", 7L, "LEAD", "4", NOW, null, data);
-        when(iam.config(7L, "LEAD_ASSIGNED", null))
-                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, List.of()));
+        when(iam.config(7L, "crm.lead.assigned", "LEAD_ASSIGNED", null))
+                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, null, List.of(), null, null, null));
 
         intake.accept(e);
 
         assertThat(savedRows()).extracting(Delivery::getRecipientRef).containsExactly("user:12", "user:13");
+    }
+
+    @Test
+    void aChatChannelSwitchedOffForTheEventGetsASkippedRow() {
+        ObjectNode data = mapper.createObjectNode().put("number", "INV-2026-11-001")
+                .put("recipientPhone", "+15005550006");
+        EventEnvelope e = new EventEnvelope("e-7", "sales.invoice.posted", 7L, "SALES_INVOICE", "9", NOW, null, data);
+        when(iam.config(7L, "sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE")).thenReturn(
+                new NotificationConfig("7", "en", true, smtp, new Slack("https://hooks.slack.com/services/x"),
+                        new IamInternalClient.Telegram("123456:abcdefghijklmnopqrstuvwxyz", "42"),
+                        new IamInternalClient.Twilio("AC" + "0".repeat(32), "token", "+15005550001"), List.of(),
+                        false, true, false));
+
+        List<Long> pending = intake.accept(e);
+
+        List<Delivery> rows = savedRows();
+        assertThat(rows).extracting(Delivery::getChannel)
+                .containsExactly(EChannel.EMAIL, EChannel.SLACK, EChannel.TELEGRAM, EChannel.SMS);
+        assertThat(rows.get(1).getStatus()).isEqualTo(EStatus.SKIPPED);
+        assertThat(rows.get(1).getLastErrorCode()).isEqualTo("CHANNEL_EVENT_DISABLED");
+        assertThat(rows.get(2).getStatus()).isEqualTo(EStatus.PENDING);
+        assertThat(rows.get(3).getStatus()).isEqualTo(EStatus.SKIPPED);
+        assertThat(rows.get(3).getLastErrorCode()).isEqualTo("CHANNEL_EVENT_DISABLED");
+        assertThat(rows.get(3).getTarget()).isEqualTo("*006");
+        assertThat(pending).hasSize(1);
+    }
+
+    @Test
+    void smsNeedsAnE164PhoneInTheEvent() {
+        ObjectNode data = mapper.createObjectNode().put("number", "INV-1").put("recipientPhone", "0901234567");
+        EventEnvelope e = new EventEnvelope("e-8", "sales.invoice.posted", 7L, "SALES_INVOICE", "9", NOW, null, data);
+        when(iam.config(7L, "sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE")).thenReturn(
+                new NotificationConfig("7", "en", true, smtp, null, null,
+                        new IamInternalClient.Twilio("AC" + "0".repeat(32), "token", "+15005550001"), List.of(),
+                        null, null, null));
+
+        intake.accept(e);
+
+        assertThat(savedRows()).extracting(Delivery::getChannel).containsExactly(EChannel.EMAIL);
     }
 
     @Test

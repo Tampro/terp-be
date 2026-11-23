@@ -8,6 +8,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.recruitment.candidate.Candidate;
 import com.terp.erp.recruitment.candidate.CandidateRepository;
 import com.terp.erp.recruitment.candidate.CandidateService;
@@ -76,6 +78,7 @@ public class InterviewService {
     private final CatalogService catalog;
     private final CatalogItemRepository catalogItems;
     private final EmployeeClient employees;
+    private final OutboxPublisher outbox;
 
     // ------------------------------------------------------------------ reads
 
@@ -126,6 +129,9 @@ public class InterviewService {
         Interview i = new Interview();
         apply(i, form);
         interviews.save(i);
+        if (i.getStatus() == Interview.EStatus.SCHEDULED) {
+            scheduled(i);
+        }
         return detail(i);
     }
 
@@ -140,7 +146,8 @@ public class InterviewService {
     @Transactional
     public InterviewDetail changeStatus(Long id, Interview.EStatus status) {
         Interview i = require(id);
-        if (status == Interview.EStatus.SCHEDULED && i.getStatus() != Interview.EStatus.SCHEDULED) {
+        boolean rescheduled = status == Interview.EStatus.SCHEDULED && i.getStatus() != Interview.EStatus.SCHEDULED;
+        if (rescheduled) {
             checkConflicts(i);
         }
         if (status == Interview.EStatus.COMPLETED && i.getStatus() != Interview.EStatus.COMPLETED) {
@@ -149,7 +156,26 @@ public class InterviewService {
                     .ifPresent(c -> c.setStatus(Candidate.EStatus.OFFER));
         }
         i.setStatus(status);
+        if (rescheduled) {
+            scheduled(i);
+        }
         return detail(i);
+    }
+
+    /** NEW_INTERVIEW_SCHEDULE: the candidate is emailed; interviewer emails stay out of the event. */
+    private void scheduled(Interview i) {
+        Candidate c = candidates.findById(i.getCandidateId()).orElse(null);
+        String job = i.getJobPostingId() == null ? null
+                : postings.findById(i.getJobPostingId()).map(com.terp.erp.recruitment.posting.JobPosting::getTitle)
+                .orElse(null);
+        String name = c == null ? null : c.fullName();
+        outbox.publish(i.getCompanyId(), "recruitment.interview.scheduled", "INTERVIEW", i.getId(), Payload.of(
+                "interviewId", i.getId(), "title", name == null ? "Interview" : "Interview: " + name,
+                "candidateId", i.getCandidateId(), "candidateName", name, "jobPostingId", i.getJobPostingId(),
+                "jobTitle", job, "date", i.getInterviewDate() == null ? null : i.getInterviewDate().toString(),
+                "startTime", i.getStartTime() == null ? null : i.getStartTime().toString(),
+                "durationMinutes", i.getDurationMinutes(), "location", i.getLocation(),
+                "meetingLink", i.getMeetingLink(), "recipientEmail", c == null ? null : c.getEmail()));
     }
 
     @Transactional

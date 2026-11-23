@@ -50,9 +50,10 @@ class TrainingSessionTest {
             new TrainingTypeService(typeRepo, programRepo, mock(BranchRepository.class),
                     mock(DepartmentRepository.class)), support, trainingRepo, sessionRepo, mock(TrainingAssessmentRepository.class));
     private final TrainerRepository trainerRepo = mock(TrainerRepository.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final TrainingSessionService service = new TrainingSessionService(sessionRepo, attendanceRepo,
             trainingRepo, programRepo, programs, support, new TrainerService(trainerRepo, sessionRepo,
-            mock(BranchRepository.class), mock(DepartmentRepository.class)), trainerRepo);
+            mock(BranchRepository.class), mock(DepartmentRepository.class), outbox), trainerRepo, outbox);
 
     private TrainingProgram program;
 
@@ -110,6 +111,15 @@ class TrainingSessionTest {
     @Test
     void recurringCreatesCopies() {
         var r = service.create(form(START.plusHours(3), null, new Recurrence(EFrequency.MONTHLY, 3)));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("employee.training.created"), org.mockito.ArgumentMatchers.eq("TRAINING_SESSION"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("sessionId", "title", "startAt", "occurrences");
+            org.assertj.core.api.Assertions.assertThat(p.get("occurrences")).isEqualTo(3);
+        }
         assertThat(r.created()).isEqualTo(3);
         assertThat(r.seriesId()).isNotNull();
         ArgumentCaptor<TrainingSession> saved = ArgumentCaptor.forClass(TrainingSession.class);

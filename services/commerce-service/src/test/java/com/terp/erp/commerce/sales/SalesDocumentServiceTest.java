@@ -133,6 +133,12 @@ class SalesDocumentServiceTest {
         assertThat(posted.document().status()).isEqualTo(EDocumentStatus.POSTED);
         verify(outbox).publish(eq(10L), eq("sales.invoice.posted"), eq("SALES_INVOICE"), eq(7L),
                 org.mockito.ArgumentMatchers.<Object>argThat(p -> ((java.util.Map<?, ?>) p).get("invoiceId").equals("7")));
+        verify(outbox).publish(eq(10L), eq("sales.invoice.status_changed"), eq("SALES_INVOICE"), eq(7L),
+                org.mockito.ArgumentMatchers.<Object>argThat(p -> {
+                    var m = (java.util.Map<?, ?>) p;
+                    return m.get("fromStatus") == EDocumentStatus.DRAFT && m.get("status") == EDocumentStatus.POSTED
+                            && "SI-2026-11-007".equals(m.get("title"));
+                }));
         assertThatThrownBy(() -> service.update(EDocumentKind.INVOICE, 7L, form(null, 3L, List.of(
                 new LineForm(1L, BigDecimal.ONE, null, null)))))
                 .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_002);
@@ -255,6 +261,46 @@ class SalesDocumentServiceTest {
         TestLogin.superAdmin();
         assertThatThrownBy(() -> service.calendar(EDocumentKind.INVOICE, null, from, to))
                 .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(ECommerceError.SAL_006));
+    }
+
+    @Test
+    void proposalCreateSendAndDecidePublishTheirEvents() {
+        TestLogin.as(10L, "SALES_MANAGE");
+        when(accounting.customer(5L)).thenReturn(
+                new AccountingClient.Customer("5", "CUST-0001", "Test Customer", "buyer@example.com"));
+        var created = service.create(EDocumentKind.PROPOSAL, form(null, null, List.of(
+                new LineForm(2L, BigDecimal.ONE, null, null))));
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("sales.proposal.created"), eq("SALES_PROPOSAL"),
+                eq(Long.valueOf(created.document().id())), payload.capture());
+        assertThat(Payloads.map(payload.getValue()))
+                .containsKeys("proposalId", "title", "number", "customerName", "total");
+
+        SalesDocument p = doc(EDocumentKind.PROPOSAL, 10L, EDocumentStatus.DRAFT);
+        when(documents.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(p));
+        service.send(EDocumentKind.PROPOSAL, 7L);
+        service.decide(EDocumentKind.PROPOSAL, 7L, true);
+        var changes = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox, org.mockito.Mockito.times(2)).publish(eq(10L), eq("sales.proposal.status_changed"),
+                eq("SALES_PROPOSAL"), eq(7L), changes.capture());
+        var sent = Payloads.map(changes.getAllValues().get(0));
+        var accepted = Payloads.map(changes.getAllValues().get(1));
+        assertThat(sent.get("fromStatus")).isEqualTo(EDocumentStatus.DRAFT);
+        assertThat(sent.get("status")).isEqualTo(EDocumentStatus.SENT);
+        assertThat(accepted.get("status")).isEqualTo(EDocumentStatus.ACCEPTED);
+        assertThat(accepted).containsKeys("proposalId", "title", "customerName", "createdBy");
+    }
+
+    @Test
+    void quotationsPublishNoProposalEventsAndTheCustomerEmailIsCopied() {
+        TestLogin.as(10L, "QUOTATION_MANAGE");
+        when(accounting.customer(5L)).thenReturn(
+                new AccountingClient.Customer("5", "CUST-0001", "Test Customer", "buyer@example.com"));
+        var captor = org.mockito.ArgumentCaptor.forClass(SalesDocument.class);
+        service.create(EDocumentKind.QUOTATION, form(null, null, List.of(new LineForm(2L, BigDecimal.ONE, null, null))));
+        verify(documents).save(captor.capture());
+        assertThat(captor.getValue().getCustomerEmail()).isEqualTo("buyer@example.com");
+        verify(outbox, never()).publish(any(), anyString(), anyString(), any(), any());
     }
 
     private static DocumentForm form(EInvoiceType type, Long warehouseId, List<LineForm> lines) {

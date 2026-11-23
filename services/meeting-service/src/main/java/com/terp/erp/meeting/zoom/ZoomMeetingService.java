@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.meeting.client.EmployeeClient;
 import com.terp.erp.meeting.client.EmployeeClient.Employee;
 import com.terp.erp.meeting.common.EMeetingError;
@@ -56,6 +58,7 @@ public class ZoomMeetingService {
     private final SecretCipher cipher;
     private final EmployeeClient employees;
     private final PermissionChecker permissions;
+    private final OutboxPublisher outbox;
 
     public record MeetingForm(
             @Schema(example = "Team Sync", requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank @Size(max = 200)
@@ -147,6 +150,12 @@ public class ZoomMeetingService {
             }
             throw e;
         }
+        // webhook NEW_ZOOM_MEETING; never the passcode, join or start URL. Invitees are employee ids, not IAM users:
+        // no recipient. TODO(assumption): invitees are not emailed by notification-service.
+        outbox.publish(companyId, "meeting.zoom.created", "ZOOM_MEETING", z.getId(), Payload.of(
+                "meetingId", z.getId(), "title", z.getTopic(), "topic", z.getTopic(), "startDate", z.getStartDate(),
+                "startTime", z.getStartTime(), "durationMinutes", z.getDurationMinutes(), "status", z.getStatus(),
+                "inviteeIds", Payload.ids(z.getInviteeIds())));
         return dtos(List.of(z), companyId).get(0);
     }
 
