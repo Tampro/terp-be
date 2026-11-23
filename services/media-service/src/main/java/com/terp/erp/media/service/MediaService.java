@@ -20,15 +20,16 @@ import com.terp.erp.media.repository.MediaFolderRepository;
 import com.terp.erp.media.service.MediaDtos.FolderDto;
 import com.terp.erp.media.service.MediaDtos.MediaFileDto;
 import com.terp.erp.media.service.MediaDtos.StatsDto;
-import com.terp.erp.media.storage.FileStorage;
+import com.terp.erp.media.constant.EStorageDriver;
 import com.terp.erp.media.storage.FileTypePolicy;
 import com.terp.erp.media.storage.LinkSigner;
 import com.terp.erp.media.storage.StoragePolicyClient;
 import com.terp.erp.media.storage.StorageQuotaClient;
+import com.terp.erp.media.storage.StorageRouter;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Path;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,7 @@ import java.util.stream.Collectors;
 public class MediaService {
     private final MediaFileRepository files;
     private final MediaFolderRepository folders;
-    private final FileStorage storage;
+    private final StorageRouter storage;
     private final LinkSigner links;
     private final MediaProperties props;
     private final StoragePolicyClient storagePolicy;
@@ -148,13 +149,16 @@ public class MediaService {
             checked.add(new Checked(u, name, type));
         }
         assertQuota(s, checked.stream().mapToLong(c -> c.file().getSize()).sum());
+        // Refused here (MEDIA_012/013/014) before any byte is written: never a silent fallback to local.
+        EStorageDriver driver = storage.writeDriver(policy.driver());
+        var target = storage.of(driver);
         List<String> stored = new ArrayList<>();
         try {
             List<MediaFileDto> result = new ArrayList<>();
             for (Checked c : checked) {
-                String key;
+                String key = s.storageOwner() + "/" + UUID.randomUUID() + "." + c.type().extension();
                 try (InputStream in = c.file().getInputStream()) {
-                    key = storage.save(s.storageOwner(), c.type().extension(), in);
+                    target.put(key, in, c.file().getSize(), c.type().mimeType());
                 }
                 stored.add(key);
                 MediaFile m = new MediaFile();
@@ -167,11 +171,12 @@ public class MediaService {
                 m.setKind(c.type().kind());
                 m.setSizeBytes(c.file().getSize());
                 m.setStorageKey(key);
+                m.setStorageDriver(driver);
                 result.add(dto(files.save(m)));
             }
             return result;
         } catch (IOException | RuntimeException e) {
-            stored.forEach(storage::delete);
+            stored.forEach(target::delete);
             if (e instanceof ApiException api) {
                 throw api;
             }
@@ -221,7 +226,7 @@ public class MediaService {
     public void delete(Long id) {
         MediaFile m = requireFile(id);
         files.delete(m);
-        storage.delete(m.getStorageKey());
+        storage.of(m.getStorageDriver()).delete(m.getStorageKey());
     }
 
     // ------------------------------------------------------------------ internal (service account)
@@ -241,7 +246,8 @@ public class MediaService {
 
     // ------------------------------------------------------------------ signed content
 
-    public record Content(Path path, String mimeType, String downloadName, boolean download) {
+    /** The caller streams and closes {@code body}. */
+    public record Content(InputStream body, long size, String mimeType, String downloadName, boolean download) {
     }
 
     /** No caller identity here: the valid signature is the authorization (it was issued after the checks). */
@@ -251,7 +257,24 @@ public class MediaService {
             throw ApiException.forbidden(EMediaError.MEDIA_007);
         }
         MediaFile m = files.findById(id).orElseThrow(() -> ApiException.notFound(EMediaError.MEDIA_001));
-        return new Content(storage.path(m.getStorageKey()), m.getMimeType(), m.getOriginalName(), dl == 1);
+        // The row's driver, not the current one: files written before a switch are read from where they are.
+        InputStream body = storage.of(m.getStorageDriver()).get(m.getStorageKey());
+        return new Content(body, m.getSizeBytes(), m.getMimeType(), m.getOriginalName(), dl == 1);
+    }
+
+    // ------------------------------------------------------------------ storage test (super admin)
+
+    /**
+     * Probes the S3 storage of this server's environment: bucket reachable, a tiny object written and removed.
+     * Allowed before switching the driver, so the super admin can check the setup first.
+     */
+    public MediaDtos.StorageTestDto testStorage(EStorageDriver driver) {
+        EStorageDriver d = driver == null || driver == EStorageDriver.LOCAL ? EStorageDriver.S3 : driver;
+        String failed = storage.s3().probe(d);
+        if (failed != null) {
+            throw ApiException.badRequest(EMediaError.MEDIA_015, failed);
+        }
+        return new MediaDtos.StorageTestDto(d, storage.s3().endpointHost(), storage.s3().bucket(), true);
     }
 
     // ------------------------------------------------------------------ helpers

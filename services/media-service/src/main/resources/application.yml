@@ -44,6 +44,23 @@ erp:
     # Service accounts allowed on /api/v1/internal/** (employee-service: announcement attachments;
     # document-service: HR document downloads), comma-separated.
     internal-client-ids: ${MEDIA_INTERNAL_CLIENT_IDS:erp-employee-service,erp-document-service}
+    # S3-compatible storage (AWS S3 / Wasabi / MinIO), used when the super admin picks driver S3 or WASABI in IAM
+    # Settings -> Storage. Credentials only from this environment; all blank = S3 not configured (uploads with S3
+    # chosen are refused with MEDIA_012, never written locally). Endpoint must be https unless its host is listed
+    # in allowed-http-hosts (SeaweedFS in the compose network).
+    s3:
+      endpoint: ${MEDIA_S3_ENDPOINT:}
+      region: ${MEDIA_S3_REGION:us-east-1}
+      bucket: ${MEDIA_S3_BUCKET:}
+      # Secrets: optional feature, so blank (not unset) means "S3 off"; never logged (S3Properties.toString).
+      access-key: ${MEDIA_S3_ACCESS_KEY:}
+      secret-key: ${MEDIA_S3_SECRET_KEY:}
+      path-style: ${MEDIA_S3_PATH_STYLE:false}
+      prefix: ${MEDIA_S3_PREFIX:}
+      create-bucket: ${MEDIA_S3_CREATE_BUCKET:false}
+      allowed-http-hosts: ${MEDIA_S3_ALLOWED_HTTP_HOSTS:seaweedfs}
+      connect-timeout: ${MEDIA_S3_CONNECT_TIMEOUT:PT3S}
+      read-timeout: ${MEDIA_S3_READ_TIMEOUT:PT30S}
 
 management:
   endpoints:

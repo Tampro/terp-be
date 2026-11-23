@@ -8,6 +8,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import com.terp.erp.media.constant.EMediaKind;
+import com.terp.erp.media.constant.EStorageDriver;
 
 /**
  * An uploaded file. The bytes live on the storage volume under {@code storageKey}, a server-generated path that
@@ -47,4 +48,9 @@ public class MediaFile extends BaseAuditableEntity {
 
     @Column(name = "storage_key", nullable = false, length = 200)
     private String storageKey;
+
+    /** Where the bytes were written; reads and deletes go there even after the platform driver is switched. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "storage_driver", nullable = false, length = 10)
+    private EStorageDriver storageDriver = EStorageDriver.LOCAL;
 }

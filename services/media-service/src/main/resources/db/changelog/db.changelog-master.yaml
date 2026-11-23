@@ -3,3 +3,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/changes/20261119090000_media_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123090000_media_storage_driver_changelog.mysql.sql

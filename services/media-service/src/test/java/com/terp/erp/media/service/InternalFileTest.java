@@ -9,7 +9,6 @@ import com.terp.erp.media.constant.EMediaError;
 import com.terp.erp.media.model.MediaFile;
 import com.terp.erp.media.repository.MediaFileRepository;
 import com.terp.erp.media.repository.MediaFolderRepository;
-import com.terp.erp.media.storage.FileStorage;
 import com.terp.erp.media.storage.LinkSigner;
 import com.terp.erp.media.storage.StoragePolicyClient;
 
@@ -34,7 +33,7 @@ class InternalFileTest {
                 Duration.ofMinutes(10), DataSize.ofMegabytes(10), "http://localhost:8080", "http://iam",
                 java.util.List.of("erp-employee-service"));
         LinkSigner signer = new LinkSigner(props, Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC));
-        return new MediaService(files, mock(MediaFolderRepository.class), mock(FileStorage.class), signer, props,
+        return new MediaService(files, mock(MediaFolderRepository.class), mock(com.terp.erp.media.storage.StorageRouter.class), signer, props,
                 mock(StoragePolicyClient.class),
                 mock(com.terp.erp.media.storage.StorageQuotaClient.class));
     }

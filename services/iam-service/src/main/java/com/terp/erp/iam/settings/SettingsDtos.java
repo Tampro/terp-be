@@ -190,11 +190,30 @@ public final class SettingsDtos {
 
     // ------------------------------------------------------------------ Storage
 
+    /**
+     * Where media-service writes new uploads. WASABI = S3 with a Wasabi endpoint. The S3 endpoint, bucket and
+     * credentials are media-service's own environment (MEDIA_S3_*), never stored or returned here.
+     */
+    public enum EStorageDriver { LOCAL, S3, WASABI }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StorageSettings(
             @Schema(description = "Allowed File Types (extensions). Only types media-service can verify are accepted.",
                     example = "[\"png\",\"jpg\",\"pdf\"]") @NotNull @Size(min = 1) List<@NotBlank String> allowedFileTypes,
-            @Schema(description = "Max Upload Size (KB)", example = "10240") @Min(1) @Max(1024 * 1024) int maxUploadSizeKb) {
+            @Schema(description = "Max Upload Size (KB)", example = "10240") @Min(1) @Max(1024 * 1024) int maxUploadSizeKb,
+            @Schema(description = "Storage driver for new uploads: LOCAL (server volume), S3 or WASABI. Omitted = LOCAL. "
+                    + "Files already uploaded stay readable where they were written. S3/WASABI need the MEDIA_S3_* "
+                    + "environment of media-service (check with POST /api/v1/media/storage/test).", example = "LOCAL")
+            EStorageDriver driver) {
+        public StorageSettings {
+            // Settings saved before the driver existed were local.
+            driver = driver == null ? EStorageDriver.LOCAL : driver;
+        }
+
+        public StorageSettings(List<String> allowedFileTypes, int maxUploadSizeKb) {
+            this(allowedFileTypes, maxUploadSizeKb, EStorageDriver.LOCAL);
+        }
+
         /** Every type media-service can check by its content (FileTypePolicy). */
         public static final List<String> SUPPORTED = List.of("png", "jpg", "jpeg", "gif", "webp", "pdf", "doc", "docx",
                 "xls", "xlsx", "pptx", "txt", "csv");

@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import com.terp.erp.media.constant.EMediaKind;
+import com.terp.erp.media.constant.EStorageDriver;
 import com.terp.erp.media.model.MediaFile;
 import com.terp.erp.media.model.MediaFolder;
 import com.terp.erp.media.storage.LinkSigner.SignedLink;
@@ -51,5 +52,13 @@ public final class MediaDtos {
             @NotBlank @Size(max = 255) String displayName,
             @Schema(description = "Folder id of the same owner; omitted = no folder (PUT is a full replacement)", example = "3")
             Long folderId) {
+    }
+
+    /** Result of a passed storage test. Never carries a credential: only the endpoint host and the bucket. */
+    public record StorageTestDto(
+            @Schema(description = "Driver tested", example = "S3") EStorageDriver driver,
+            @Schema(description = "Endpoint host (null = AWS endpoint of the region)", example = "seaweedfs") String endpointHost,
+            @Schema(description = "Bucket", example = "erp-media") String bucket,
+            @Schema(description = "HEAD bucket, put and delete of a probe object all passed", example = "true") boolean ok) {
     }
 }

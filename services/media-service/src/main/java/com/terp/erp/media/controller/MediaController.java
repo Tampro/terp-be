@@ -25,11 +25,13 @@ import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.common.ResponseListDto;
 import com.terp.erp.media.constant.EMediaKind;
 import com.terp.erp.media.constant.EMediaSort;
+import com.terp.erp.media.constant.EStorageDriver;
 import com.terp.erp.media.service.MediaDtos.FileUpdateForm;
 import com.terp.erp.media.service.MediaDtos.FolderDto;
 import com.terp.erp.media.service.MediaDtos.FolderForm;
 import com.terp.erp.media.service.MediaDtos.MediaFileDto;
 import com.terp.erp.media.service.MediaDtos.StatsDto;
+import com.terp.erp.media.service.MediaDtos.StorageTestDto;
 import com.terp.erp.media.service.MediaService;
 
 import java.util.List;
@@ -124,9 +126,11 @@ public class MediaController {
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "No file (MEDIA_008), type not allowed (MEDIA_004), too "
                     + "large (MEDIA_005), content does not match type (MEDIA_006), storage error (MEDIA_009), "
-                    + "the company plan's storage limit would be passed (MEDIA_010)"),
+                    + "the company plan's storage limit would be passed (MEDIA_010), driver S3/WASABI chosen but not "
+                    + "configured on this server (MEDIA_012), storage endpoint not allowed (MEDIA_013)"),
             @ApiResponse(responseCode = "404", description = "Folder not in your company (MEDIA_002)"),
-            @ApiResponse(responseCode = "503", description = "IAM unreachable for the storage limit (MEDIA_011)")})
+            @ApiResponse(responseCode = "503", description = "IAM unreachable for the storage limit (MEDIA_011) or "
+                    + "for the storage driver while S3 is configured (MEDIA_014)")})
     @PreAuthorize("@PermissionChecker.has('MEDIA_UPLOAD')")
     @PostMapping(value = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiMessageDto<List<MediaFileDto>> upload(
@@ -151,5 +155,19 @@ public class MediaController {
     public ApiMessageDto<Void> delete(@PathVariable Long id) {
         media.delete(id);
         return ApiMessageDto.ok(null);
+    }
+
+    @Operation(summary = "Test the S3 storage (super admin)",
+            description = "Probes the S3-compatible storage configured in this server's environment (MEDIA_S3_*): "
+                    + "HEAD bucket, then put and delete of a tiny probe object. Works before the driver is switched. "
+                    + "driver: S3 (default) or WASABI (also checks the endpoint is a Wasabi one). Never returns a credential.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not configured (MEDIA_012), endpoint not allowed "
+                    + "(MEDIA_013), a probe step failed (MEDIA_015: HEAD_BUCKET, PUT_OBJECT or DELETE_OBJECT)"),
+            @ApiResponse(responseCode = "403", description = "Not a super admin")})
+    @PreAuthorize("@PermissionChecker.isSuperAdmin()")
+    @PostMapping("/storage/test")
+    public ApiMessageDto<StorageTestDto> testStorage(@RequestParam(required = false) EStorageDriver driver) {
+        return ApiMessageDto.ok(media.testStorage(driver));
     }
 }

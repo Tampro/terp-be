@@ -13,6 +13,7 @@ import org.springframework.web.client.RestClientException;
 import com.terp.erp.common.ApiMessageDto;
 import com.terp.erp.common.Nulls;
 import com.terp.erp.media.config.MediaProperties;
+import com.terp.erp.media.constant.EStorageDriver;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -36,11 +37,17 @@ public class StoragePolicyClient {
     };
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Remote(List<String> allowedFileTypes, int maxUploadSizeKb) {
+    record Remote(List<String> allowedFileTypes, int maxUploadSizeKb, String driver) {
     }
 
-    /** null allowedTypes = no extra restriction beyond FileTypePolicy. */
-    public record Policy(Set<String> allowedTypes, long maxBytes) {
+    /**
+     * null allowedTypes = no extra restriction beyond FileTypePolicy. null driver = not known (IAM unreachable and
+     * nothing cached): StorageRouter then decides, never silently local when S3 is configured.
+     */
+    public record Policy(Set<String> allowedTypes, long maxBytes, EStorageDriver driver) {
+        public Policy(Set<String> allowedTypes, long maxBytes) {
+            this(allowedTypes, maxBytes, null);
+        }
     }
 
     private final RestClient client;
@@ -92,9 +99,22 @@ public class StoragePolicyClient {
             Remote r = body.getData();
             long bytes = Math.min((long) r.maxUploadSizeKb() * 1024, props.maxFileSize().toBytes());
             return new Policy(r.allowedFileTypes().stream().map(t -> t.toLowerCase(Locale.ROOT))
-                    .collect(Collectors.toUnmodifiableSet()), bytes);
+                    .collect(Collectors.toUnmodifiableSet()), bytes, driverOf(r.driver()));
         } catch (RestClientException e) {
             log.warn("Storage policy from IAM unavailable, using the last known one: {}", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /** Settings saved before the driver existed have none: they were local. */
+    static EStorageDriver driverOf(String value) {
+        if (value == null || value.isBlank()) {
+            return EStorageDriver.LOCAL;
+        }
+        try {
+            return EStorageDriver.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            log.warn("Unknown storage driver from IAM, treated as not known");
             return null;
         }
     }

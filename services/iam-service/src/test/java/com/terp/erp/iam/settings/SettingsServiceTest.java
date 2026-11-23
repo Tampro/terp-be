@@ -104,6 +104,17 @@ class SettingsServiceTest {
     }
 
     @Test
+    void storageDriverIsKeptAndOldRowsReadAsLocal() {
+        service.saveStorage(new StorageSettings(List.of("png"), 2048, SettingsDtos.EStorageDriver.S3));
+        assertThat(service.storage().driver()).isEqualTo(SettingsDtos.EStorageDriver.S3);
+        // A section saved before the driver existed has no "driver" key.
+        rows.get("STORAGE").setValueJson("{\"allowedFileTypes\":[\"png\"],\"maxUploadSizeKb\":2048}");
+        assertThat(service.storage().driver()).isEqualTo(SettingsDtos.EStorageDriver.LOCAL);
+        // Nothing secret is part of the storage section.
+        assertThat(rows.get("STORAGE").getValueJson()).doesNotContainIgnoringCase("secret");
+    }
+
+    @Test
     void secretsCannotBeSavedWithoutAKey() {
         SecretCipher noKey = new SecretCipher("");
         assertThat(noKey.available()).isFalse();
