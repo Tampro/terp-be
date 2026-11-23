@@ -1,0 +1,34 @@
+// inventory items and images
+// 1x1 transparent PNG
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+const up = async (tok, name, type, bytes) => { const fd = new FormData(); fd.append('files', new Blob([bytes], { type }), name); const res = await fetch(G + '/media/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Accept-Language': 'en' }, body: fd }); const j = await res.json().catch(() => ({})); return { s: res.status, code: j.code, data: j.data }; };
+let r = await up(t, 'main.png', 'image/png', PNG); const img1 = r.data?.[0]; ck('upload main png', r.s === 200 && img1?.id, r.s + ' ' + r.code);
+const img2 = (await up(t, 'side.png', 'image/png', PNG)).data?.[0]; const img3 = (await up(t, 'back.png', 'image/png', PNG)).data?.[0];
+const txt = (await up(t, 'notes.txt', 'text/plain', Buffer.from('plain text'))).data?.[0];
+const bImg = (await up(B.t, 'b.png', 'image/png', PNG)).data?.[0];
+ck('setup files', img2?.id && img3?.id && txt?.id && bImg?.id, [img2?.id, img3?.id, txt?.id, bImg?.id].join(','));
+const unit = (await c('POST', '/inventory/units', { name: 'Piece' }, t)).data;
+const cat = (await c('POST', '/inventory/categories', { name: 'Gadgets', color: '#3B82F6' }, t)).data;
+const wh = (await c('POST', '/inventory/warehouses', { name: 'Main', address: '1 Test Street', city: 'Test City', zipCode: '70000', active: true }, t)).data;
+r = await c('POST', '/inventory/items', { type: 'PRODUCT', name: 'Test Lamp', generateSku: true, categoryId: Number(cat.id), unitId: Number(unit.id), salePrice: 100, purchasePrice: 60, openingWarehouseId: Number(wh.id), openingQuantity: 5 }, t);
+const item = r.data; ck('item created with generated SKU and opening stock', r.s === 200 && /^[A-Z0-9]{8}$/.test(item.sku) && Number(item.quantity) === 5 && item.mainImageId === null, r.s + ' ' + r.code + ' ' + item?.sku + ' ' + item?.quantity);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(img1.id), additionalImageIds: [Number(img3.id), Number(img2.id)] }, t);
+ck('set main + 2 additional images', r.s === 200 && r.data.mainImageId === String(img1.id) && r.data.additionalImageIds.join() === [img3.id, img2.id].join(), r.s + ' ' + r.code + ' ' + JSON.stringify(r.data));
+r = await c('GET', '/inventory/items/' + item.id + '/images', null, t); ck('get images', r.s === 200 && r.data.additionalImageIds.length === 2, r.s + ' ' + JSON.stringify(r.data));
+r = await c('GET', '/inventory/items?keyword=' + item.sku, null, t); ck('list shows mainImageId', r.s === 200 && r.data.content[0].mainImageId === String(img1.id), r.s + ' ' + r.data?.content?.[0]?.mainImageId);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(txt.id), additionalImageIds: [] }, t); ck('text file as image → INV_024', r.s === 400 && r.code === 'INV_024', r.s + ' ' + r.code + ' ' + r.msg);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(img1.id), additionalImageIds: [Number(bImg.id)] }, t); ck('company B image → INV_024', r.s === 400 && r.code === 'INV_024', r.s + ' ' + r.code);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: 999999999, additionalImageIds: [] }, t); ck('unknown file → INV_024', r.code === 'INV_024', r.s + ' ' + r.code);
+r = await c('GET', '/inventory/items/' + item.id + '/images', null, t); ck('refused calls changed nothing', r.data?.mainImageId === String(img1.id) && r.data.additionalImageIds.length === 2, JSON.stringify(r.data));
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(img1.id), additionalImageIds: Array.from({ length: 11 }, (_, k) => k + 1) }, t); ck('11 additional → COMMON_001', r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: null, additionalImageIds: [] }, t); ck('clear images', r.s === 200 && r.data.mainImageId === null && r.data.additionalImageIds.length === 0, r.s + ' ' + JSON.stringify(r.data));
+r = await c('POST', '/inventory/stock/add', { itemId: Number(item.id), warehouseId: Number(wh.id), quantity: 3 }, t); ck('add stock 5 → 8', r.s === 200 && Number((await c('GET', '/inventory/items/' + item.id, null, t)).data.quantity) === 8, r.s + ' ' + r.code + ' ' + r.msg);
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(bImg.id), additionalImageIds: [] }, B.t); ck('company B sets A item images → 404', r.s === 404 && r.code === 'INV_009', r.s + ' ' + r.code);
+r = await c('GET', '/inventory/items/' + item.id + '/images', null, B.t); ck('company B reads A item images → 404', r.s === 404, r.s + ' ' + r.code);
+const roles = (await c('GET', '/iam/roles', null, t)).data; const emp = roles.find(z => z.code === 'EMPLOYEE'); const ep = pw(); const eun = 'pr.emp.' + x.toLowerCase();
+const eu = await c('POST', '/iam/users', { username: eun, email: eun + '@example.com', fullName: 'Item Employee', roleIds: [Number(emp.id)], password: ep }, t); const ep2 = pw();
+await c('POST', '/auth/initial-password', { username: eun, currentPassword: eu.data?.temporaryPassword || ep, newPassword: ep2 });
+const et = (await c('POST', '/auth/login', { username: eun, password: ep2 })).data?.accessToken;
+r = await c('PUT', '/inventory/items/' + item.id + '/images', { mainImageId: Number(img1.id), additionalImageIds: [] }, et); ck('employee sets images → 403', r.s === 403, r.s + ' ' + r.code);
+r = await c('GET', '/inventory/items/' + item.id + '/images'); ck('no token → 401', r.s === 401, r.s);
+console.log(`\n${n - f}/${n} passed`);

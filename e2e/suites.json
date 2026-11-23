@@ -1,0 +1,167 @@
+{
+  "acc": {
+    "prefix": "AC",
+    "standalone": false,
+    "description": "accounting: customers, vendors, vouchers, payments, notes, reports"
+  },
+  "ai": {
+    "prefix": "AI",
+    "standalone": false,
+    "description": "AI assistant gating (never calls a provider)"
+  },
+  "cc": {
+    "prefix": "CC",
+    "standalone": false,
+    "description": "automatic journal postings (manual §20)"
+  },
+  "cp": {
+    "prefix": "CP",
+    "standalone": false,
+    "description": "coupon types incl. FIXED"
+  },
+  "crm": {
+    "prefix": "CR",
+    "standalone": true,
+    "description": "CRM pipelines, leads, deals, contracts"
+  },
+  "cs": {
+    "prefix": "CS",
+    "standalone": false,
+    "description": "company settings: profile, notifications, integrations, webhooks, SSRF, ticket fields",
+    "publicWrites": true
+  },
+  "dashboards": {
+    "prefix": "DA",
+    "standalone": true,
+    "description": "HR / employee dashboards"
+  },
+  "db": {
+    "prefix": "DB",
+    "standalone": false,
+    "description": "module dashboards with seeded numbers"
+  },
+  "de": {
+    "prefix": "DE",
+    "standalone": false,
+    "description": "double entry: journals, reports, year-end close"
+  },
+  "ev": {
+    "prefix": "EV",
+    "standalone": false,
+    "description": "notification events from 7 services (no egress)"
+  },
+  "gb": {
+    "prefix": "GB",
+    "standalone": false,
+    "description": "financial goals and budgets"
+  },
+  "gc": {
+    "prefix": "GC",
+    "standalone": false,
+    "description": "Google Calendar sync paths (no egress)"
+  },
+  "helpdesk": {
+    "prefix": "HD",
+    "standalone": true,
+    "description": "platform helpdesk"
+  },
+  "hrm": {
+    "prefix": "HR",
+    "standalone": false,
+    "description": "HRM regression (employees, lifecycle, payroll, documents, dashboards)"
+  },
+  "items": {
+    "prefix": "PR",
+    "standalone": false,
+    "description": "inventory items and images"
+  },
+  "ntf": {
+    "prefix": "NT",
+    "standalone": false,
+    "description": "notification-service + accounting outbox",
+    "publicWrites": true
+  },
+  "own": {
+    "prefix": "OW",
+    "standalone": false,
+    "description": "Manage Own scope + client/vendor portal"
+  },
+  "pl": {
+    "prefix": "PL",
+    "standalone": false,
+    "description": "platform settings: email toggles, platform webhooks, cache"
+  },
+  "plan-modules": {
+    "prefix": "PL",
+    "standalone": true,
+    "description": "plan module catalogue"
+  },
+  "pos": {
+    "prefix": "PS",
+    "standalone": false,
+    "description": "POS checkout and reports"
+  },
+  "pp": {
+    "prefix": "PP",
+    "standalone": false,
+    "description": "PayPal paths (never calls PayPal)"
+  },
+  "project": {
+    "prefix": "PJ",
+    "standalone": false,
+    "description": "projects, tasks, forms"
+  },
+  "pt": {
+    "prefix": "PT",
+    "standalone": false,
+    "description": "performance and training"
+  },
+  "purchase": {
+    "prefix": "PU",
+    "standalone": false,
+    "description": "purchase invoices and returns"
+  },
+  "rec": {
+    "prefix": "RC",
+    "standalone": false,
+    "description": "recruitment incl. public career page",
+    "publicWrites": true
+  },
+  "rt": {
+    "prefix": "RT",
+    "standalone": false,
+    "description": "realtime SSE stream and in-app feed"
+  },
+  "s3": {
+    "prefix": "S3",
+    "standalone": false,
+    "description": "S3 storage driver against local SeaweedFS (flips the platform driver, restores LOCAL)",
+    "optIn": "needs the seaweedfs container and docker exec; flips the platform storage driver (restored to LOCAL)"
+  },
+  "sales": {
+    "prefix": "SL",
+    "standalone": true,
+    "description": "quotations, proposals, sales invoices, returns"
+  },
+  "sg": {
+    "prefix": "SG",
+    "standalone": false,
+    "description": "small gaps: offer bonus, PDFs, login history, plan free/badge, media quota"
+  },
+  "sig": {
+    "prefix": "SN",
+    "standalone": false,
+    "description": "contract signatures incl. concurrent signing"
+  },
+  "sup": {
+    "prefix": "SP",
+    "standalone": false,
+    "description": "support tickets, public portal, KB/FAQ, messenger",
+    "publicWrites": true
+  },
+  "tp": {
+    "prefix": "TP",
+    "standalone": false,
+    "description": "editable notification templates"
+  }
+}
