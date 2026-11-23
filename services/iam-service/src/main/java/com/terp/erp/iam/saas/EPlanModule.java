@@ -34,7 +34,7 @@ public enum EPlanModule {
     CALENDAR("Calendar", Set.of()),
     FORM_BUILDER("Form Builder", Set.of("FORM")),
     SUPPORT_TICKET("Support Ticket", Set.of("SUPPORT")),
-    AI_ASSISTANT("AI Assistant", Set.of()),
+    AI_ASSISTANT("AI Assistant", Set.of("AI")),
     SLACK("Slack", Set.of()),
     TELEGRAM("Telegram", Set.of()),
     TWILIO("Twilio", Set.of()),

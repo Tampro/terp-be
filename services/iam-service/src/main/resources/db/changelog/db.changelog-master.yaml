@@ -137,3 +137,7 @@ databaseChangeLog:
       file: db/changelog/changes/20261123500000_company_notification_template_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123600000_platform_webhook_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123700000_ai_assistant_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123700001_ai_usage_changelog.mysql.sql

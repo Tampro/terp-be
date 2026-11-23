@@ -46,7 +46,8 @@ class OwnScopePermissionsTest {
                 OwnPermissions.SUPPORT_TICKET_VIEW_OWN, OwnPermissions.SUPPORT_TICKET_MANAGE_OWN);
         assertThat(EDefaultRole.CLIENT.getPermissions()).doesNotContain(SupportPermissions.MESSENGER_USE);
         assertThat(EDefaultRole.VENDOR.getPermissions()).containsExactly(PortalPermissions.VENDOR);
-        assertThat(EDefaultRole.MANAGER.getPermissions()).containsExactlyInAnyOrderElementsOf(OwnPermissions.ALL);
+        assertThat(EDefaultRole.MANAGER.getPermissions()).containsExactlyInAnyOrderElementsOf(
+                union(OwnPermissions.ALL, AiPermissions.ALL));
         assertThat(EDefaultRole.EMPLOYEE.getPermissions()).contains("ATTENDANCE_SELF", "EMPLOYEE_SELF",
                 OwnPermissions.PROJECT_VIEW_OWN, OwnPermissions.SUPPORT_TICKET_MANAGE_OWN);
         assertThat(EDefaultRole.EXECUTIVE.getPermissions()).allMatch(c -> c.endsWith("_VIEW_OWN"));
@@ -56,5 +57,11 @@ class OwnScopePermissionsTest {
                 assertThat(r.getPermissions()).doesNotContain("SALES_VIEW", "CRM_VIEW", "PROJECT_VIEW");
             }
         }
+    }
+
+    private static java.util.Set<String> union(java.util.Set<String> a, java.util.Set<String> b) {
+        java.util.Set<String> all = new java.util.HashSet<>(a);
+        all.addAll(b);
+        return all;
     }
 }
