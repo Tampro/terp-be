@@ -157,6 +157,11 @@ public class UserService {
     private void publishCreated(UserAccount u) {
         outbox.publish(u.getCompanyId(), EVENT_USER_CREATED, "USER", u.getId(), Payload.of(
                 "userId", u.getId(), "title", u.getFullName(), "name", u.getFullName()));
+        // The platform's NEW_USER webhook (reference "super admin" New User). TODO(assumption): every new account
+        // of every company, not only the ones the super admin creates.
+        com.terp.erp.iam.platform.PlatformEvents.publish(outbox, com.terp.erp.iam.platform.PlatformEvents.USER_CREATED,
+                "USER", u.getId(), Payload.of("userId", u.getId(), "title", u.getFullName(), "name",
+                        u.getFullName(), "companyId", u.getCompanyId()));
     }
 
     @Transactional

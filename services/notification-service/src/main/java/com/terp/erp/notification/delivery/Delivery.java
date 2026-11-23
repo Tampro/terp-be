@@ -25,7 +25,8 @@ public class Delivery extends BaseAuditableEntity {
     /** PENDING = not sent yet or waiting for a retry (next_attempt_at); SKIPPED = nothing to send (switch off…). */
     public enum EStatus { PENDING, SENT, FAILED, SKIPPED }
 
-    @Column(name = "company_id", nullable = false)
+    /** null = a platform event (EPlatformRoute): visible to super admins only. */
+    @Column(name = "company_id")
     private Long companyId;
 
     @Column(name = "event_id", nullable = false, length = 36)

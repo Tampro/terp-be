@@ -123,6 +123,9 @@ public class HelpdeskService {
         // The company user who opened it is told it was received. TODO(assumption): nobody on the platform side is
         // emailed (no platform address list yet); a ticket the super admin opens for a company emails nobody.
         publish(EVENT_TICKET_CREATED, t, p.superAdmin() || p.userId() == null ? List.of() : List.of(p.userId()));
+        // The platform team: helpdeskNotifyEmails (when the platform switch is on) and NEW_HELPDESK_TICKET webhooks.
+        // TODO(assumption): also when the super admin opened the ticket for a company.
+        publishPlatform(com.terp.erp.iam.platform.PlatformEvents.HELPDESK_TICKET_CREATED, t);
         return new TicketDetail(rowMapper(List.of(t)).apply(t), t.getDescription(), List.of());
     }
 
@@ -183,6 +186,10 @@ public class HelpdeskService {
         if (!internal) {
             List<Long> to = p.superAdmin() ? creator(t) : List.of();
             publish(EVENT_TICKET_REPLIED, t, to);
+            // A company's reply is the platform team's business; the platform's own reply is not announced to it.
+            if (!p.superAdmin()) {
+                publishPlatform(com.terp.erp.iam.platform.PlatformEvents.HELPDESK_TICKET_REPLIED, t);
+            }
         }
         return dto;
     }
@@ -254,6 +261,18 @@ public class HelpdeskService {
                 "ticketId", t.getId(), "ticketNumber", t.getTicketNumber(), "title", "#" + t.getTicketNumber(),
                 "subject", t.getTitle(), "status", t.getStatus() == null ? null : t.getStatus().name(),
                 "recipientUserIds", Payload.ids(recipientUserIds)));
+    }
+
+    /** companyId null (platform event); the company travels in the payload. Display fields only, as above. */
+    private void publishPlatform(String eventType, HelpdeskTicket t) {
+        com.terp.erp.iam.platform.PlatformEvents.publish(outbox, eventType, "HELPDESK_TICKET", t.getId(), Payload.of(
+                "ticketId", t.getId(), "ticketNumber", t.getTicketNumber(), "title", "#" + t.getTicketNumber(),
+                "subject", t.getTitle(), "status", t.getStatus() == null ? null : t.getStatus().name(),
+                "companyId", t.getCompanyId(), "companyName", companyName(t.getCompanyId())));
+    }
+
+    private String companyName(Long companyId) {
+        return companyId == null ? null : companies.findById(companyId).map(Company::getName).orElse(null);
     }
 
     /** The IAM user who opened the ticket (created_by = Keycloak sub); none when unknown or deleted. */

@@ -95,6 +95,19 @@ public class IamInternalClient {
         }
     }
 
+    /** Platform event settings (companyId null): never a company's. recipients = the platform team addresses. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PlatformConfig(String defaultLanguage, boolean emailEnabled, Smtp smtp, List<String> recipients,
+                                 List<Webhook> webhooks) {
+        public List<String> recipients() {
+            return recipients == null ? List.of() : recipients;
+        }
+
+        public List<Webhook> webhooks() {
+            return webhooks == null ? List.of() : webhooks;
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Contact(String id, String fullName, String email, String companyId, boolean active) {
     }
@@ -120,6 +133,14 @@ public class IamInternalClient {
                 webhookEvent == null ? "" : webhookEvent)
                 .orElseThrow(() -> new ApiException(HttpStatus.SERVICE_UNAVAILABLE, ENotificationError.NTF_004));
         return mapper.convertValue(data, NotificationConfig.class);
+    }
+
+    /** emailCode (EPlatformEmail) / webhookEvent (EPlatformWebhookEvent) may be null. */
+    public PlatformConfig platformConfig(String emailCode, String webhookEvent) {
+        JsonNode data = get("/api/v1/internal/platform-notification-config?emailCode={e}&webhookEvent={w}",
+                emailCode == null ? "" : emailCode, webhookEvent == null ? "" : webhookEvent)
+                .orElseThrow(() -> new ApiException(HttpStatus.SERVICE_UNAVAILABLE, ENotificationError.NTF_004));
+        return mapper.convertValue(data, PlatformConfig.class);
     }
 
     /** Empty when IAM does not know the user (404). */

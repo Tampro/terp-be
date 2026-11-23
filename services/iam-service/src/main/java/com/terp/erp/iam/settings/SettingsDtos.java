@@ -23,7 +23,8 @@ public final class SettingsDtos {
     }
 
     public enum ESection {
-        SYSTEM, BRAND, CURRENCY_FORMAT, SEO, COOKIE, EMAIL, BANK_TRANSFER, STORAGE, RECAPTCHA, STRIPE
+        SYSTEM, BRAND, CURRENCY_FORMAT, SEO, COOKIE, EMAIL, BANK_TRANSFER, STORAGE, RECAPTCHA, STRIPE,
+        PLATFORM_EMAIL_NOTIFICATIONS
     }
 
     // ------------------------------------------------------------------ System
@@ -270,5 +271,29 @@ public final class SettingsDtos {
     }
 
     public record PublicRecaptcha(boolean enabled, ERecaptchaVersion version, String siteKey) {
+    }
+
+    // ------------------------------------------------------------------ Platform email notifications
+
+    /**
+     * The super admin's Email Notifications (ERP manual 3.7: New User, New Helpdesk Ticket, New Helpdesk Ticket
+     * Reply); every switch defaults to on. newUser governs the USER_CREATE email IAM sends for every company (the
+     * company's own switch still applies on top); the helpdesk switches govern the emails to helpdeskNotifyEmails,
+     * the platform team's addresses (the company side of helpdesk emails keeps its own switches).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PlatformEmailNotificationSettings(
+            @Schema(description = "New User: welcome email with the temporary password", example = "true")
+            @NotNull Boolean newUser,
+            @Schema(description = "New Helpdesk Ticket: email to helpdeskNotifyEmails", example = "true")
+            @NotNull Boolean helpdeskTicketCreated,
+            @Schema(description = "New Helpdesk Ticket Reply (a company replied): email to helpdeskNotifyEmails",
+                    example = "true") @NotNull Boolean helpdeskTicketReply,
+            @Schema(description = "Platform team addresses for helpdesk emails, at most 10", example =
+                    "[\"support@example.com\"]") @NotNull @Size(max = 10)
+            List<@NotBlank @Email @Size(max = 254) String> helpdeskNotifyEmails) {
+        static PlatformEmailNotificationSettings defaults() {
+            return new PlatformEmailNotificationSettings(true, true, true, List.of());
+        }
     }
 }

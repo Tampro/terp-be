@@ -33,7 +33,7 @@ import com.terp.erp.iam.settings.SettingsDtos.TestEmailForm;
 /**
  * Settings page of the super admin (docs/analysis/06 §3.3.2). Each section: GET, and PUT as a full replacement.
  * Secrets (SMTP password, reCAPTCHA secret) are write-only. Payment gateways other than bank transfer, S3/Wasabi,
- * ChatGPT and cache clearing are deliberately not here (PO, 2026-11-19).
+ * ChatGPT are deliberately not here (PO, 2026-11-19); cache is CacheAdminController.
  */
 @Tag(name = "Settings")
 @RestController
@@ -215,5 +215,26 @@ public class SettingsController {
     @PutMapping("/admin/recaptcha")
     public ApiMessageDto<RecaptchaSettingsView> saveRecaptcha(@Valid @RequestBody RecaptchaSettingsForm form) {
         return ApiMessageDto.ok(settings.saveRecaptcha(form));
+    }
+
+    @Operation(summary = "Platform email notifications",
+            description = "New User, New Helpdesk Ticket, New Helpdesk Ticket Reply (each on by default) and the "
+                    + "platform team addresses that receive the helpdesk emails.")
+    @PreAuthorize("@PermissionChecker.isSuperAdmin()")
+    @GetMapping("/admin/email-notifications")
+    public ApiMessageDto<SettingsDtos.PlatformEmailNotificationSettings> platformEmailNotifications() {
+        return ApiMessageDto.ok(settings.platformEmailNotifications());
+    }
+
+    @Operation(summary = "Save platform email notifications", description = "Full replacement. newUser off: no "
+            + "welcome email (USER_CREATE) for any company. Helpdesk switches off: helpdeskNotifyEmails get nothing; "
+            + "the company side of helpdesk emails keeps the company's own switches. At most 10 addresses.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Validation (COMMON_001): a switch missing, an "
+            + "invalid address or more than 10"))
+    @PreAuthorize("@PermissionChecker.isSuperAdmin()")
+    @PutMapping("/admin/email-notifications")
+    public ApiMessageDto<SettingsDtos.PlatformEmailNotificationSettings> savePlatformEmailNotifications(
+            @Valid @RequestBody SettingsDtos.PlatformEmailNotificationSettings form) {
+        return ApiMessageDto.ok(settings.savePlatformEmailNotifications(form));
     }
 }

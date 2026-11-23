@@ -50,7 +50,8 @@ class CompanyServiceTest {
         orders = mock(OrderService.class);
         service = new CompanyService(companies, mock(RoleRepository.class), mock(PlanRepository.class), users,
                 mock(RoleService.class), userService, orders, mock(SubscriptionService.class), keycloak,
-                mock(LocalAuthorityResolver.class), mock(com.terp.erp.iam.referral.ReferralService.class), verification);
+                mock(LocalAuthorityResolver.class), mock(com.terp.erp.iam.referral.ReferralService.class), verification,
+                mock(com.terp.erp.outbox.OutboxPublisher.class));
         company = new Company();
         company.setId(10L);
         company.setCode("ACME");

@@ -53,6 +53,7 @@ public class OrderService {
     private final com.terp.erp.iam.me.AvatarMediaClient media;
     private final CompanyPlanTrialRepository trials;
     private final com.terp.erp.iam.payment.StripeClient stripeClient;
+    private final com.terp.erp.outbox.OutboxPublisher outbox;
     @org.springframework.beans.factory.annotation.Value("${erp.app-url:http://localhost:5173}")
     private String appUrl;
     private final Clock clock;
@@ -120,7 +121,9 @@ public class OrderService {
         o.setPaymentMethod(method);
         o.setPaymentReference(form.paymentReference());
         o.setStatus(EOrderStatus.PENDING);
-        return dto(orders.save(o));
+        PlanOrder saved = orders.save(o);
+        publishPlatform(com.terp.erp.iam.platform.PlatformEvents.ORDER_CREATED, saved, plan);
+        return dto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -260,7 +263,23 @@ public class OrderService {
         authorityCache.evictAll();
         notifier.orderDecided(true, c, o.getOrderNumber(), plan.getName(), o.getBillingCycle().name(),
                 o.getFinalPrice(), c.getPlanExpiresAt(), notes);
+        publishPlatform(com.terp.erp.iam.platform.PlatformEvents.ORDER_APPROVED, o, plan);
         return dto(o);
+    }
+
+    /**
+     * NEW_ORDER / ORDER_APPROVED platform webhooks. TODO(assumption): a plan set by the super admin
+     * (activateManually) is not an order the platform is told about. No payment reference in the payload.
+     */
+    private void publishPlatform(String eventType, PlanOrder o, Plan plan) {
+        com.terp.erp.iam.platform.PlatformEvents.publish(outbox, eventType, "PLAN_ORDER", o.getId(),
+                com.terp.erp.outbox.Payload.of("orderId", o.getId(), "title", o.getOrderNumber(),
+                        "number", o.getOrderNumber(), "companyId", o.getCompanyId(),
+                        "planName", plan == null ? null : plan.getName(),
+                        "billingCycle", o.getBillingCycle() == null ? null : o.getBillingCycle().name(),
+                        "finalPrice", o.getFinalPrice() == null ? null : o.getFinalPrice().toPlainString(),
+                        "paymentMethod", o.getPaymentMethod() == null ? null : o.getPaymentMethod().name(),
+                        "status", o.getStatus() == null ? null : o.getStatus().name()));
     }
 
     @Transactional

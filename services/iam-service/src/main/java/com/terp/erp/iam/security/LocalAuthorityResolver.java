@@ -78,6 +78,11 @@ public class LocalAuthorityResolver implements AuthorityResolver {
         cache.invalidateAll();
     }
 
+    /** Entries held now (Caffeine's estimate), for the super admin Cache page. */
+    public long estimatedSize() {
+        return cache.estimatedSize();
+    }
+
     // No transaction needed: the entity graph fetches roles and permissions in the one query.
     private Optional<ErpPrincipal> load(String keycloakId) {
         Optional<UserAccount> found = users.findByKeycloakIdAndDeletedFalse(keycloakId);
