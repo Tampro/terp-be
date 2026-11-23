@@ -92,6 +92,27 @@ public class InterviewService {
         return page.map(i -> row(i, l));
     }
 
+    /**
+     * Interviews where the caller (their employee profile) is on the panel, from {@code from} (default today, company
+     * zone) on. REC_069 for a super admin or a user without a profile in their company.
+     * TODO(assumption): today is taken in Asia/Ho_Chi_Minh; no per-company time zone is read here.
+     */
+    @Transactional(readOnly = true)
+    public Page<InterviewRow> mine(LocalDate from, Pageable pageable) {
+        com.terp.erp.security.ErpPrincipal p = com.terp.erp.security.CurrentUser.get();
+        if (p.companyId() == null) {
+            throw ApiException.notFound(ERecruitmentError.REC_069);
+        }
+        EmployeeClient.Employee me = employees.me();
+        if (me == null || me.id() == null || !String.valueOf(p.companyId()).equals(me.companyId())) {
+            throw ApiException.notFound(ERecruitmentError.REC_069);
+        }
+        LocalDate start = from != null ? from : LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        Page<Interview> page = interviews.ofInterviewer(p.companyId(), Long.valueOf(me.id()), start, pageable);
+        Lookups l = lookups(page.getContent());
+        return page.map(i -> row(i, l));
+    }
+
     @Transactional(readOnly = true)
     public InterviewSummary summary(Long requestedCompanyId, String keyword, Long candidateId, LocalDate from,
                                     LocalDate to) {

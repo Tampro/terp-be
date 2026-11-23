@@ -23,7 +23,7 @@ import static org.mockito.Mockito.when;
 class HrDashboardServiceTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Fanout fanout = mock(Fanout.class);
-    private final ReportProperties urls = new ReportProperties("i", "e", "a", "r", "p", "s", "m", "c", "crm", "prj");
+    private final ReportProperties urls = new ReportProperties("i", "e", "a", "r", "p", "s", "m", "c", "crm", "prj", "acc", "inv", "sup");
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-22T03:00:00Z"), ZoneOffset.UTC);
     private final HrDashboardService service = new HrDashboardService(fanout, urls, mapper, clock);
 
@@ -114,6 +114,13 @@ class HrDashboardServiceTest {
                 + "'shift':{'id':'3','name':'Day'},'canClockIn':false,'canClockOut':true}"), null));
         p.put("warnings", new Part(json("{'content':[{'id':'41','status':'PENDING'}]}"), null));
         p.put("announcements", new Part(json("{'content':[{'id':'31'},{'id':'32'}]}"), null));
+        p.put("leave", new Part(json("{'year':2026,'balances':[{'available':3}],'pendingApplications':2,"
+                + "'recentApplications':[{'id':'51'}]}"), null));
+        p.put("awards", new Part(json("{'content':[{'id':'61'}]}"), null));
+        p.put("interviews", new Part(json("{'content':[{'id':'71'},{'id':'72'}]}"), null));
+        p.put("crm", new Part(json("{'scope':'OWN','deals':4,'leads':9,'recentDeals':[{'id':'81'}]}"), null));
+        p.put("tickets", new Part(json("{'scope':'OWN','total':3,'open':1,'closed':2,'today':0,"
+                + "'byStatus':{'IN_PROGRESS':1,'ON_HOLD':0,'CLOSED':2}}"), null));
         return p;
     }
 
@@ -138,13 +145,23 @@ class HrDashboardServiceTest {
         assertThat(today.has("shift")).isFalse();
         assertThat(d.parts().get("myWarnings").data()).hasSize(1);
         assertThat(d.parts().get("myAnnouncements").data()).hasSize(2);
-        assertThat(d.unavailable()).containsOnlyKeys("myAttendanceThisMonth", "myLeaveBalances",
-                "myLeaveApplications", "myAwards", "myComplaints")
+        assertThat(d.parts().get("myLeaveBalances").data().get(0).path("available").asInt()).isEqualTo(3);
+        assertThat(d.parts().get("myLeaveApplications").data().path("pendingApplications").asInt()).isEqualTo(2);
+        assertThat(d.parts().get("myAwards").data()).hasSize(1);
+        assertThat(d.parts().get("myInterviews").data()).hasSize(2);
+        assertThat(d.parts().get("myDeals").data().path("deals").asInt()).isEqualTo(4);
+        assertThat(d.parts().get("myDeals").data().has("leads")).isFalse();
+        assertThat(d.parts().get("myTickets").data().path("open").asInt()).isEqualTo(1);
+        assertThat(d.unavailable()).containsOnlyKeys("myAttendanceThisMonth", "myComplaints")
                 .allSatisfy((k, v) -> assertThat(v).isEqualTo(HrDashboardService.NOT_AVAILABLE));
         assertThat(calls.getValue().get("today")).isEqualTo(new Fanout.Call("a", "/api/v1/attendance/me/today"));
         assertThat(calls.getValue().get("profile")).isEqualTo(new Fanout.Call("e", "/api/v1/employees/me"));
         assertThat(calls.getValue().get("warnings")).isEqualTo(new Fanout.Call("e",
                 "/api/v1/lifecycle/warnings/my?size=5&sort=warningDate,desc"));
+        assertThat(calls.getValue().get("crm")).isEqualTo(new Fanout.Call("crm", "/api/v1/crm/dashboard?own=true"));
+        assertThat(calls.getValue().get("tickets")).isEqualTo(new Fanout.Call("sup",
+                "/api/v1/support/tickets/stats?own=true"));
+        assertThat(calls.getValue().get("leave")).isEqualTo(new Fanout.Call("a", "/api/v1/attendance/me/leave"));
     }
 
     @Test
@@ -159,7 +176,7 @@ class HrDashboardServiceTest {
 
         assertThat(d.unavailable()).containsEntry("myShift", "COMMON_004")
                 .containsEntry("myAttendanceToday", "COMMON_004").containsEntry("myProfile", "EMP_041")
-                .containsEntry("myAnnouncements", Fanout.UNAVAILABLE).doesNotContainKey("myWarnings").hasSize(9);
+                .containsEntry("myAnnouncements", Fanout.UNAVAILABLE).doesNotContainKey("myWarnings").hasSize(6);
         assertThat(d.parts().get("myWarnings").ok()).isTrue();
     }
 
@@ -174,6 +191,6 @@ class HrDashboardServiceTest {
 
         assertThat(d.parts().get("myShift").ok()).isTrue();
         assertThat(d.parts().get("myShift").data().isNull()).isTrue();
-        assertThat(d.unavailable()).doesNotContainKey("myShift").hasSize(5);
+        assertThat(d.unavailable()).doesNotContainKey("myShift").hasSize(2);
     }
 }

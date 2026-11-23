@@ -25,4 +25,9 @@ public interface CrmTaskRepository extends JpaRepository<CrmTask, Long> {
             + "then 1 else 0 end) from CrmTask t where t.subjectType = :type and t.subjectId in :ids "
             + "and t.deleted = false group by t.subjectId")
     List<Object[]> progress(@Param("type") ESubject type, @Param("ids") Collection<Long> ids);
+
+    /** Dashboard: the next open tasks of these subjects from a day on. */
+    List<CrmTask> findTop10BySubjectTypeAndSubjectIdInAndStatusAndTaskDateGreaterThanEqualAndDeletedFalseOrderByTaskDateAscTaskTimeAscIdAsc(
+            ESubject type, Collection<Long> subjectIds, com.terp.erp.crm.record.CrmEnums.ETaskStatus status,
+            java.time.LocalDate from);
 }

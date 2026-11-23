@@ -250,4 +250,27 @@ class InterviewServiceTest {
         assertThatThrownBy(call).isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
     }
+
+    @Test
+    void myInterviewsAreThoseOfMyEmployeeInMyCompany() {
+        TestLogin.as(10L);
+        when(employees.me()).thenReturn(new EmployeeClient.Employee("21", "10", "Panel Person", null, null));
+        var page = org.springframework.data.domain.PageRequest.of(0, 20);
+        LocalDate from = LocalDate.of(2026, 11, 1);
+        when(interviews.ofInterviewer(10L, 21L, from, page))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(), page, 0));
+
+        assertThat(service.mine(from, page).getTotalElements()).isZero();
+        verify(interviews).ofInterviewer(10L, 21L, from, page);
+    }
+
+    @Test
+    void myInterviewsNeedAProfileOfMyCompany() {
+        TestLogin.as(10L);
+        when(employees.me()).thenReturn(new EmployeeClient.Employee("21", "11", "Elsewhere", null, null));
+        assertThatThrownBy(() -> service.mine(null, org.springframework.data.domain.PageRequest.of(0, 20)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ERecruitmentError.REC_069));
+        verify(interviews, never()).ofInterviewer(any(), any(), any(), any());
+    }
 }

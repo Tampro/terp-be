@@ -64,6 +64,17 @@ public class AwardService {
         return page.map(a -> dto(a, people.get(a.getEmployeeId()), typeNames.get(a.getAwardTypeId()), false));
     }
 
+    /** The caller's own awards (any authenticated employee; EMP_041 without a profile). */
+    @Transactional(readOnly = true)
+    public Page<AwardDto> mine(Pageable pageable) {
+        Employee me = support.me();
+        Page<EmployeeAward> page = awards.search(me.getCompanyId(), null, me.getId(), null, null, "", pageable);
+        Map<Long, EmployeeRef> people = support.refs(page.map(EmployeeAward::getEmployeeId).toSet());
+        Map<Long, String> typeNames = types.findAllById(page.map(EmployeeAward::getAwardTypeId).toSet()).stream()
+                .collect(Collectors.toMap(AwardType::getId, AwardType::getName));
+        return page.map(a -> dto(a, people.get(a.getEmployeeId()), typeNames.get(a.getAwardTypeId()), false));
+    }
+
     @Transactional(readOnly = true)
     public AwardDto get(Long id) {
         return detail(require(id));

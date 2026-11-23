@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 class ReportServiceTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Fanout fanout = mock(Fanout.class);
-    private final ReportProperties urls = new ReportProperties("i", "e", "a", "r", "p", "s", "m", "c", "crm", "prj");
+    private final ReportProperties urls = new ReportProperties("i", "e", "a", "r", "p", "s", "m", "c", "crm", "prj", "acc", "inv", "sup");
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC);
 
     private JsonNode json(String s) throws Exception {

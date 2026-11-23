@@ -21,4 +21,6 @@ public interface KbArticleRepository extends JpaRepository<KbArticle, Long> {
             + " or lower(a.description) like concat('%', :kw, '%'))")
     Page<KbArticle> search(@Param("company") Long companyId, @Param("published") Boolean published,
                            @Param("category") Long categoryId, @Param("kw") String keyword, Pageable pageable);
+
+    long countByCompanyIdAndDeletedFalse(Long companyId);
 }

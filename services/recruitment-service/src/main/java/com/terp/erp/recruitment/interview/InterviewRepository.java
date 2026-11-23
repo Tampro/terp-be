@@ -38,6 +38,15 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             + "and i.status = com.terp.erp.recruitment.interview.Interview.EStatus.SCHEDULED")
     List<Interview> scheduledOn(Long companyId, LocalDate date);
 
+    /** Interviews of the company with this employee on the panel, dated on or after from. */
+    @Query(value = "select i from Interview i where i.companyId = :companyId and i.deleted = false "
+            + "and i.interviewDate >= :from and exists (select 1 from Interview j join j.interviewers v "
+            + "where j.id = i.id and v.employeeId = :employeeId)",
+            countQuery = "select count(i) from Interview i where i.companyId = :companyId and i.deleted = false "
+                    + "and i.interviewDate >= :from and exists (select 1 from Interview j join j.interviewers v "
+                    + "where j.id = i.id and v.employeeId = :employeeId)")
+    Page<Interview> ofInterviewer(Long companyId, Long employeeId, LocalDate from, Pageable pageable);
+
     Optional<Interview> findByIdAndDeletedFalse(Long id);
 
     boolean existsByRoundIdAndDeletedFalse(Long roundId);

@@ -28,4 +28,8 @@ public interface CrmLinkRepository extends JpaRepository<CrmLink, Long> {
             + "and l.linkType = :linkType group by l.refId")
     List<Object[]> countByRef(@Param("companyId") Long companyId, @Param("type") ESubject type,
                               @Param("linkType") ELinkType linkType);
+
+    /** Dashboard: the links of one kind (MEMBER, CLIENT) of these subjects. */
+    List<CrmLink> findBySubjectTypeAndSubjectIdInAndLinkType(ESubject subjectType, Collection<Long> subjectIds,
+                                                            ELinkType linkType);
 }

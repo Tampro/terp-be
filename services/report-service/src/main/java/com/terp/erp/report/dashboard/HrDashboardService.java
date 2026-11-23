@@ -39,8 +39,7 @@ public class HrDashboardService {
     /**
      * "My" parts without a self endpoint in their service yet (checked 2026-11-22): NOT_AVAILABLE until they add one.
      */
-    static final List<String> MY_GAPS = List.of("myAttendanceThisMonth", "myLeaveBalances", "myLeaveApplications",
-            "myAwards", "myComplaints");
+    static final List<String> MY_GAPS = List.of("myAttendanceThisMonth", "myComplaints");
 
     private final Fanout fanout;
     private final ReportProperties urls;
@@ -118,6 +117,13 @@ public class HrDashboardService {
                 + "&sort=warningDate,desc"));
         calls.put("announcements", new Call(urls.employeeServiceUrl(), "/api/v1/org/announcements/my?size=" + RECENT
                 + "&sort=startDate,desc"));
+        calls.put("leave", new Call(urls.attendanceServiceUrl(), "/api/v1/attendance/me/leave"));
+        calls.put("awards", new Call(urls.employeeServiceUrl(), "/api/v1/lifecycle/awards/my?size=" + RECENT));
+        calls.put("interviews", new Call(urls.recruitmentServiceUrl(), "/api/v1/recruitment/interviews/my?size="
+                + RECENT));
+        // own=true: a holder of the full CRM_VIEW / SUPPORT_TICKET_VIEW still sees only their own rows here.
+        calls.put("crm", new Call(urls.crmServiceUrl(), "/api/v1/crm/dashboard?own=true"));
+        calls.put("tickets", new Call(urls.supportServiceUrl(), "/api/v1/support/tickets/stats?own=true"));
         Map<String, Part> p = fanout.all(calls);
         Map<String, Part> parts = new LinkedHashMap<>();
         parts.put("myProfile", profile(p.get("profile")));
@@ -125,6 +131,12 @@ public class HrDashboardService {
         parts.put("myAttendanceToday", attendanceTodayOfMine(p.get("today")));
         parts.put("myWarnings", rows(p.get("warnings")));
         parts.put("myAnnouncements", rows(p.get("announcements")));
+        parts.put("myLeaveBalances", field(p.get("leave"), "balances"));
+        parts.put("myLeaveApplications", pick(p.get("leave"), "pendingApplications", "recentApplications"));
+        parts.put("myAwards", rows(p.get("awards")));
+        parts.put("myInterviews", rows(p.get("interviews")));
+        parts.put("myDeals", pick(p.get("crm"), "deals", "recentDeals"));
+        parts.put("myTickets", pick(p.get("tickets"), "total", "open", "closed", "byStatus"));
         for (String name : MY_GAPS) {
             parts.put(name, new Part(null, NOT_AVAILABLE));
         }
@@ -156,6 +168,19 @@ public class HrDashboardService {
         }
         JsonNode v = part.data().get(name);
         return new Part(v == null || v.isNull() ? mapper.nullNode() : v, null);
+    }
+
+    /** Only the named fields of an object part (absent ones as null). */
+    Part pick(Part part, String... names) {
+        if (failed(part)) {
+            return missing(part);
+        }
+        ObjectNode out = mapper.createObjectNode();
+        for (String n : names) {
+            JsonNode v = part.data().get(n);
+            out.set(n, v == null ? mapper.nullNode() : v);
+        }
+        return new Part(out, null);
     }
 
     /** /attendance/me/today without the shift (its own part): {date, record, canClockIn, canClockOut}. */

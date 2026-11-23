@@ -10,4 +10,7 @@ public interface CrmCallRepository extends JpaRepository<CrmCall, Long> {
     List<CrmCall> findBySubjectTypeAndSubjectIdAndDeletedFalseOrderByIdDesc(ESubject type, Long subjectId);
 
     Optional<CrmCall> findByIdAndSubjectTypeAndSubjectIdAndDeletedFalse(Long id, ESubject type, Long subjectId);
+
+    /** Dashboard: live calls on these subjects. */
+    long countBySubjectTypeAndSubjectIdInAndDeletedFalse(ESubject type, java.util.Collection<Long> subjectIds);
 }

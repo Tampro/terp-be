@@ -77,4 +77,15 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
             + "group by extract(month from d.createdDate)")
     List<Object[]> countByMonth(@Param("companyId") Long companyId, @Param("pipelineId") Long pipelineId,
                                 @Param("from") Instant from, @Param("to") Instant to);
+
+    /** Dashboard: every live deal of the company. */
+    List<Deal> findByCompanyIdAndDeletedFalse(Long companyId);
+
+    /** Dashboard, own scope: deals I created or am a MEMBER of (same rule as {@link #searchOwn}). */
+    @Query("""
+            select d from Deal d where d.companyId = :companyId and d.deleted = false
+              and (d.createdBy = :sub or exists (select k.id from CrmLink k where k.subjectType = :dealType
+                   and k.subjectId = d.id and k.linkType = :memberType and k.refId = :me))""")
+    List<Deal> listOwn(@Param("companyId") Long companyId, @Param("me") Long me, @Param("sub") String sub,
+                       @Param("dealType") ESubject dealType, @Param("memberType") ELinkType memberType);
 }

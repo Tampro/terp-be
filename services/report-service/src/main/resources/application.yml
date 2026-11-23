@@ -28,6 +28,9 @@ erp:
     commerce-service-url: ${COMMERCE_SERVICE_URL:http://localhost:8092}
     crm-service-url: ${CRM_SERVICE_URL:http://localhost:8094}
     project-service-url: ${PROJECT_SERVICE_URL:http://localhost:8095}
+    accounting-service-url: ${ACCOUNTING_SERVICE_URL:http://localhost:8093}
+    inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    support-service-url: ${SUPPORT_SERVICE_URL:http://localhost:8096}
 
 management:
   endpoints:

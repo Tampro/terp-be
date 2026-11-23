@@ -59,6 +59,17 @@ public class AwardController {
                 service.search(companyId, keyword, awardTypeId, employeeId, from, to, pageable)));
     }
 
+    @Operation(summary = "My awards (the caller's own employee profile)",
+            description = "For every employee with a profile; no permission needed. Newest award date first.")
+    @ApiResponses(@ApiResponse(responseCode = "403", description = "No employee profile in the company (EMP_041)"))
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/my")
+    public ApiMessageDto<ResponseListDto<AwardDto>> mine(
+            @ParameterObject @PageableDefault(size = 20, sort = "awardDate", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ApiMessageDto.ok(ResponseListDto.of(service.mine(pageable)));
+    }
+
     @Operation(summary = "Award details", description = "With signed links to the certificate and photo.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = "No such award in your company (EMP_043)"))
     @PreAuthorize("@PermissionChecker.has('LIFECYCLE_VIEW')")

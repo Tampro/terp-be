@@ -16,4 +16,6 @@ public interface FaqRepository extends JpaRepository<Faq, Long> {
             + " and (:kw is null or lower(f.title) like concat('%', :kw, '%'))")
     Page<Faq> search(@Param("company") Long companyId, @Param("published") Boolean published,
                      @Param("kw") String keyword, Pageable pageable);
+
+    long countByCompanyIdAndDeletedFalse(Long companyId);
 }

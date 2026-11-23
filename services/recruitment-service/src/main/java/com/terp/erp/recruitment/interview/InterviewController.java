@@ -69,6 +69,21 @@ public class InterviewController {
                 service.search(companyId, keyword, candidateId, from, to, status, pageable)));
     }
 
+    @Operation(summary = "My interviews (I am on the panel)",
+            description = "Interviews of my company where my employee profile is an interviewer, dated on or after "
+                    + "from (default today), sorted by date and time. Any signed-in employee: the panel itself is the "
+                    + "authorization, so no RECRUITMENT_VIEW is needed.")
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "No employee profile linked to the account "
+            + "(REC_069)"))
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/my")
+    public ApiMessageDto<ResponseListDto<InterviewRow>> mine(
+            @Parameter(description = "First date shown; default today") @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @ParameterObject @PageableDefault(size = 20, sort = {"interviewDate", "startTime"}) Pageable pageable) {
+        return ApiMessageDto.ok(ResponseListDto.of(service.mine(from, pageable)));
+    }
+
     @Operation(summary = "Summary cards, status tab counts and Month Summary",
             description = "total, byStatus (Scheduled, Completed, Cancelled, No-show) and pendingFeedback (completed "
                     + "without feedback) under the list's filters; pass the month as from / to for the Month Summary.")

@@ -21,4 +21,6 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Optional<Customer> findFirstByCompanyIdAndUserIdAndDeletedFalse(Long companyId, Long userId);
 
     boolean existsByCompanyIdAndUserIdAndDeletedFalseAndIdNot(Long companyId, Long userId, Long id);
+
+    long countByCompanyIdAndDeletedFalse(Long companyId);
 }

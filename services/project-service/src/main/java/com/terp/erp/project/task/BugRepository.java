@@ -18,4 +18,6 @@ public interface BugRepository extends JpaRepository<Bug, Long> {
 
     @Query("select coalesce(max(b.position), 0) from Bug b where b.projectId = :project and b.stageId = :stage and b.deleted = false")
     int maxPosition(@Param("project") Long projectId, @Param("stage") Long stageId);
+
+    List<Bug> findByProjectIdInAndDeletedFalse(java.util.Collection<Long> projectIds);
 }

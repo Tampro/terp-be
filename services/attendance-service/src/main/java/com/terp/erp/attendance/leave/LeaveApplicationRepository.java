@@ -62,4 +62,8 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     @Query("select a from LeaveApplication a where a.companyId = :companyId and a.status = :status "
             + "and a.startDate <= :date and a.endDate >= :date order by a.startDate")
     List<LeaveApplication> covering(Long companyId, ERegularizationStatus status, LocalDate date);
+
+    long countByCompanyIdAndEmployeeIdAndStatus(Long companyId, Long employeeId, ERegularizationStatus status);
+
+    List<LeaveApplication> findTop5ByCompanyIdAndEmployeeIdOrderByCreatedDateDescIdDesc(Long companyId, Long employeeId);
 }

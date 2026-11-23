@@ -18,6 +18,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Client / vendor portal: only rows of the customer / vendor linked to the caller (no party id in the request). */
@@ -53,6 +54,18 @@ public final class PortalControllers {
     @SecurityRequirement(name = "bearerAuth")
     public static class ClientPortalController {
         private final PortalPartyService service;
+        private final PortalSummaryService summary;
+
+        @Operation(summary = "My client dashboard figures", description = "totalSettled = all CLEARED payments of my "
+                + "customer; monthly = cleared per month of the year (default this year); notesTotal / notesCount = my "
+                + "credit notes except drafts.")
+        @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_LINKED))
+        @PreAuthorize("@PermissionChecker.has('PORTAL_CLIENT')")
+        @GetMapping("/payments/summary")
+        public ApiMessageDto<PortalSummaryService.PortalSummary> summary(
+                @RequestParam(required = false) Integer year) {
+            return ApiMessageDto.ok(summary.client(year));
+        }
 
         @Operation(summary = "My payments (as a customer)", description = "Customer payments CP- of my customer.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_LINKED))
@@ -82,6 +95,18 @@ public final class PortalControllers {
     @SecurityRequirement(name = "bearerAuth")
     public static class VendorPortalController {
         private final PortalPartyService service;
+        private final PortalSummaryService summary;
+
+        @Operation(summary = "My vendor dashboard figures", description = "totalSettled = all CLEARED payments of my "
+                + "vendor; monthly = cleared per month of the year (default this year); notesTotal / notesCount = my "
+                + "debit notes except drafts.")
+        @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_LINKED))
+        @PreAuthorize("@PermissionChecker.has('PORTAL_VENDOR')")
+        @GetMapping("/payments/summary")
+        public ApiMessageDto<PortalSummaryService.PortalSummary> summary(
+                @RequestParam(required = false) Integer year) {
+            return ApiMessageDto.ok(summary.vendor(year));
+        }
 
         @Operation(summary = "My payments (as a vendor)", description = "Vendor payments VP- to my vendor.")
         @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_LINKED))

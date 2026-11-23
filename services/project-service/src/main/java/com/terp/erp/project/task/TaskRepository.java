@@ -44,4 +44,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             + " and t.projectId in (select p.id from Project p where p.deleted = false)"
             + " order by t.dueDate asc, t.id asc")
     List<Task> dueBetween(@Param("company") Long companyId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    List<Task> findByProjectIdInAndDeletedFalse(java.util.Collection<Long> projectIds);
 }

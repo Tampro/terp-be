@@ -29,5 +29,10 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
     @Query("select s.itemId, sum(s.quantity) from WarehouseStock s where s.itemId in :itemIds group by s.itemId")
     List<Object[]> sumByItems(Collection<Long> itemIds);
 
+    /** [warehouseId, count] of stock rows at 0 or less of live items, per warehouse of the company. */
+    @Query("select s.warehouseId, count(s) from WarehouseStock s, Item i where i.id = s.itemId "
+            + "and s.companyId = :companyId and i.deleted = false and s.quantity <= 0 group by s.warehouseId")
+    List<Object[]> outOfStockByWarehouse(Long companyId);
+
     boolean existsByWarehouseIdAndQuantityGreaterThan(Long warehouseId, BigDecimal quantity);
 }

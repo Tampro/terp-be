@@ -34,4 +34,12 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("select p from Project p where p.companyId = :company and p.deleted = false"
             + " and :customer member of p.clientIds")
     Page<Project> findOfClient(@Param("company") Long company, @Param("customer") Long customerId, Pageable pageable);
+
+    /** Every live project of the company (dashboard stats). */
+    List<Project> findByCompanyIdAndDeletedFalse(Long companyId);
+
+    /** Live projects I am on the team of or created (PROJECT_VIEW_OWN dashboard stats). */
+    @Query("select p from Project p where p.companyId = :company and p.deleted = false"
+            + " and (:me member of p.userIds or p.createdBy = :sub)")
+    List<Project> listOwn(@Param("company") Long company, @Param("me") Long me, @Param("sub") String sub);
 }

@@ -51,4 +51,11 @@ public interface PosOrderRepository extends JpaRepository<PosOrder, Long> {
             group by o.customerId order by sum(o.total) desc""")
     List<Object[]> byCustomer(@Param("companyId") Long companyId, @Param("from") LocalDate from,
                               @Param("to") LocalDate to);
+
+    /** [createdDate, total] of each order dated in [from, to]: the hour x weekday heat map of the POS dashboard. */
+    @Query("""
+            select o.createdDate, o.total from PosOrder o
+            where o.companyId = :companyId and o.orderDate between :from and :to""")
+    List<Object[]> createdAndTotal(@Param("companyId") Long companyId, @Param("from") LocalDate from,
+                                   @Param("to") LocalDate to);
 }

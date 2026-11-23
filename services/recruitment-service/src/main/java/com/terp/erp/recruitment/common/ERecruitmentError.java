@@ -75,7 +75,8 @@ public enum ERecruitmentError implements ErrorCode {
     REC_065("The answer to \"{0}\" must be a date (yyyy-MM-dd)."),
     REC_066("The answer to \"{0}\" is not one of its options."),
     REC_067("The offer is {0} and can no longer be changed or deleted."),
-    REC_068("Only a sent, negotiating or accepted offer can have its letter emailed; this one is {0}.");
+    REC_068("Only a sent, negotiating or accepted offer can have its letter emailed; this one is {0}."),
+    REC_069("No employee profile is linked to your account.");
 
     private final String message;
 }

@@ -54,6 +54,7 @@ public class PosController {
 
     private final PosService service;
     private final PosReportService reports;
+    private final PosDashboardService dashboard;
 
     @Operation(summary = "Cart totals for the checkout screen",
             description = "Prices and taxes from the items; same item twice = one line. Nothing is written.")
@@ -153,6 +154,22 @@ public class PosController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ApiMessageDto.ok(reports.customers(companyId, from, to));
+    }
+
+    @Operation(summary = "POS dashboard: today, year totals, monthly orders, hour x weekday heat map, top products",
+            description = "todayOrders / todayRevenue = orders dated today in tz; totals and monthly over the year "
+                    + "(default this year); heatmap = 168 cells (dayOfWeek 1 = Monday .. 7, hour 0-23) from the "
+                    + "order's creation time in tz; topProducts = top 10 by revenue of the year. tz = IANA zone, "
+                    + "default Asia/Ho_Chi_Minh.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "No company (POS_002), unknown tz (COMMON_001)"))
+    @PreAuthorize("@PermissionChecker.has('POS_REPORT')")
+    @GetMapping("/reports/dashboard")
+    public ApiMessageDto<PosDashboardService.PosDashboard> dashboard(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Integer year,
+            @Parameter(description = "IANA time zone, default Asia/Ho_Chi_Minh")
+            @RequestParam(required = false) String tz) {
+        return ApiMessageDto.ok(dashboard.dashboard(companyId, year, tz));
     }
 
     private static ResponseEntity<byte[]> pdf(byte[] bytes, String name) {

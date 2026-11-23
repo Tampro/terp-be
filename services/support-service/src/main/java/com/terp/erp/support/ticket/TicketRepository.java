@@ -53,4 +53,12 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     @Query("select t.status, count(t) from Ticket t where t.companyId = :company and t.deleted = false"
             + " group by t.status")
     List<Object[]> countByStatus(@Param("company") Long companyId);
+
+    /** Dashboard: every live ticket of the company. */
+    List<Ticket> findByCompanyIdAndDeletedFalse(Long companyId);
+
+    /** Dashboard, own scope: tickets I created or raised with my email (same rule as {@link #searchOwn}). */
+    @Query("select t from Ticket t where t.companyId = :company and t.deleted = false"
+            + " and (t.createdBy = :sub or (:email is not null and t.email = :email))")
+    List<Ticket> listOwn(@Param("company") Long companyId, @Param("sub") String sub, @Param("email") String email);
 }
