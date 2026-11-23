@@ -46,8 +46,10 @@ public enum EPlanModule {
      */
     // TODO(assumption): the commercial core is always on, like the reference product (items, sales) — confirm with PO.
     // TODO(assumption): the messenger (MESSENGER) is not a plan module of the plans list, so it stays on — confirm.
+    // PORTAL (client / vendor portal) is always on: each portal endpoint only shows rows of a service the company
+    // has, and the rows themselves stay behind their own plan module's service.
     public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION",
-            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR", "MESSENGER");
+            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR", "MESSENGER", "PORTAL");
 
     private final String displayName;
     private final Set<String> permissionModules;

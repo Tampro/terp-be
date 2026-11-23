@@ -26,6 +26,7 @@ import com.terp.erp.crm.setup.Stage;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.outbox.OutboxPublisher;
 import com.terp.erp.outbox.Payload;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -79,7 +80,10 @@ public class DealService {
     public Page<DealRow> search(Long companyId, Long pipelineId, Long stageId, EDealStatus status, String keyword,
                                 Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, ECrmError.CRM_001);
-        Page<Deal> page = deals.search(company, pipelineId, stageId, status, like(keyword), pageable);
+        Page<Deal> page = CrmScope.ownView()
+                ? deals.searchOwn(company, pipelineId, stageId, status, like(keyword), OwnScope.userId(),
+                OwnScope.sub(), ESubject.DEAL, ELinkType.MEMBER, pageable)
+                : deals.search(company, pipelineId, stageId, status, like(keyword), pageable);
         List<DealRow> rows = rows(page.getContent());
         return page.map(d -> rows.get(page.getContent().indexOf(d)));
     }
@@ -88,8 +92,9 @@ public class DealService {
     @Transactional(readOnly = true)
     public List<Column> board(Long pipelineId) {
         Pipeline p = setup.requirePipeline(pipelineId);
+        boolean own = CrmScope.ownView();
         List<DealRow> rows = rows(deals.findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(
-                p.getCompanyId(), p.getId()));
+                p.getCompanyId(), p.getId()).stream().filter(d -> !own || activity.isMine(d)).toList());
         List<Column> out = new ArrayList<>();
         for (Stage s : setup.stagesOf(p.getId(), EStageKind.DEAL)) {
             List<DealRow> in = rows.stream().filter(r -> r.stageId().equals(s.getId().toString())).toList();
@@ -102,6 +107,13 @@ public class DealService {
     @Transactional(readOnly = true)
     public DealDetail get(Long id) {
         Deal d = require(id);
+        if (CrmScope.ownView()) {
+            OwnScope.assertMine(activity.isMine(d), ECrmError.CRM_007);
+        }
+        return detail(d);
+    }
+
+    private DealDetail detail(Deal d) {
         return new DealDetail(rows(List.of(d)).get(0), d.getNotes(), activity.activity(subject(d)));
     }
 
@@ -121,38 +133,38 @@ public class DealService {
         if (f.clientIds() != null) {
             activity.setLinks(subject(d), ELinkType.CLIENT, f.clientIds());
         }
-        return get(d.getId());
+        return detail(d);
     }
 
     /** Full replacement of name, price, phone, notes and (when given) clients; stage changes through move. */
     @Transactional
     public DealDetail update(Long id, DealForm f) {
-        Deal d = require(id);
+        Deal d = requireManaged(id);
         apply(d, f);
         if (f.clientIds() != null) {
             activity.setLinks(subject(d), ELinkType.CLIENT, f.clientIds());
         }
-        return get(d.getId());
+        return detail(d);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        requireManaged(id).setDeleted(true);
     }
 
     @Transactional
     public DealDetail status(Long id, StatusForm f) {
-        Deal d = require(id);
+        Deal d = requireManaged(id);
         if (d.getStatus() != f.status()) {
             activity.log(subject(d), "Status", d.getStatus() + " → " + f.status());
             d.setStatus(f.status());
         }
-        return get(d.getId());
+        return detail(d);
     }
 
     @Transactional
     public DealDetail move(Long id, MoveForm f) {
-        Deal d = require(id);
+        Deal d = requireManaged(id);
         Stage to = setup.requireStageOf(f.stageId(), d.getPipelineId(), EStageKind.DEAL);
         String fromName = setup.stageNames(List.of(d.getStageId())).get(d.getStageId());
         List<Deal> column = deals.findByCompanyIdAndPipelineIdAndDeletedFalseOrderByPositionAscIdAsc(
@@ -176,12 +188,12 @@ public class DealService {
                     "fromStage", fromName, "toStage", to.getName(),
                     "recipientUserIds", Payload.ids(members(d.getId()))));
         }
-        return get(d.getId());
+        return detail(d);
     }
 
     @Transactional
     public List<LinkDto> setLinks(Long id, ELinkType type, LinksForm f) {
-        Deal d = require(id);
+        Deal d = requireManaged(id);
         if (type != ELinkType.MEMBER) {
             return activity.setLinks(subject(d), type, f.ids());
         }
@@ -201,6 +213,15 @@ public class DealService {
     private List<Long> members(Long dealId) {
         return activity.linksOf(ESubject.DEAL, List.of(dealId)).getOrDefault(dealId, List.of()).stream()
                 .filter(k -> k.getLinkType() == ELinkType.MEMBER).map(CrmLink::getRefId).toList();
+    }
+
+    /** For writes: with CRM_MANAGE_OWN only, a deal I neither created nor am a member of answers 404. */
+    Deal requireManaged(Long id) {
+        Deal d = require(id);
+        if (CrmScope.ownManage()) {
+            OwnScope.assertMine(activity.isMine(d), ECrmError.CRM_007);
+        }
+        return d;
     }
 
     Deal require(Long id) {

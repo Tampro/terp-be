@@ -118,7 +118,7 @@ class SalesDocumentServiceTest {
 
     @Test
     void postingAProductInvoiceTakesItsStockedLinesOutOfTheWarehouse() {
-        TestLogin.as(10L, "SALES_POST");
+        TestLogin.as(10L, "SALES_POST", "SALES_MANAGE");
         SalesDocument d = doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.DRAFT);
         d.setInvoiceType(EInvoiceType.PRODUCT);
         d.setWarehouseId(3L);
@@ -241,7 +241,7 @@ class SalesDocumentServiceTest {
         TestLogin.as(10L, "SALES_VIEW");
         LocalDate from = TODAY.minusDays(10);
         LocalDate to = from.plusDays(61);
-        when(documents.dueBetween(10L, EDocumentKind.INVOICE, from, to))
+        when(documents.dueBetween(10L, EDocumentKind.INVOICE, from, to, null))
                 .thenReturn(List.of(doc(EDocumentKind.INVOICE, 10L, EDocumentStatus.POSTED)));
         // a company user naming another company still reads their own
         assertThat(service.calendar(EDocumentKind.INVOICE, 99L, from, to)).singleElement().satisfies(e -> {

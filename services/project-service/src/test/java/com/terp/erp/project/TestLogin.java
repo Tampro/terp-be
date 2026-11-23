@@ -18,6 +18,11 @@ public final class TestLogin {
         set(new ErpPrincipal(5L, "kc-5", "u5", companyId, false, Set.of(), Set.of(permissions)));
     }
 
+    /** A company user with an explicit IAM user id and Keycloak sub (own-scope tests). */
+    public static void user(Long userId, String sub, Long companyId, String... permissions) {
+        set(new ErpPrincipal(userId, sub, "u" + userId, companyId, false, Set.of(), Set.of(permissions)));
+    }
+
     public static void superAdmin() {
         set(new ErpPrincipal(null, "kc-root", "root", null, true, Set.of(), Set.of()));
     }

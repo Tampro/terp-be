@@ -24,8 +24,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PermissionAnnotationTest {
     private static final Set<String> SEEDED = Set.of("SUPPORT_TICKET_VIEW", "SUPPORT_TICKET_MANAGE",
             "SUPPORT_KB_VIEW", "SUPPORT_KB_MANAGE", "SUPPORT_CONTACT_VIEW", "SUPPORT_CONTACT_MANAGE",
-            "SUPPORT_SETTINGS_MANAGE", "MESSENGER_USE");
-    private static final Pattern CODE = Pattern.compile("@PermissionChecker\\.has\\('([A-Z_]+)'\\)");
+            "SUPPORT_SETTINGS_MANAGE", "MESSENGER_USE", "SUPPORT_TICKET_VIEW_OWN", "SUPPORT_TICKET_MANAGE_OWN",
+            "PORTAL_CLIENT");
+    /** has('A') or hasAny('A','A_OWN'): an own variant always comes with its full code. */
+    private static final Pattern CODE = Pattern.compile(
+            "@PermissionChecker\\.(?:has\\('([A-Z_]+)'\\)|hasAny\\('([A-Z_]+)','\\2_OWN'\\))");
 
     private static List<Method> handlers(Class<?> c) {
         return Arrays.stream(c.getDeclaredMethods())
@@ -38,7 +41,8 @@ class PermissionAnnotationTest {
     @Test
     void everyProtectedHandlerHasASeededPermission() {
         for (Class<?> c : List.of(TicketController.class, KnowledgeController.class, ContactController.class,
-                PortalSettingsController.class, MessengerController.class)) {
+                PortalSettingsController.class, MessengerController.class,
+                com.terp.erp.support.ticket.ClientTicketPortalController.class)) {
             List<Method> hs = handlers(c);
             assertThat(hs).as(c.getSimpleName()).isNotEmpty();
             for (Method m : hs) {
@@ -46,7 +50,8 @@ class PermissionAnnotationTest {
                 assertThat(p).as(c.getSimpleName() + "." + m.getName()).isNotNull();
                 Matcher x = CODE.matcher(p.value());
                 assertThat(x.matches()).as(p.value()).isTrue();
-                assertThat(SEEDED).as(c.getSimpleName() + "." + m.getName()).contains(x.group(1));
+                assertThat(SEEDED).as(c.getSimpleName() + "." + m.getName())
+                        .contains(x.group(1) != null ? x.group(1) : x.group(2));
             }
         }
     }

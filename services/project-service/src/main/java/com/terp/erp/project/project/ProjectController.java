@@ -45,8 +45,8 @@ import java.util.List;
 @SecurityRequirement(name = "bearerAuth")
 public class ProjectController {
     private static final String COMPANY = "Super admin only: the company to act on (required for a super admin)";
-    private static final String VIEW = "@PermissionChecker.has('PROJECT_VIEW')";
-    private static final String MANAGE = "@PermissionChecker.has('PROJECT_MANAGE')";
+    private static final String VIEW = "@PermissionChecker.hasAny('PROJECT_VIEW','PROJECT_VIEW_OWN')";
+    private static final String MANAGE = "@PermissionChecker.hasAny('PROJECT_MANAGE','PROJECT_MANAGE_OWN')";
     private static final String NOT_FOUND = "Project not found or of another company (PRJ_006)";
 
     private final ProjectService service;

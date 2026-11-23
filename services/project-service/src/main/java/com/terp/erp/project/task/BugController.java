@@ -30,8 +30,8 @@ import java.util.List;
 @RequestMapping("/api/v1/projects")
 @SecurityRequirement(name = "bearerAuth")
 public class BugController {
-    private static final String VIEW = "@PermissionChecker.has('PROJECT_VIEW')";
-    private static final String MANAGE = "@PermissionChecker.has('PROJECT_TASK_MANAGE')";
+    private static final String VIEW = "@PermissionChecker.hasAny('PROJECT_VIEW','PROJECT_VIEW_OWN')";
+    private static final String MANAGE = "@PermissionChecker.hasAny('PROJECT_TASK_MANAGE','PROJECT_TASK_MANAGE_OWN')";
     private static final String NOT_FOUND = "Bug (PRJ_020) not found or of another company";
     private final BugService service;
 

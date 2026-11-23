@@ -23,6 +23,8 @@ import com.terp.erp.project.project.ProjectService;
 import com.terp.erp.project.task.StageService.StageDto;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
+import com.terp.erp.project.project.ProjectScope;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.time.Instant;
@@ -192,7 +194,7 @@ public class TaskService {
     /** Full replacement of the fields; the stage changes only through move (stageId here is ignored). */
     @Transactional
     public TaskDto update(Long id, TaskForm f) {
-        Task t = require(id);
+        Task t = requireManaged(id);
         Project p = projects.require(t.getProjectId());
         apply(p, t, f);
         activity.log(p.getCompanyId(), p.getId(), "TASK_UPDATED", t.getTitle());
@@ -202,7 +204,7 @@ public class TaskService {
     /** Moves the card to a stage and index; the last stage means done (counts in progress). */
     @Transactional
     public TaskDto move(Long id, MoveForm f) {
-        Task t = require(id);
+        Task t = requireManaged(id);
         Stage target = stages.require(f.stageId(), EStageKind.TASK, t.getCompanyId());
         Long from = t.getStageId();
         List<Task> column = new ArrayList<>(tasks.findByProjectIdAndStageIdAndDeletedFalseOrderByPositionAscIdAsc(
@@ -223,7 +225,7 @@ public class TaskService {
 
     @Transactional
     public void delete(Long id) {
-        Task t = require(id);
+        Task t = requireManaged(id);
         t.setDeleted(true);
         activity.log(t.getCompanyId(), t.getProjectId(), "TASK_DELETED", t.getTitle());
     }
@@ -232,7 +234,7 @@ public class TaskService {
 
     @Transactional
     public SubtaskDto addSubtask(Long taskId, SubtaskForm f) {
-        Task t = require(taskId);
+        Task t = requireManaged(taskId);
         Subtask s = new Subtask();
         s.setCompanyId(t.getCompanyId());
         s.setTaskId(t.getId());
@@ -265,7 +267,7 @@ public class TaskService {
 
     @Transactional
     public CommentDto addComment(Long taskId, CommentForm f) {
-        Task t = require(taskId);
+        Task t = requireManaged(taskId);
         TaskComment c = new TaskComment();
         c.setCompanyId(t.getCompanyId());
         c.setTaskId(t.getId());
@@ -281,7 +283,7 @@ public class TaskService {
     public void deleteComment(Long id) {
         TaskComment c = comments.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(EProjectError.PRJ_019));
         TenantGuard.assertSameCompany(c.getCompanyId(), EProjectError.PRJ_019);
-        require(c.getTaskId());
+        requireManaged(c.getTaskId());
         c.setDeleted(true);
     }
 
@@ -300,10 +302,19 @@ public class TaskService {
         return t;
     }
 
+    /** For task writes: with PROJECT_TASK_MANAGE_OWN only, a task neither assigned to me nor created by me is 404. */
+    public Task requireManaged(Long id) {
+        Task t = require(id);
+        if (!ProjectScope.managesAllTasks()) {
+            OwnScope.assertMine(ProjectScope.ownsTask(t.getAssigneeIds(), t.getCreatedBy()), EProjectError.PRJ_016);
+        }
+        return t;
+    }
+
     private Subtask requireSubtask(Long id) {
         Subtask s = subtasks.findById(id).orElseThrow(() -> ApiException.notFound(EProjectError.PRJ_018));
         TenantGuard.assertSameCompany(s.getCompanyId(), EProjectError.PRJ_018);
-        require(s.getTaskId());
+        requireManaged(s.getTaskId());
         return s;
     }
 

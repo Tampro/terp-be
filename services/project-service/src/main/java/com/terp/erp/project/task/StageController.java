@@ -38,7 +38,7 @@ public class StageController {
 
     @Operation(summary = "Stages of a board in order (defaults created on first use); the last task stage is done")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "PRJ_001"))
-    @PreAuthorize("@PermissionChecker.has('PROJECT_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('PROJECT_VIEW','PROJECT_VIEW_OWN')")
     @GetMapping
     public ApiMessageDto<List<StageDto>> list(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
                                               @RequestParam EStageKind kind) {

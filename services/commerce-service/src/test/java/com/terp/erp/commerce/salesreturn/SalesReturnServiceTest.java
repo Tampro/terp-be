@@ -124,7 +124,7 @@ class SalesReturnServiceTest {
 
     @Test
     void completingAnApprovedReturnPutsTheStockBack() {
-        TestLogin.as(10L, "SALES_POST");
+        TestLogin.as(10L, "SALES_POST", "SALES_MANAGE");
         SalesReturn r = new SalesReturn();
         r.setId(70L);
         r.setCompanyId(10L);

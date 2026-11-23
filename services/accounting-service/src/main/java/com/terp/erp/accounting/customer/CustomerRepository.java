@@ -17,5 +17,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByIdAndDeletedFalse(Long id);
 
+    /** The party a portal user is linked to; a user is linked to at most one (ACC_003 / create checks). */
+    Optional<Customer> findFirstByCompanyIdAndUserIdAndDeletedFalse(Long companyId, Long userId);
+
     boolean existsByCompanyIdAndUserIdAndDeletedFalseAndIdNot(Long companyId, Long userId, Long id);
 }

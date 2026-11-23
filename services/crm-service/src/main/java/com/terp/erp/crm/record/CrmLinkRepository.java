@@ -19,6 +19,9 @@ public interface CrmLinkRepository extends JpaRepository<CrmLink, Long> {
     @Query("delete from CrmLink l where l.subjectType = :type and l.subjectId = :id and l.linkType = :linkType")
     void deleteLinks(@Param("type") ESubject type, @Param("id") Long id, @Param("linkType") ELinkType linkType);
 
+    boolean existsBySubjectTypeAndSubjectIdAndLinkTypeAndRefId(ESubject subjectType, Long subjectId,
+                                                              ELinkType linkType, Long refId);
+
     boolean existsByLinkTypeAndRefId(ELinkType linkType, Long refId);
 
     @Query("select l.refId, count(l) from CrmLink l where l.companyId = :companyId and l.subjectType = :type "

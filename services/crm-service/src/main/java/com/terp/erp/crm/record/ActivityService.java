@@ -22,6 +22,7 @@ import com.terp.erp.crm.setup.Label;
 import com.terp.erp.crm.setup.SetupService;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.time.Instant;
@@ -135,15 +136,31 @@ public class ActivityService {
 
     // ---------- access ----------
 
+    /** Every caller writes (tasks, calls, discussions, emails, files): CRM_MANAGE_OWN reaches only own records. */
     public Subject require(ESubject type, Long id) {
+        boolean own = CrmScope.ownManage();
         if (type == ESubject.LEAD) {
             Lead l = leads.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(ECrmError.CRM_006));
             TenantGuard.assertSameCompany(l.getCompanyId(), ECrmError.CRM_006);
+            if (own) {
+                OwnScope.assertMine(CrmScope.mine(l), ECrmError.CRM_006);
+            }
             return new Subject(type, l.getId(), l.getCompanyId(), l.getPipelineId());
         }
         Deal d = deals.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(ECrmError.CRM_007));
         TenantGuard.assertSameCompany(d.getCompanyId(), ECrmError.CRM_007);
+        if (own) {
+            OwnScope.assertMine(isMine(d), ECrmError.CRM_007);
+        }
         return new Subject(type, d.getId(), d.getCompanyId(), d.getPipelineId());
+    }
+
+    /** A deal is mine when I created it or I am one of its MEMBER links. */
+    public boolean isMine(Deal d) {
+        Long me = OwnScope.userId();
+        return java.util.Objects.equals(d.getCreatedBy(), OwnScope.sub())
+                || (me != null && links.existsBySubjectTypeAndSubjectIdAndLinkTypeAndRefId(ESubject.DEAL, d.getId(),
+                ELinkType.MEMBER, me));
     }
 
     // ---------- detail ----------

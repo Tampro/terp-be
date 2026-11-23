@@ -19,6 +19,7 @@ import com.terp.erp.project.project.ProjectEnums.EProjectStatus;
 import com.terp.erp.project.task.StageService;
 import com.terp.erp.project.task.Task;
 import com.terp.erp.project.task.TaskRepository;
+import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
 
 import java.math.BigDecimal;
@@ -32,7 +33,8 @@ import java.util.Set;
 
 /**
  * Projects (ERP manual 11.1, FR-PRJ-001/003). The form-builder conversion calls {@link #create(ProjectForm)}.
- * TODO(assumption): PROJECT_VIEW sees every project of the company; there is no per-member visibility yet.
+ * PROJECT_VIEW sees every project of the company; PROJECT_VIEW_OWN only those I am on the team of or created
+ * (see {@link ProjectScope}).
  */
 @Service
 @RequiredArgsConstructor
@@ -91,7 +93,9 @@ public class ProjectService {
     public Page<ProjectDto> list(Long companyId, EProjectStatus status, String q, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, EProjectError.PRJ_001);
         String term = q == null || q.isBlank() ? null : q.trim();
-        return projects.search(company, status, term, pageable).map(this::dto);
+        Page<Project> page = ProjectScope.seesAll() ? projects.search(company, status, term, pageable)
+                : projects.searchOwn(company, status, term, OwnScope.userId(), OwnScope.sub(), pageable);
+        return page.map(this::dto);
     }
 
     /** Write transaction: progress needs the done stage, created on first use. */
@@ -121,7 +125,7 @@ public class ProjectService {
     /** Full replacement of the fields and the team; members removed leave the tasks they were assigned. */
     @Transactional
     public ProjectDto update(Long id, ProjectForm f) {
-        Project p = require(id);
+        Project p = requireManaged(id);
         checkDates(f.startDate(), f.endDate());
         Set<Long> team = checkedTeam(p.getCompanyId(), p.getUserIds(), f.userIds());
         apply(p, f);
@@ -140,7 +144,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectDto changeStatus(Long id, StatusForm f) {
-        Project p = require(id);
+        Project p = requireManaged(id);
         if (p.getStatus() != f.status()) {
             activity.log(p.getCompanyId(), p.getId(), "PROJECT_STATUS", p.getStatus() + " -> " + f.status());
             p.setStatus(f.status());
@@ -150,7 +154,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectDto replaceClients(Long id, ClientsForm f) {
-        Project p = require(id);
+        Project p = requireManaged(id);
         Set<Long> wanted = new LinkedHashSet<>(f.customerIds());
         for (Long c : wanted) {
             if (!p.getClientIds().contains(c)) {
@@ -166,7 +170,7 @@ public class ProjectService {
     /** Soft delete; tasks, bugs and milestones stay with the deleted project and are no longer reachable. */
     @Transactional
     public void delete(Long id) {
-        Project p = require(id);
+        Project p = requireManaged(id);
         p.setDeleted(true);
         activity.log(p.getCompanyId(), p.getId(), "PROJECT_DELETED", p.getName());
     }
@@ -178,6 +182,19 @@ public class ProjectService {
     public Project require(Long id) {
         Project p = projects.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(EProjectError.PRJ_006));
         TenantGuard.assertSameCompany(p.getCompanyId(), EProjectError.PRJ_006);
+        if (!ProjectScope.seesAll()) {
+            OwnScope.assertMine(ProjectScope.onTeam(p), EProjectError.PRJ_006);
+        }
+        return p;
+    }
+
+    /** For project writes: with PROJECT_MANAGE_OWN only, a project I did not create answers 404. */
+    @Transactional(readOnly = true)
+    public Project requireManaged(Long id) {
+        Project p = require(id);
+        if (!ProjectScope.managesAll()) {
+            OwnScope.assertMine(ProjectScope.createdByMe(p.getCreatedBy()), EProjectError.PRJ_006);
+        }
         return p;
     }
 

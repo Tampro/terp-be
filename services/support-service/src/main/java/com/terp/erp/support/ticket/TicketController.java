@@ -48,7 +48,7 @@ public class TicketController {
     private final TicketCategoryService categoryService;
 
     @GetMapping("/tickets")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
     @Operation(summary = "List tickets (tabs: status; filters: category, account type, keyword)",
             description = "keyword matches ticket number, subject, name and email. Default order: last update first.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
@@ -63,7 +63,7 @@ public class TicketController {
     }
 
     @GetMapping("/tickets/status-counts")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
     @Operation(summary = "Counts for the tabs All / In Progress / On Hold / Closed")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "400", description = "SUP_001")})
@@ -72,7 +72,7 @@ public class TicketController {
     }
 
     @GetMapping("/tickets/{id}")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_VIEW')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
     @Operation(summary = "A ticket with its internal note and whole conversation (oldest first)")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "404", description = "SUP_004 (unknown or another company's ticket)")})
@@ -81,7 +81,7 @@ public class TicketController {
     }
 
     @PostMapping("/tickets")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_MANAGE','SUPPORT_TICKET_MANAGE_OWN')")
     @Operation(summary = "Create a ticket; answers the tracking token once",
             description = "Numbered TKT-000001… per company. attachmentFileIds = media-service files of the company.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
@@ -93,7 +93,7 @@ public class TicketController {
     }
 
     @PutMapping("/tickets/{id}")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_MANAGE','SUPPORT_TICKET_MANAGE_OWN')")
     @Operation(summary = "Replace a ticket",
             description = "Full replacement of account type, name, email, category, subject, description, attachments "
                     + "and note; status null keeps the current status. Number and tracking token never change.")
@@ -106,7 +106,7 @@ public class TicketController {
     }
 
     @PutMapping("/tickets/{id}/status")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_MANAGE','SUPPORT_TICKET_MANAGE_OWN')")
     @Operation(summary = "Change the status (IN_PROGRESS, ON_HOLD, CLOSED); a closed ticket can be reopened")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "400", description = "COMMON_001"),
@@ -116,7 +116,7 @@ public class TicketController {
     }
 
     @DeleteMapping("/tickets/{id}")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_MANAGE','SUPPORT_TICKET_MANAGE_OWN')")
     @Operation(summary = "Delete a ticket (soft); its portal tracking stops working")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "404", description = "SUP_004")})
@@ -126,7 +126,7 @@ public class TicketController {
     }
 
     @PostMapping("/tickets/{id}/replies")
-    @PreAuthorize("@PermissionChecker.has('SUPPORT_TICKET_MANAGE')")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_MANAGE','SUPPORT_TICKET_MANAGE_OWN')")
     @Operation(summary = "Staff reply; refused when the ticket is closed")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "400", description = "COMMON_001, SUP_006 (closed), SUP_007, SUP_008, SUP_034"),

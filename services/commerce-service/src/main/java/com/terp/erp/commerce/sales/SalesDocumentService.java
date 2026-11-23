@@ -11,6 +11,8 @@ import com.terp.erp.commerce.common.ECommerceError;
 import com.terp.erp.commerce.common.EJournalStatus;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Ownership;
+import com.terp.erp.commerce.common.Ownership.Access;
 import com.terp.erp.commerce.common.Postings;
 import com.terp.erp.commerce.sales.SalesDtos.DocumentDetail;
 import com.terp.erp.commerce.sales.SalesDtos.DocumentForm;
@@ -63,7 +65,7 @@ public class SalesDocumentService {
             throw ApiException.badRequest(ECommerceError.SAL_020, MAX_CALENDAR_DAYS);
         }
         Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
-        return documents.dueBetween(company, kind, from, to).stream()
+        return documents.dueBetween(company, kind, from, to, owner(kind, Access.VIEW)).stream()
                 .map(d -> new CalendarEntry(d.getId().toString(), d.getNumber(), d.getCustomerName(), d.getDocDate(),
                         d.getDueDate(), d.getStatus(), d.getTotal(), d.getBalance()))
                 .toList();
@@ -74,20 +76,23 @@ public class SalesDocumentService {
                                     LocalDate from, LocalDate to, String keyword, EDocumentStatus status,
                                     boolean overdue, EJournalStatus journalStatus, Pageable pageable) {
         Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
+        String owner = owner(kind, Access.VIEW);
         LocalDate today = today();
         return documents.search(company, kind, customerId, warehouseId, from, to, like(keyword), status, overdue,
-                journalStatus, today, pageable).map(d -> DocumentRow.of(d, today));
+                journalStatus, today, owner, pageable).map(d -> DocumentRow.of(d, today));
     }
 
     @Transactional(readOnly = true)
     public Map<EDocumentStatus, Long> statusCounts(EDocumentKind kind, Long companyId, Long customerId,
                                                    Long warehouseId, LocalDate from, LocalDate to, String keyword) {
         Long company = TenantGuard.resolveCompany(companyId, ECommerceError.SAL_006);
+        String owner = owner(kind, Access.VIEW);
         Map<EDocumentStatus, Long> counts = new EnumMap<>(EDocumentStatus.class);
         for (EDocumentStatus s : statuses(kind)) {
             counts.put(s, 0L);
         }
-        for (Object[] r : documents.countByStatus(company, kind, customerId, warehouseId, from, to, like(keyword))) {
+        for (Object[] r : documents.countByStatus(company, kind, customerId, warehouseId, from, to, like(keyword),
+                owner)) {
             counts.put((EDocumentStatus) r[0], ((Number) r[1]).longValue());
         }
         return counts;
@@ -95,7 +100,7 @@ public class SalesDocumentService {
 
     @Transactional(readOnly = true)
     public DocumentDetail get(EDocumentKind kind, Long id) {
-        return DocumentDetail.of(require(kind, id), today());
+        return DocumentDetail.of(require(kind, id, Access.VIEW), today());
     }
 
     // ---------- draft life ----------
@@ -114,21 +119,21 @@ public class SalesDocumentService {
     /** Full replacement of a draft; the number never changes. */
     @Transactional
     public DocumentDetail update(EDocumentKind kind, Long id, DocumentForm f) {
-        SalesDocument d = requireDraft(kind, id);
+        SalesDocument d = requireDraft(kind, id, Access.MANAGE);
         apply(d, f);
         return DocumentDetail.of(d, today());
     }
 
     @Transactional
     public void delete(EDocumentKind kind, Long id) {
-        requireDraft(kind, id).setDeleted(true);
+        requireDraft(kind, id, Access.MANAGE).setDeleted(true);
     }
 
     // ---------- quotation / proposal ----------
 
     @Transactional
     public DocumentDetail send(EDocumentKind kind, Long id) {
-        SalesDocument d = requireDraft(kind, id);
+        SalesDocument d = requireDraft(kind, id, Access.MANAGE);
         d.setStatus(EDocumentStatus.SENT);
         return DocumentDetail.of(d, today());
     }
@@ -136,7 +141,15 @@ public class SalesDocumentService {
     /** accept = true: ACCEPTED, false: REJECTED; only from SENT. */
     @Transactional
     public DocumentDetail decide(EDocumentKind kind, Long id, boolean accept) {
-        SalesDocument d = require(kind, id);
+        return decide(require(kind, id, Access.MANAGE), accept);
+    }
+
+    /**
+     * The decision itself, on a document already checked by the caller (staff above, client portal for its own
+     * customer). updated_by records who decided: the customer's own account when done from the portal.
+     */
+    @Transactional
+    public DocumentDetail decide(SalesDocument d, boolean accept) {
         if (d.getStatus() != EDocumentStatus.SENT) {
             throw ApiException.badRequest(ECommerceError.SAL_003);
         }
@@ -147,7 +160,7 @@ public class SalesDocumentService {
     /** A new DRAFT with the same customer, terms and lines; dated today, new number. */
     @Transactional
     public DocumentDetail duplicate(EDocumentKind kind, Long id) {
-        SalesDocument src = require(kind, id);
+        SalesDocument src = require(kind, id, Access.MANAGE);
         SalesDocument d = copy(src, kind);
         d.setNumber(numbering.next(d.getCompanyId(), kind.prefix(), d.getDocDate()));
         return DocumentDetail.of(documents.save(d), today());
@@ -156,7 +169,7 @@ public class SalesDocumentService {
     /** Quotation only: a new DRAFT version of a sent, accepted or rejected quotation (ERP manual 6.4). */
     @Transactional
     public DocumentDetail newVersion(Long id) {
-        SalesDocument src = require(EDocumentKind.QUOTATION, id);
+        SalesDocument src = require(EDocumentKind.QUOTATION, id, Access.MANAGE);
         if (src.getStatus() == EDocumentStatus.DRAFT) {
             throw ApiException.badRequest(ECommerceError.SAL_017);
         }
@@ -175,7 +188,7 @@ public class SalesDocumentService {
      */
     @Transactional
     public DocumentDetail convert(EDocumentKind kind, Long id) {
-        SalesDocument src = require(kind, id);
+        SalesDocument src = require(kind, id, Access.MANAGE);
         if (src.getStatus() != EDocumentStatus.ACCEPTED) {
             throw ApiException.badRequest(ECommerceError.SAL_004);
         }
@@ -208,7 +221,7 @@ public class SalesDocumentService {
      */
     @Transactional
     public DocumentDetail post(Long id) {
-        SalesDocument d = requireDraft(EDocumentKind.INVOICE, id);
+        SalesDocument d = requireDraft(EDocumentKind.INVOICE, id, Access.POST);
         boolean product = d.getInvoiceType() == EInvoiceType.PRODUCT;
         if (product && d.getWarehouseId() == null) {
             throw ApiException.badRequest(ECommerceError.SAL_009);
@@ -246,7 +259,7 @@ public class SalesDocumentService {
      */
     @Transactional
     public DocumentDetail retryJournal(Long id) {
-        SalesDocument d = require(EDocumentKind.INVOICE, id);
+        SalesDocument d = require(EDocumentKind.INVOICE, id, Access.POST);
         if (d.getJournalStatus() != EJournalStatus.FAILED) {
             throw ApiException.badRequest(ECommerceError.SAL_025);
         }
@@ -273,10 +286,13 @@ public class SalesDocumentService {
                 "Sales invoice " + d.getNumber() + " - " + d.getCustomerName(), goods, service, d.getTaxTotal(), cost);
     }
 
-    /** For returns: a posted (or paid) invoice of the caller's company. */
+    /**
+     * For returns: a posted (or paid) invoice of the caller's company; a caller holding only *_OWN sales codes reaches
+     * only invoices they created (the Access.POST rule).
+     */
     @Transactional(readOnly = true)
     public SalesDocument requirePostedInvoice(Long id) {
-        SalesDocument d = require(EDocumentKind.INVOICE, id);
+        SalesDocument d = require(EDocumentKind.INVOICE, id, Access.POST);
         if (d.getStatus() == EDocumentStatus.DRAFT) {
             throw ApiException.badRequest(ECommerceError.SAL_010);
         }
@@ -292,6 +308,7 @@ public class SalesDocumentService {
         SalesDocument d = documents.lockById(id).filter(x -> x.getKind() == EDocumentKind.INVOICE)
                 .orElseThrow(() -> ApiException.notFound(ECommerceError.SAL_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), ECommerceError.SAL_001);
+        Ownership.check(owner(EDocumentKind.INVOICE, Access.POST), d.getCreatedBy(), ECommerceError.SAL_001);
         if (d.getStatus() == EDocumentStatus.DRAFT) {
             throw ApiException.badRequest(ECommerceError.SAL_010);
         }
@@ -300,16 +317,22 @@ public class SalesDocumentService {
 
     // ---------- helpers ----------
 
-    SalesDocument require(EDocumentKind kind, Long id) {
+    SalesDocument require(EDocumentKind kind, Long id, Access access) {
         SalesDocument d = documents.findByIdAndDeletedFalse(id)
                 .filter(x -> x.getKind() == kind)
                 .orElseThrow(() -> ApiException.notFound(ECommerceError.SAL_001));
         TenantGuard.assertSameCompany(d.getCompanyId(), ECommerceError.SAL_001);
+        Ownership.check(owner(kind, access), d.getCreatedBy(), ECommerceError.SAL_001);
         return d;
     }
 
-    private SalesDocument requireDraft(EDocumentKind kind, Long id) {
-        SalesDocument d = require(kind, id);
+    /** null = every document of the company; else the caller's sub (Manage Own). Quotations have their own codes. */
+    static String owner(EDocumentKind kind, Access access) {
+        return Ownership.owner(kind == EDocumentKind.QUOTATION ? "QUOTATION" : "SALES", access);
+    }
+
+    private SalesDocument requireDraft(EDocumentKind kind, Long id, Access access) {
+        SalesDocument d = require(kind, id, access);
         if (d.getStatus() != EDocumentStatus.DRAFT) {
             throw ApiException.badRequest(ECommerceError.SAL_002);
         }

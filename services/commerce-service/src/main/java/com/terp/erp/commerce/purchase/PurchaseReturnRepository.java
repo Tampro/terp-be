@@ -24,11 +24,20 @@ public interface PurchaseReturnRepository extends JpaRepository<PurchaseReturn, 
               and (:warehouseId is null or r.warehouseId = :warehouseId)
               and (:status is null or r.status = :status)
               and (:from is null or r.returnDate >= :from) and (:to is null or r.returnDate <= :to)
-              and (:kw is null or lower(r.number) like :kw or lower(r.vendorName) like :kw)""")
+              and (:kw is null or lower(r.number) like :kw or lower(r.vendorName) like :kw)
+              and (:createdBy is null or r.createdBy = :createdBy)""")
     Page<PurchaseReturn> search(@Param("companyId") Long companyId, @Param("invoiceId") Long invoiceId,
                                 @Param("vendorId") Long vendorId, @Param("warehouseId") Long warehouseId,
                                 @Param("status") PurchaseReturn.EStatus status, @Param("from") LocalDate from,
-                                @Param("to") LocalDate to, @Param("kw") String keyword, Pageable pageable);
+                                @Param("to") LocalDate to, @Param("kw") String keyword,
+                                @Param("createdBy") String createdBy, Pageable pageable);
+
+    /** Vendor portal: purchase returns to one vendor, drafts excluded. */
+    @Query("""
+            select r from PurchaseReturn r where r.companyId = :companyId and r.deleted = false
+              and r.vendorId = :vendorId and r.status <> com.terp.erp.commerce.purchase.PurchaseReturn.EStatus.DRAFT""")
+    Page<PurchaseReturn> forVendor(@Param("companyId") Long companyId, @Param("vendorId") Long vendorId,
+                                   Pageable pageable);
 
     /** Quantity already returned per invoice line, every non-deleted return counted (draft included). */
     @Query("""
