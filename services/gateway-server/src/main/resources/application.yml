@@ -92,6 +92,14 @@ spring:
               uri: ${SUPPORT_SERVICE_URL:http://localhost:8096}
               predicates:
                 - Path=/api/v1/support/**,/api/v1/messenger/**,/api/v1/public/support/**,/api/v1/portal/client/tickets/**,/api/v1/portal/client/tickets
+            # SSE stream: must come before notification-service (first match wins). response-timeout -1 lifts the
+            # global 15s read timeout for this path only; the service ends the stream at the token's expiry.
+            - id: notification-stream
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8097}
+              predicates:
+                - Path=/api/v1/notifications/me/stream
+              metadata:
+                response-timeout: -1
             - id: notification-service
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8097}
               predicates:

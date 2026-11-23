@@ -38,8 +38,9 @@ class MessengerServiceTest {
     private final ChatFavoriteRepository favorites = mock(ChatFavoriteRepository.class);
     private final IamClient iam = mock(IamClient.class);
     private final MediaClient media = mock(MediaClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final MessengerService service = new MessengerService(messages, favorites, iam, media,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), outbox);
 
     @AfterEach
     void tearDown() {
@@ -85,6 +86,34 @@ class MessengerServiceTest {
         assertThat(dto.body()).isEqualTo("hi");
         assertThat(dto.mine()).isTrue();
         verifyNoInteractions(media);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sendPublishesTheChatEventWithoutTheBody() {
+        TestLogin.user(5L, 10L, "MESSENGER_USE");
+        when(messages.save(any())).thenAnswer(i -> {
+            ChatMessage m = i.getArgument(0);
+            m.setId(42L);
+            return m;
+        });
+
+        service.send(6L, new SendForm("secret words", null));
+
+        org.mockito.ArgumentCaptor<Object> payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("support.chat.message_sent"), eq("CHAT_MESSAGE"), eq("42"),
+                payload.capture());
+        java.util.Map<String, Object> p = (java.util.Map<String, Object>) payload.getValue();
+        assertThat(p).containsEntry("messageId", "42").containsEntry("fromUserId", "5")
+                .containsEntry("toUserId", "6").doesNotContainKey("body");
+        assertThat(p.values()).noneMatch(v -> String.valueOf(v).contains("secret"));
+    }
+
+    @Test
+    void refusedMessageIsNotAnnounced() {
+        TestLogin.user(5L, 10L, "MESSENGER_USE");
+        assertThatThrownBy(() -> service.send(5L, new SendForm("hi", null))).isInstanceOf(ApiException.class);
+        verifyNoInteractions(outbox);
     }
 
     @Test

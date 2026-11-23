@@ -1,6 +1,8 @@
 package com.terp.erp.support.messenger;
 
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.support.client.IamClient;
@@ -29,7 +31,8 @@ import java.util.stream.Collectors;
  * One-to-one messenger inside a company (ERP manual 18; reference Chatify). REST only, polled by the FE. The caller is
  * always one side of the conversation: every read is "my messages with peer X", never a conversation id, so nobody
  * can read a conversation they are not part of. A peer must be an active user of the caller's company (IAM).
- * Message bodies are never logged.
+ * Message bodies are never logged, nor put in the support.chat.message_sent event (ids + sender name only): the
+ * notification-service pushes it to the recipient's live stream so the FE refreshes the thread and its badge.
  */
 @Service
 @RequiredArgsConstructor
@@ -57,14 +60,17 @@ public class MessengerService {
     public record FavoriteDto(String userId, Instant createdDate) {
     }
 
-    private record Me(Long userId, Long companyId) {
+    private record Me(Long userId, Long companyId, String name) {
     }
+
+    static final String EVENT_MESSAGE_SENT = "support.chat.message_sent";
 
     private final ChatMessageRepository messages;
     private final ChatFavoriteRepository favorites;
     private final IamClient iam;
     private final MediaClient media;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     @Transactional(readOnly = true)
     public Page<ConversationDto> conversations(Pageable pageable) {
@@ -120,7 +126,12 @@ public class MessengerService {
             m.setAttachmentFileId(f.attachmentFileId());
             m.setAttachmentName(file.name());
         }
-        return dto(messages.save(m), me);
+        ChatMessage saved = messages.save(m);
+        ChatMessage ref = saved == null ? m : saved;
+        // TODO(assumption): the sender's login name stands for the display name (the token carries no full name here).
+        outbox.publish(me.companyId(), EVENT_MESSAGE_SENT, "CHAT_MESSAGE", String.valueOf(ref.getId()), Payload.of(
+                "messageId", ref.getId(), "fromUserId", me.userId(), "toUserId", peerId, "senderName", me.name()));
+        return dto(ref, me);
     }
 
     /** Marks every message from peer to me as seen; answers how many changed. */
@@ -178,7 +189,7 @@ public class MessengerService {
         if (p.userId() == null || p.companyId() == null) {
             throw ApiException.forbidden(ESupportError.SUP_028);
         }
-        return new Me(p.userId(), p.companyId());
+        return new Me(p.userId(), p.companyId(), p.username());
     }
 
     private Set<Long> favoriteIds(Me me) {
