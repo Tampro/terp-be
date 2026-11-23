@@ -33,7 +33,7 @@ class UserCreatedEventTest {
     private final UserService service = new UserService(users, roles, keycloak, mock(LocalAuthorityResolver.class),
             mock(com.terp.erp.iam.repository.CompanyRepository.class),
             mock(com.terp.erp.iam.saas.SubscriptionService.class), mock(com.terp.erp.iam.email.EmailNotifier.class),
-            outbox);
+            outbox, mock(com.terp.erp.iam.saas.PlanSeatEnforcer.class));
 
     @Test
     @SuppressWarnings("unchecked")

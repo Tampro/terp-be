@@ -40,7 +40,7 @@ public class UserProfileDeleteTest {
     private final UserService service = new UserService(users, mock(RoleRepository.class), keycloak,
             mock(LocalAuthorityResolver.class), mock(com.terp.erp.iam.repository.CompanyRepository.class),
             mock(com.terp.erp.iam.saas.SubscriptionService.class), mock(com.terp.erp.iam.email.EmailNotifier.class),
-            mock(com.terp.erp.outbox.OutboxPublisher.class));
+            mock(com.terp.erp.outbox.OutboxPublisher.class), mock(com.terp.erp.iam.saas.PlanSeatEnforcer.class));
     private final UserAccount admin = account(7L, true);
 
     @BeforeEach

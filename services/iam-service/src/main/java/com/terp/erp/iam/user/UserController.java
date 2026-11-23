@@ -104,7 +104,7 @@ public class UserController {
             description = "LOCKED disables the Keycloak user and ends its sessions; access tokens already issued are "
                     + "rejected by IAM within 30 seconds.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Own account (IAM_013)"),
+            @ApiResponse(responseCode = "400", description = "Own account (IAM_013), activating over the plan user limit (SAAS_011)"),
             @ApiResponse(responseCode = "404", description = "No such user in your company (IAM_009)")})
     @PreAuthorize("@PermissionChecker.has('IAM_USER_UPDATE')")
     @PutMapping("/{id}/status")
