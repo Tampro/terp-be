@@ -99,8 +99,9 @@ public class ReviewController {
         return ApiMessageDto.ok(service.schedule(form));
     }
 
-    @Operation(summary = "Edit the schedule", description = "Full replacement while not completed; status omitted = "
-            + "kept and only moves forward. Ratings are kept.")
+    @Operation(summary = "Edit the schedule", description = "Full replacement while not completed (reopen a "
+            + "completed review through Update Status first); status omitted = kept and only moves forward. Ratings "
+            + "are kept.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Completed (EMP_077), status moved back (EMP_096), "
                     + "EMP_076, EMP_058, EMP_073, EMP_054, EMP_079"),
@@ -124,11 +125,12 @@ public class ReviewController {
         return ApiMessageDto.ok(service.conduct(id, form));
     }
 
-    @Operation(summary = "Update Status", description = "PENDING -> IN_PROGRESS -> COMPLETED, forward only. "
-            + "COMPLETED needs every indicator rated and is read-only afterwards.")
+    @Operation(summary = "Update Status", description = "PENDING -> IN_PROGRESS -> COMPLETED; COMPLETED -> "
+            + "IN_PROGRESS reopens the review (edit and conduct work again; completedAt cleared). COMPLETED needs every "
+            + "indicator rated. Any move back to PENDING is refused (EMP_096).")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Not every indicator rated (EMP_079), completed (EMP_077), "
-                    + "status moved back (EMP_096)"),
+            @ApiResponse(responseCode = "400", description = "Not every indicator rated (EMP_079), "
+                    + "status moved back to PENDING (EMP_096)"),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('PERFORMANCE_MANAGE')")
     @PutMapping("/{id}/status")

@@ -106,7 +106,7 @@ public enum EEmployeeError implements ErrorCode {
     EMP_096("The status cannot change from {0} to {1}."),
     EMP_097("A response can only be given while the warning is pending."),
     EMP_098("The new designation must differ from the current one."),
-    EMP_099("OVERDUE is derived from the end date and cannot be set."),
+    EMP_099("OVERDUE cannot be set."), // unused since 2026-11-24: OVERDUE is set by hand
     EMP_100("The trainer does not exist."),
     EMP_101("The trainer is not in the company's list or is inactive."),
     EMP_102("The record is {0} and can no longer be edited or deleted.");

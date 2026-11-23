@@ -120,9 +120,33 @@ class ReviewTest {
         assertCode(() -> service.delete(9L), EEmployeeError.EMP_077);
         assertThat(done.pros()).isEqualTo("Fast");
         assertThat(done.cons()).isEqualTo("Docs");
-        // completed is read-only: no reopen
-        assertCode(() -> service.changeStatus(9L, EStatus.IN_PROGRESS), EEmployeeError.EMP_077);
         assertThat(service.changeStatus(9L, EStatus.COMPLETED).status()).isEqualTo(EStatus.COMPLETED);
+    }
+
+    @Test
+    void completedReviewCanBeReopenedThenEditedAndConducted() {
+        service.schedule(new ScheduleForm(1L, 2L, 3L, DAY, null));
+        service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 5, null), new RatingForm(8L, 2, null)), null,
+                null, null, true));
+        assertCode(() -> service.update(9L, new ScheduleForm(1L, 2L, 3L, DAY.plusDays(1), null)),
+                EEmployeeError.EMP_077);
+        // reopen (aligned with reference demo 2026-11-24, PO); never back to PENDING
+        assertCode(() -> service.changeStatus(9L, EStatus.PENDING), EEmployeeError.EMP_096);
+        var reopened = service.changeStatus(9L, EStatus.IN_PROGRESS);
+        assertThat(reopened.status()).isEqualTo(EStatus.IN_PROGRESS);
+        assertThat(reopened.completedAt()).isNull();
+        assertThat(service.update(9L, new ScheduleForm(1L, 2L, 3L, DAY.plusDays(1), null)).reviewDate())
+                .isEqualTo(DAY.plusDays(1));
+        var redone = service.conduct(9L, new ConductForm(List.of(new RatingForm(8L, 5, null)), "Better", null, null,
+                false));
+        assertThat(redone.status()).isEqualTo(EStatus.IN_PROGRESS);
+        assertThat(redone.overallRating()).isEqualByComparingTo("5.0");
+        // completing again still needs every indicator rated
+        assertCode(() -> service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, null, null)), null, null,
+                null, true)), EEmployeeError.EMP_079);
+        var again = service.conduct(9L, new ConductForm(List.of(new RatingForm(7L, 4, null)), null, null, null, true));
+        assertThat(again.status()).isEqualTo(EStatus.COMPLETED);
+        assertThat(again.completedAt()).isNotNull();
     }
 
     @Test
@@ -135,7 +159,8 @@ class ReviewTest {
         // nothing rated yet
         assertCode(() -> service.changeStatus(9L, EStatus.COMPLETED), EEmployeeError.EMP_079);
         ReviewService.assertTransition(EStatus.PENDING, EStatus.IN_PROGRESS);
-        assertCode(() -> ReviewService.assertTransition(EStatus.COMPLETED, EStatus.PENDING), EEmployeeError.EMP_077);
+        ReviewService.assertTransition(EStatus.COMPLETED, EStatus.IN_PROGRESS);
+        assertCode(() -> ReviewService.assertTransition(EStatus.COMPLETED, EStatus.PENDING), EEmployeeError.EMP_096);
     }
 
     @Test

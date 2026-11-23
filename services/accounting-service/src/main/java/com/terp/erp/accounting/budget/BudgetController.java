@@ -147,8 +147,8 @@ public class BudgetController {
         return ApiMessageDto.ok(service.allocations(id));
     }
 
-    @Operation(summary = "Add an allocation", description = "DRAFT budgets only; expense accounts only; the sum "
-            + "of allocations may not exceed the budget amount.")
+    @Operation(summary = "Add an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED); expense accounts only; the sum "
+            + "of allocations may not exceed the budget amount (unchanged; allocated total is recalculated from the lines).")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", " + ALLOC),
             @ApiResponse(responseCode = "404", description = NOT_FOUND)})
     @PreAuthorize("@PermissionChecker.has('BUDGET_MANAGE')")
@@ -158,7 +158,7 @@ public class BudgetController {
         return ApiMessageDto.ok(service.addAllocation(id, form));
     }
 
-    @Operation(summary = "Edit an allocation", description = "Full replacement; DRAFT budgets only.")
+    @Operation(summary = "Edit an allocation", description = "Full replacement; DRAFT, APPROVED or ACTIVE budgets (not CLOSED); sum stays within the budget amount.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE + ", " + ALLOC),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + ", allocation not on the budget "
                     + "(ACC_092)")})
@@ -169,7 +169,7 @@ public class BudgetController {
         return ApiMessageDto.ok(service.updateAllocation(id, allocationId, form));
     }
 
-    @Operation(summary = "Delete an allocation", description = "DRAFT budgets only.")
+    @Operation(summary = "Delete an allocation", description = "DRAFT, APPROVED or ACTIVE budgets (not CLOSED).")
     @ApiResponses({@ApiResponse(responseCode = "400", description = STATE),
             @ApiResponse(responseCode = "404", description = NOT_FOUND + ", allocation not on the budget "
                     + "(ACC_092)")})

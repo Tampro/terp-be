@@ -229,6 +229,32 @@ class BudgetServiceTest {
     }
 
     @Test
+    void allocationsChangeOnApprovedAndActiveButNotClosed() {
+        BudgetPeriod p = period(CO, EBudgetPeriodStatus.ACTIVE);
+        for (EBudgetStatus open : List.of(EBudgetStatus.APPROVED, EBudgetStatus.ACTIVE)) {
+            Budget b = budget(CO, p, open, "1000");
+            String id = service.addAllocation(b.getId(), new AllocationForm(40L, new BigDecimal("600"), null)).id();
+            String other = service.addAllocation(b.getId(), new AllocationForm(42L, new BigDecimal("300"), null)).id();
+            assertThat(service.monitoring(b.getId()).allocated()).isEqualByComparingTo("900");
+            assertError(() -> service.updateAllocation(b.getId(), Long.valueOf(other),
+                    new AllocationForm(42L, new BigDecimal("401"), null)), EAccountingError.ACC_094); // rule holds
+            service.updateAllocation(b.getId(), Long.valueOf(id), new AllocationForm(40L, new BigDecimal("700"), null));
+            assertThat(service.monitoring(b.getId()).allocated()).isEqualByComparingTo("1000");
+            service.deleteAllocation(b.getId(), Long.valueOf(id));
+            org.mockito.Mockito.verify(allocationRows).delete(allocationMap.get(Long.valueOf(id)));
+            assertThat(service.get(b.getId()).amount()).isEqualByComparingTo("1000"); // amount unchanged
+            assertError(() -> service.delete(b.getId()), EAccountingError.ACC_091); // budget itself stays DRAFT-only
+        }
+        Budget closed = budget(CO, p, EBudgetStatus.CLOSED, "1000");
+        BudgetAllocation line = allocation(closed, 40L, "100");
+        assertError(() -> service.addAllocation(closed.getId(), new AllocationForm(42L, BigDecimal.TEN, null)),
+                EAccountingError.ACC_091);
+        assertError(() -> service.updateAllocation(closed.getId(), line.getId(),
+                new AllocationForm(40L, BigDecimal.TEN, null)), EAccountingError.ACC_091);
+        assertError(() -> service.deleteAllocation(closed.getId(), line.getId()), EAccountingError.ACC_091);
+    }
+
+    @Test
     void closePeriodOnlyAfterItsEndAndThenReadOnly() {
         BudgetPeriod current = period(CO, EBudgetPeriodStatus.ACTIVE); // ends 2026-12-31, after today
         assertError(() -> periods.close(current.getId()), EAccountingError.ACC_088);
