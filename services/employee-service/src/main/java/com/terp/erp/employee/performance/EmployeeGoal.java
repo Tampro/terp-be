@@ -18,8 +18,8 @@ import java.time.LocalDate;
 @Table(name = "employee_goal")
 public class EmployeeGoal extends BaseAuditableEntity {
     /**
-     * OVERDUE is never stored: a NOT_STARTED / IN_PROGRESS goal whose end date is before today (Vietnam time) reads
-     * as OVERDUE. TODO(assumption): derived rather than a stored status — confirm with BA.
+     * Every status, OVERDUE included, is stored and chosen by hand; nothing is derived from the end date — aligned with
+     * reference demo 2026-11-24 (PO).
      */
     public enum EStatus { NOT_STARTED, IN_PROGRESS, COMPLETED, OVERDUE }
 

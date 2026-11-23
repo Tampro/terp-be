@@ -45,8 +45,10 @@ import java.util.stream.Collectors;
  * Employee Reviews page and Conduct Review (docs/analysis/06 §7.3.1). The first conduct copies the company's active
  * indicators into the review; each is rated 1 (Poor) – 5 (Excellent) and the overall rating is their weighted
  * average, 1 decimal (PO, 2026-11-20). Saving keeps the review IN_PROGRESS; submitting (or Update Status to
- * COMPLETED) needs every indicator rated (EMP_079). Status only moves forward, PENDING -> IN_PROGRESS -> COMPLETED
- * (EMP_096); the first saved conduct starts a PENDING review; a COMPLETED review is read-only (EMP_077, manual 16).
+ * COMPLETED) needs every indicator rated (EMP_079). Status moves PENDING -> IN_PROGRESS -> COMPLETED (EMP_096 for
+ * other steps back); the first saved conduct starts a PENDING review. A COMPLETED review is read-only (EMP_077) until
+ * Update Status reopens it to IN_PROGRESS; then edit and conduct work again — aligned with reference demo 2026-11-24
+ * (PO).
  */
 @Service
 @RequiredArgsConstructor
@@ -154,7 +156,7 @@ public class ReviewService {
         return detail(reviews.save(r));
     }
 
-    /** Full replacement of the schedule while not completed; status omitted = kept. */
+    /** Full replacement of the schedule while not completed (reopen first); status omitted = kept. */
     @Transactional
     public ReviewDto update(Long id, ScheduleForm form) {
         EmployeeReview r = requireOpen(id);
@@ -162,7 +164,7 @@ public class ReviewService {
         return detail(r);
     }
 
-    /** Update Status: forward only; COMPLETED needs every indicator rated and is final. */
+    /** Update Status: forward, or COMPLETED back to IN_PROGRESS (reopen); COMPLETED needs every indicator rated. */
     @Transactional
     public ReviewDto changeStatus(Long id, EStatus status) {
         EmployeeReview r = require(id);
@@ -170,21 +172,22 @@ public class ReviewService {
         if (status == EStatus.COMPLETED) {
             complete(r, ratings.findByReviewIdOrderByCategoryNameAscIndicatorNameAsc(r.getId()));
         } else {
+            if (r.getStatus() == EStatus.COMPLETED) {
+                // reopened: completedAt is set again by the next completion
+                r.setCompletedAt(null);
+            }
             r.setStatus(status);
         }
         return detail(r);
     }
 
     /**
-     * Forward only. TODO(assumption): no way back once completed (manual 16 lists no reopen) and no step back from
-     * IN_PROGRESS to PENDING — confirm with BA.
+     * Forward, plus COMPLETED -> IN_PROGRESS (reopen) — aligned with reference demo 2026-11-24 (PO).
+     * TODO(assumption): no step back to PENDING (from IN_PROGRESS or COMPLETED) — confirm with BA.
      */
     static void assertTransition(EStatus from, EStatus to) {
-        if (from == to) {
+        if (from == to || (from == EStatus.COMPLETED && to == EStatus.IN_PROGRESS)) {
             return;
-        }
-        if (from == EStatus.COMPLETED) {
-            throw ApiException.badRequest(EEmployeeError.EMP_077);
         }
         if (to.ordinal() < from.ordinal()) {
             throw ApiException.badRequest(EEmployeeError.EMP_096, from, to);
@@ -221,7 +224,7 @@ public class ReviewService {
         return detail(r);
     }
 
-    /** Completed reviews keep only View and Update Status. */
+    /** Completed reviews keep only View and Update Status (which can reopen them). */
     @Transactional
     public void delete(Long id) {
         requireOpen(id).setDeleted(true);

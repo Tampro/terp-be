@@ -22,13 +22,15 @@ ck('conduct saves pros/cons, PENDING → IN_PROGRESS', r.s === 200 && r.data.sta
 r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'PENDING' }, t); ck('moving back → EMP_096', r.code === 'EMP_096', r.s + ' ' + r.code);
 r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'COMPLETED' }, t); ck('complete', r.s === 200 && r.data.status === 'COMPLETED', r.s + ' ' + r.code + ' ' + r.msg);
 r = await c('PUT', '/performance/reviews/' + rev.id + '/conduct', { ratings: [{ indicatorId: num(ind.id), rating: 1 }], submit: false }, t); ck('completed review read-only → EMP_077', r.code === 'EMP_077', r.s + ' ' + r.code);
+r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'IN_PROGRESS' }, t); ck('reopen COMPLETED → IN_PROGRESS', r.s === 200 && r.data.status === 'IN_PROGRESS' && r.data.completedAt == null, r.s + ' ' + r.code + ' ' + r.msg);
+r = await c('PUT', '/performance/reviews/' + rev.id + '/conduct', { ratings: [{ indicatorId: num(ind.id), rating: 5 }], submit: true }, t); ck('conduct after reopen completes again', r.s === 200 && r.data.status === 'COMPLETED', r.s + ' ' + r.code + ' ' + r.msg);
 // goals
 const gt = (await c('POST', '/performance/goal-types', { name: 'Skill' }, t)).data;
 r = await c('POST', '/performance/goals', { employeeId: eid(e1), goalTypeId: num(gt?.id), title: 'Late goal', startDate: ago(30), endDate: ago(2), target: 'Finish course', progress: 20, status: 'IN_PROGRESS' }, t);
-const g1 = r.data; ck('goal past its end shows OVERDUE', r.s === 200 && g1.status === 'OVERDUE', r.s + ' ' + r.code + ' ' + r.msg + ' ' + g1?.status);
+const g1 = r.data; ck('goal past its end keeps stored IN_PROGRESS', r.s === 200 && g1.status === 'IN_PROGRESS', r.s + ' ' + r.code + ' ' + r.msg + ' ' + g1?.status);
+await c('POST', '/performance/goals', { employeeId: eid(e1), goalTypeId: num(gt?.id), title: 'Manual overdue', startDate: today, endDate: ahead(3), target: 'x', progress: 0, status: 'OVERDUE' }, t);
 await c('POST', '/performance/goals', { employeeId: eid(e1), goalTypeId: num(gt?.id), title: 'Fresh goal', startDate: today, endDate: ahead(30), target: 'Ship it', progress: 0, status: 'NOT_STARTED' }, t);
-r = await c('GET', '/performance/goals?status=OVERDUE&employeeId=' + eid(e1), null, t); ck('filter OVERDUE → 1', r.s === 200 && r.data.content.length === 1 && r.data.content[0].title === 'Late goal', r.s + ' ' + r.code + ' ' + r.data?.content?.length);
-r = await c('POST', '/performance/goals', { employeeId: eid(e1), goalTypeId: num(gt?.id), title: 'X', startDate: today, endDate: ahead(3), target: 'x', progress: 0, status: 'OVERDUE' }, t); ck('setting OVERDUE → EMP_099', r.code === 'EMP_099', r.s + ' ' + r.code);
+r = await c('GET', '/performance/goals?status=OVERDUE&employeeId=' + eid(e1), null, t); ck('filter OVERDUE → 1', r.s === 200 && r.data.content.length === 1 && r.data.content[0].title === 'Manual overdue', r.s + ' ' + r.code + ' ' + r.data?.content?.length);
 r = await c('GET', '/performance/goals/status-counts?employeeId=' + eid(e1), null, t); ck('status counts have OVERDUE 1', r.s === 200 && show(r.data).includes('OVERDUE'), r.s + ' ' + show(r.data));
 // trainers + sessions
 r = await c('POST', '/training/trainers', { name: 'Test Trainer', contactPhone: '0900000001', email: 'trainer@example.com', experienceYears: 7, branchId: num(br.id), departmentId: num(dep.id), expertise: 'Excel', qualification: 'MOS' }, t);

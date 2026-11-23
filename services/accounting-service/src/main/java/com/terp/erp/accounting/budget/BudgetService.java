@@ -161,11 +161,13 @@ public class BudgetService {
     }
 
     /**
-     * TODO(assumption): allocations change only while the budget is DRAFT, so an approved plan stays as approved.
+     * Allocations can be added, edited and deleted on DRAFT, APPROVED and ACTIVE budgets; CLOSED is locked
+     * (aligned with reference demo 2026-11-24 (PO)). The allocated total is summed from the lines on every read;
+     * the budget amount itself is not changed, and the allocations may never exceed it (ACC_094).
      */
     @Transactional
     public AllocationDto addAllocation(Long budgetId, AllocationForm form) {
-        Budget b = requireStatus(budgetId, EBudgetStatus.DRAFT);
+        Budget b = requireAllocatable(budgetId);
         BudgetAllocation a = new BudgetAllocation();
         a.setBudgetId(b.getId());
         applyAllocation(b, a, form, -1L);
@@ -175,7 +177,7 @@ public class BudgetService {
 
     @Transactional
     public AllocationDto updateAllocation(Long budgetId, Long allocationId, AllocationForm form) {
-        Budget b = requireStatus(budgetId, EBudgetStatus.DRAFT);
+        Budget b = requireAllocatable(budgetId);
         BudgetAllocation a = requireAllocation(b, allocationId);
         applyAllocation(b, a, form, a.getId());
         return line(a, periods.require(b.getPeriodId()), b.getCompanyId());
@@ -183,7 +185,7 @@ public class BudgetService {
 
     @Transactional
     public void deleteAllocation(Long budgetId, Long allocationId) {
-        Budget b = requireStatus(budgetId, EBudgetStatus.DRAFT);
+        Budget b = requireAllocatable(budgetId);
         allocations.delete(requireAllocation(b, allocationId));
     }
 
@@ -248,6 +250,9 @@ public class BudgetService {
 
     // ---- helpers ----
 
+    private static final java.util.Set<EBudgetStatus> ALLOCATABLE =
+            java.util.EnumSet.of(EBudgetStatus.DRAFT, EBudgetStatus.APPROVED, EBudgetStatus.ACTIVE);
+
     Budget require(Long id) {
         Budget b = budgets.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> ApiException.notFound(EAccountingError.ACC_090));
@@ -261,6 +266,16 @@ public class BudgetService {
         periods.requireOpen(b.getPeriodId());
         if (b.getStatus() != status) {
             throw ApiException.badRequest(EAccountingError.ACC_091, status);
+        }
+        return b;
+    }
+
+    /** Allocations stay editable until the budget is CLOSED; the period must still be open (ACC_089). */
+    private Budget requireAllocatable(Long id) {
+        Budget b = require(id);
+        periods.requireOpen(b.getPeriodId());
+        if (!ALLOCATABLE.contains(b.getStatus())) {
+            throw ApiException.badRequest(EAccountingError.ACC_091, "DRAFT/APPROVED/ACTIVE");
         }
         return b;
     }

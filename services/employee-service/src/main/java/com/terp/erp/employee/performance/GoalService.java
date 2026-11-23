@@ -22,22 +22,18 @@ import com.terp.erp.employee.performance.PerformanceSupport.Ref;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.EnumSet;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Employee Goals page (docs/analysis/06 §7.3.2). The goal type is an active goal type of the company; end ≥ start
- * (EMP_052); no new goal for a terminated employee (EMP_058). OVERDUE is derived on read (see EStatus) and cannot be
- * set (EMP_099).
+ * (EMP_052); no new goal for a terminated employee (EMP_058). OVERDUE is a stored status set by hand like the others,
+ * not derived from the end date — aligned with reference demo 2026-11-24 (PO).
  */
 @Service
 @RequiredArgsConstructor
@@ -46,10 +42,6 @@ public class GoalService {
     private final PerformanceCatalogService catalogs;
     private final PerformanceCatalogRepository catalogItems;
     private final LifecycleSupport support;
-    private final Clock clock;
-
-    static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    static final Set<EStatus> OPEN = EnumSet.of(EStatus.NOT_STARTED, EStatus.IN_PROGRESS);
 
     /** days counts both ends, like the trip period. */
     public record GoalDto(String id, EmployeeRef employee, Ref goalType, String title, String description,
@@ -71,8 +63,8 @@ public class GoalService {
             @Schema(example = "2027-02-28", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate endDate,
             @Schema(example = "Complete 5 projects") @Size(max = 200) String target,
             @Schema(description = "0–100", example = "0") @Min(0) @Max(100) int progress,
-            @Schema(description = "NOT_STARTED, IN_PROGRESS or COMPLETED; omitted = NOT_STARTED on create, kept on "
-                    + "edit. OVERDUE is derived and refused (EMP_099)") EStatus status) {
+            @Schema(description = "NOT_STARTED, IN_PROGRESS, COMPLETED or OVERDUE (set by hand); omitted = "
+                    + "NOT_STARTED on create, kept on edit") EStatus status) {
     }
 
     public record ProgressForm(
@@ -83,12 +75,11 @@ public class GoalService {
     @Transactional(readOnly = true)
     public Page<GoalDto> search(Long requestedCompanyId, String keyword, Long employeeId, Long goalTypeId,
                                 EStatus status, Pageable pageable) {
-        LocalDate today = today();
         Page<EmployeeGoal> page = goals.search(PerformanceSupport.company(requestedCompanyId), employeeId,
-                goalTypeId, status, status == EStatus.OVERDUE, OPEN, today, DepartmentService.kw(keyword), pageable);
+                goalTypeId, status, DepartmentService.kw(keyword), pageable);
         Map<Long, EmployeeRef> people = support.refs(page.map(EmployeeGoal::getEmployeeId).toSet());
         Map<Long, String> types = names(page.map(EmployeeGoal::getGoalTypeId).toList());
-        return page.map(g -> dto(g, people.get(g.getEmployeeId()), types, today));
+        return page.map(g -> dto(g, people.get(g.getEmployeeId()), types));
     }
 
     @Transactional(readOnly = true)
@@ -97,15 +88,9 @@ public class GoalService {
         for (EStatus s : EStatus.values()) {
             by.put(s, 0L);
         }
-        Long companyId = PerformanceSupport.company(requestedCompanyId);
-        String kw = DepartmentService.kw(keyword);
-        for (Object[] r : goals.countByStatus(companyId, employeeId, goalTypeId, kw)) {
+        for (Object[] r : goals.countByStatus(PerformanceSupport.company(requestedCompanyId), employeeId, goalTypeId,
+                DepartmentService.kw(keyword))) {
             by.put((EStatus) r[0], (Long) r[1]);
-        }
-        // Overdue goals leave their stored tab for the OVERDUE one.
-        for (Object[] r : goals.countOverdue(companyId, employeeId, goalTypeId, OPEN, today(), kw)) {
-            by.merge((EStatus) r[0], -(Long) r[1], Long::sum);
-            by.merge(EStatus.OVERDUE, (Long) r[1], Long::sum);
         }
         return new StatusCounts(by.values().stream().mapToLong(Long::longValue).sum(), by);
     }
@@ -158,9 +143,6 @@ public class GoalService {
         if (g.getId() == null || !e.getId().equals(g.getEmployeeId())) {
             EmployeeExit.assertEmployed(e);
         }
-        if (f.status() == EStatus.OVERDUE) {
-            throw ApiException.badRequest(EEmployeeError.EMP_099);
-        }
         if (f.endDate().isBefore(f.startDate())) {
             throw ApiException.badRequest(EEmployeeError.EMP_052, "end date", "start date");
         }
@@ -186,23 +168,14 @@ public class GoalService {
 
     private GoalDto detail(EmployeeGoal g) {
         return dto(g, support.refs(List.of(g.getEmployeeId())).get(g.getEmployeeId()),
-                names(List.of(g.getGoalTypeId())), today());
+                names(List.of(g.getGoalTypeId())));
     }
 
-    private LocalDate today() {
-        return LocalDate.now(clock.withZone(ZONE));
-    }
-
-    /** The status shown: OVERDUE for an open goal past its end date. */
-    static EStatus shown(EmployeeGoal g, LocalDate today) {
-        return OPEN.contains(g.getStatus()) && g.getEndDate().isBefore(today) ? EStatus.OVERDUE : g.getStatus();
-    }
-
-    private static GoalDto dto(EmployeeGoal g, EmployeeRef employee, Map<Long, String> types, LocalDate today) {
+    private static GoalDto dto(EmployeeGoal g, EmployeeRef employee, Map<Long, String> types) {
         return new GoalDto(g.getId().toString(), employee, new Ref(g.getGoalTypeId().toString(),
                 types.get(g.getGoalTypeId())), g.getTitle(), g.getDescription(), g.getStartDate(), g.getEndDate(),
                 ChronoUnit.DAYS.between(g.getStartDate(), g.getEndDate()) + 1, g.getTarget(), g.getProgress(),
-                shown(g, today), g.getCreatedDate(), g.getUpdatedDate());
+                g.getStatus(), g.getCreatedDate(), g.getUpdatedDate());
     }
 
     private EmployeeGoal require(Long id) {
