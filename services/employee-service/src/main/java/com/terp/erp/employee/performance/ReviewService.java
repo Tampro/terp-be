@@ -48,7 +48,8 @@ import java.util.stream.Collectors;
  * COMPLETED) needs every indicator rated (EMP_079). Status moves PENDING -> IN_PROGRESS -> COMPLETED (EMP_096 for
  * other steps back); the first saved conduct starts a PENDING review. A COMPLETED review is read-only (EMP_077) until
  * Update Status reopens it to IN_PROGRESS; then edit and conduct work again — aligned with reference demo 2026-11-24
- * (PO).
+ * (PO). PENDING or IN_PROGRESS can be CANCELLED (final, read-only like COMPLETED, still deletable) — reference product +
+ * PO 2026-11-24.
  */
 @Service
 @RequiredArgsConstructor
@@ -90,7 +91,8 @@ public class ReviewService {
             @Schema(description = "Entry of /performance/review-cycles", example = "3",
                     requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Long reviewCycleId,
             @Schema(example = "2026-12-01", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull LocalDate reviewDate,
-            @Schema(description = "PENDING or IN_PROGRESS; omitted = PENDING on create, kept on edit; never moves back")
+            @Schema(description = "PENDING or IN_PROGRESS; omitted = PENDING on create, kept on edit; never moves back. "
+                    + "CANCELLED only through Update Status")
             EStatus status) {
     }
 
@@ -156,7 +158,7 @@ public class ReviewService {
         return detail(reviews.save(r));
     }
 
-    /** Full replacement of the schedule while not completed (reopen first); status omitted = kept. */
+    /** Full replacement of the schedule while not completed/cancelled (reopen first); status omitted = kept. */
     @Transactional
     public ReviewDto update(Long id, ScheduleForm form) {
         EmployeeReview r = requireOpen(id);
@@ -182,11 +184,19 @@ public class ReviewService {
     }
 
     /**
-     * Forward, plus COMPLETED -> IN_PROGRESS (reopen) — aligned with reference demo 2026-11-24 (PO).
+     * Forward, plus COMPLETED -> IN_PROGRESS (reopen) — aligned with reference demo 2026-11-24 (PO); PENDING or
+     * IN_PROGRESS -> CANCELLED, nothing out of CANCELLED (reference product + PO 2026-11-24).
      * TODO(assumption): no step back to PENDING (from IN_PROGRESS or COMPLETED) — confirm with BA.
      */
     static void assertTransition(EStatus from, EStatus to) {
         if (from == to || (from == EStatus.COMPLETED && to == EStatus.IN_PROGRESS)) {
+            return;
+        }
+        // reference product + PO 2026-11-24: only an open review can be cancelled, and a cancelled one is final
+        if (from == EStatus.CANCELLED || to == EStatus.CANCELLED) {
+            if (from == EStatus.CANCELLED || from == EStatus.COMPLETED) {
+                throw ApiException.badRequest(EEmployeeError.EMP_096, from, to);
+            }
             return;
         }
         if (to.ordinal() < from.ordinal()) {
@@ -224,10 +234,17 @@ public class ReviewService {
         return detail(r);
     }
 
-    /** Completed reviews keep only View and Update Status (which can reopen them). */
+    /**
+     * Completed reviews keep only View and Update Status (which can reopen them). A cancelled review is deletable
+     * like a pending one: it was never completed, so nothing is lost (reference product + PO 2026-11-24).
+     */
     @Transactional
     public void delete(Long id) {
-        requireOpen(id).setDeleted(true);
+        EmployeeReview r = require(id);
+        if (r.getStatus() == EStatus.COMPLETED) {
+            throw ApiException.badRequest(EEmployeeError.EMP_077);
+        }
+        r.setDeleted(true);
     }
 
     private void complete(EmployeeReview r, List<ReviewRating> rows) {
@@ -295,6 +312,11 @@ public class ReviewService {
         if (f.status() == EStatus.COMPLETED) {
             throw ApiException.badRequest(EEmployeeError.EMP_079);
         }
+        if (f.status() == EStatus.CANCELLED) {
+            // cancelling is an Update Status action, not part of scheduling
+            throw ApiException.badRequest(EEmployeeError.EMP_096,
+                    r.getStatus() == null ? EStatus.PENDING : r.getStatus(), f.status());
+        }
         r.setReviewCycleId(cycles.usable(f.reviewCycleId(), e.getCompanyId(), r.getReviewCycleId()).getId());
         r.setCompanyId(e.getCompanyId());
         r.setEmployeeId(e.getId());
@@ -352,7 +374,7 @@ public class ReviewService {
 
     private EmployeeReview requireOpen(Long id) {
         EmployeeReview r = require(id);
-        if (r.getStatus() == EStatus.COMPLETED) {
+        if (r.getStatus() == EStatus.COMPLETED || r.getStatus() == EStatus.CANCELLED) {
             throw ApiException.badRequest(EEmployeeError.EMP_077);
         }
         return r;

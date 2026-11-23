@@ -135,6 +135,59 @@ class PosServiceTest {
         });
     }
 
+    @Test
+    void posViewPrintsAnotherCashiersReceipt() {
+        PosOrder paid = paidOrder(10L, "kc-other");
+        when(orders.findById(60L)).thenReturn(Optional.of(paid));
+        TestLogin.as(10L, "POS_VIEW");
+        PosService.Receipt r = service.receipt(60L);
+        assertThat(r.fileName()).isEqualTo("RCPT-2026-11-001.pdf");
+        assertThat(r.pdf()).isNotEmpty();
+    }
+
+    @Test
+    void sellOnlyCashierPrintsOwnReceipt() {
+        PosOrder paid = paidOrder(10L, "kc-5");
+        when(orders.findById(60L)).thenReturn(Optional.of(paid));
+        TestLogin.as(10L, "POS_SELL");
+        assertThat(service.receipt(60L).pdf()).isNotEmpty();
+    }
+
+    @Test
+    void sellOnlyCashierCannotPrintAnotherCashiersReceipt() {
+        PosOrder paid = paidOrder(10L, "kc-other");
+        when(orders.findById(60L)).thenReturn(Optional.of(paid));
+        TestLogin.as(10L, "POS_SELL");
+        assertNotFound(() -> service.receipt(60L));
+    }
+
+    @Test
+    void receiptOfAnotherCompanyIsNotFound() {
+        PosOrder paid = paidOrder(10L, "kc-5");
+        when(orders.findById(60L)).thenReturn(Optional.of(paid));
+        TestLogin.as(20L, "POS_VIEW", "POS_SELL");
+        assertNotFound(() -> service.receipt(60L));
+    }
+
+    /** A paid order as checkout leaves it, created by {@code sub}. */
+    private PosOrder paidOrder(Long companyId, String sub) {
+        TestLogin.as(companyId, "POS_SELL");
+        service.checkout(cart(7L, null, List.of(new CartLine(1L, BigDecimal.ONE))));
+        org.mockito.ArgumentCaptor<PosOrder> c = org.mockito.ArgumentCaptor.forClass(PosOrder.class);
+        verify(orders).saveAndFlush(c.capture());
+        PosOrder o = c.getValue();
+        o.setCreatedBy(sub);
+        SecurityContextHolder.clearContext();
+        return o;
+    }
+
+    private static void assertNotFound(Runnable r) {
+        assertThatThrownBy(r::run).isInstanceOf(ApiException.class).satisfies(e -> {
+            assertThat(((ApiException) e).getErrorCode()).isEqualTo(EPosError.POS_001);
+            assertThat(((ApiException) e).getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+        });
+    }
+
     private static CartForm cart(Long bank, BigDecimal discount, List<CartLine> lines) {
         return new CartForm(null, null, 2L, bank, discount, lines);
     }

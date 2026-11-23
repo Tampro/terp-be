@@ -34,6 +34,8 @@ import java.util.Objects;
  * Budgets (manual §14, FR-BUD-002..004): DRAFT (edit, delete, allocations) → approve → APPROVED → activate →
  * ACTIVE → close → CLOSED; nothing changes once the period is CLOSED (ACC_089). Spent per allocation = counted
  * journal debits − credits on the account and its children dated inside the period, computed on read.
+ * The budget amount is the sum of its allocations (no cap), stored on the budget and recomputed on every allocation
+ * add/edit/delete so lists stay a single-table read (reference product + PO 2026-11-24).
  */
 @Service
 @RequiredArgsConstructor
@@ -53,9 +55,9 @@ public class BudgetService {
             @Size(max = 255) String name,
             @Schema(example = "1", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Long periodId,
             @Schema(example = "OPERATIONAL", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EBudgetType type,
-            @Schema(description = "Total; allocations may not exceed it", example = "500000000",
-                    requiredMode = Schema.RequiredMode.REQUIRED) @NotNull
-            @DecimalMin(value = "0", inclusive = false) @Digits(integer = 15, fraction = 4) BigDecimal amount,
+            @Schema(description = "Deprecated and ignored: the budget amount is the sum of its allocations "
+                    + "(a new budget starts at 0). Kept only so existing clients that still send it are accepted.",
+                    deprecated = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED) BigDecimal amount,
             @Schema(example = "Office and selling costs") @Size(max = 1000) String description) {
     }
 
@@ -108,19 +110,16 @@ public class BudgetService {
         Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
         Budget b = new Budget();
         b.setCompanyId(companyId);
+        b.setAmount(BigDecimal.ZERO);
         apply(b, form);
         return dto(budgets.save(b));
     }
 
-    /** Full replacement; DRAFT only; the amount cannot fall below the allocations (ACC_094). */
+    /** Full replacement of name/period/type/description; DRAFT only; the amount stays the allocations' sum. */
     @Transactional
     public BudgetDto update(Long id, BudgetForm form) {
         Budget b = requireStatus(id, EBudgetStatus.DRAFT);
         apply(b, form);
-        BigDecimal allocated = allocatedTotal(b.getId(), null);
-        if (allocated.compareTo(b.getAmount()) > 0) {
-            throw ApiException.badRequest(EAccountingError.ACC_094, allocated, b.getAmount());
-        }
         return dto(b);
     }
 
@@ -162,8 +161,8 @@ public class BudgetService {
 
     /**
      * Allocations can be added, edited and deleted on DRAFT, APPROVED and ACTIVE budgets; CLOSED is locked
-     * (aligned with reference demo 2026-11-24 (PO)). The allocated total is summed from the lines on every read;
-     * the budget amount itself is not changed, and the allocations may never exceed it (ACC_094).
+     * (aligned with reference demo 2026-11-24 (PO)). Each change recomputes the budget amount as the sum of the
+     * allocations, with no cap (reference product + PO 2026-11-24; ACC_094 is no longer thrown).
      */
     @Transactional
     public AllocationDto addAllocation(Long budgetId, AllocationForm form) {
@@ -172,6 +171,7 @@ public class BudgetService {
         a.setBudgetId(b.getId());
         applyAllocation(b, a, form, -1L);
         a = allocations.save(a);
+        recomputeAmount(b);
         return line(a, periods.require(b.getPeriodId()), b.getCompanyId());
     }
 
@@ -180,13 +180,21 @@ public class BudgetService {
         Budget b = requireAllocatable(budgetId);
         BudgetAllocation a = requireAllocation(b, allocationId);
         applyAllocation(b, a, form, a.getId());
+        recomputeAmount(b);
         return line(a, periods.require(b.getPeriodId()), b.getCompanyId());
     }
 
     @Transactional
     public void deleteAllocation(Long budgetId, Long allocationId) {
         Budget b = requireAllocatable(budgetId);
-        allocations.delete(requireAllocation(b, allocationId));
+        BudgetAllocation a = requireAllocation(b, allocationId);
+        allocations.delete(a);
+        b.setAmount(allocatedTotal(b.getId(), a.getId()));
+    }
+
+    /** Budget amount = sum of its allocations (reference product + PO 2026-11-24). */
+    private void recomputeAmount(Budget b) {
+        b.setAmount(allocatedTotal(b.getId(), null));
     }
 
     // ---- monitoring ----
@@ -299,7 +307,6 @@ public class BudgetService {
         b.setName(f.name().trim());
         b.setPeriodId(p.getId());
         b.setType(f.type());
-        b.setAmount(f.amount());
         b.setDescription(f.description() == null || f.description().isBlank() ? null : f.description().trim());
     }
 
@@ -327,10 +334,6 @@ public class BudgetService {
                         .orElse(other.getAccountId().toString());
                 throw ApiException.badRequest(EAccountingError.ACC_097, acc.getCode(), otherCode);
             }
-        }
-        BigDecimal total = allocatedTotal(b.getId(), selfId).add(f.allocated());
-        if (total.compareTo(b.getAmount()) > 0) {
-            throw ApiException.badRequest(EAccountingError.ACC_094, total, b.getAmount());
         }
         a.setAccountId(acc.getId());
         a.setAllocated(f.allocated());

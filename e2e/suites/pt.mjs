@@ -24,6 +24,13 @@ r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'COMP
 r = await c('PUT', '/performance/reviews/' + rev.id + '/conduct', { ratings: [{ indicatorId: num(ind.id), rating: 1 }], submit: false }, t); ck('completed review read-only → EMP_077', r.code === 'EMP_077', r.s + ' ' + r.code);
 r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'IN_PROGRESS' }, t); ck('reopen COMPLETED → IN_PROGRESS', r.s === 200 && r.data.status === 'IN_PROGRESS' && r.data.completedAt == null, r.s + ' ' + r.code + ' ' + r.msg);
 r = await c('PUT', '/performance/reviews/' + rev.id + '/conduct', { ratings: [{ indicatorId: num(ind.id), rating: 5 }], submit: true }, t); ck('conduct after reopen completes again', r.s === 200 && r.data.status === 'COMPLETED', r.s + ' ' + r.code + ' ' + r.msg);
+// cancel (reference product + PO 2026-11-24): an open review can be cancelled, then it is read-only and final
+const rev2 = (await c('POST', '/performance/reviews', { employeeId: eid(e1), reviewerId: eid(e2), reviewCycleId: num(cyc?.id), reviewDate: today }, t)).data;
+r = await c('PUT', '/performance/reviews/' + rev2?.id + '/status', { status: 'CANCELLED' }, t); ck('cancel PENDING review', r.s === 200 && r.data.status === 'CANCELLED', r.s + ' ' + r.code + ' ' + r.msg);
+r = await c('PUT', '/performance/reviews/' + rev2?.id + '/conduct', { ratings: [{ indicatorId: num(ind.id), rating: 3 }], submit: false }, t); ck('conduct cancelled review → EMP_077', r.s === 400 && r.code === 'EMP_077', r.s + ' ' + r.code);
+r = await c('PUT', '/performance/reviews/' + rev2?.id + '/status', { status: 'IN_PROGRESS' }, t); ck('cancelled → IN_PROGRESS → EMP_096', r.s === 400 && r.code === 'EMP_096', r.s + ' ' + r.code);
+r = await c('PUT', '/performance/reviews/' + rev.id + '/status', { status: 'CANCELLED' }, t); ck('completed → CANCELLED → EMP_096', r.s === 400 && r.code === 'EMP_096', r.s + ' ' + r.code);
+r = await c('DELETE', '/performance/reviews/' + rev2?.id, null, t); ck('delete cancelled review', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
 // goals
 const gt = (await c('POST', '/performance/goal-types', { name: 'Skill' }, t)).data;
 r = await c('POST', '/performance/goals', { employeeId: eid(e1), goalTypeId: num(gt?.id), title: 'Late goal', startDate: ago(30), endDate: ago(2), target: 'Finish course', progress: 20, status: 'IN_PROGRESS' }, t);

@@ -19,6 +19,7 @@ import com.terp.erp.commerce.client.InventoryClient;
 import com.terp.erp.commerce.common.EPosError;
 import com.terp.erp.commerce.common.Money;
 import com.terp.erp.commerce.common.Numbering;
+import com.terp.erp.commerce.common.Ownership;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 
@@ -124,10 +125,20 @@ public class PosService {
             List<@Valid @NotNull LabelLine> items) {
     }
 
-    /** The receipt PDF of an order. */
+    /** A receipt PDF and the file name it is served under ({@code <receipt number>.pdf}). */
+    public record Receipt(byte[] pdf, String fileName) {
+    }
+
+    /**
+     * Receipt (re)print. POS_VIEW (or super admin) prints any order of the company; a cashier with only POS_SELL
+     * prints only orders they created ({@code created_by} = their Keycloak sub). Another cashier's order answers 404
+     * (POS_001), like another company's, so its existence is not confirmed.
+     */
     @Transactional(readOnly = true)
-    public byte[] receiptPdf(Long id) {
-        return PosPdf.receipt(OrderDetail.of(require(id)));
+    public Receipt receipt(Long id) {
+        PosOrder o = require(id);
+        Ownership.check(Ownership.owner("POS_VIEW", "POS_SELL"), o.getCreatedBy(), EPosError.POS_001);
+        return new Receipt(PosPdf.receipt(OrderDetail.of(o)), o.getReceiptNumber() + ".pdf");
     }
 
     /** Label sheet: each item's SKU as Code 128, repeated copies times (at most MAX_LABELS labels in all). */
