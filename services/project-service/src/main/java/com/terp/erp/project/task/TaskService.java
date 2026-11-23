@@ -11,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.project.common.EProjectError;
 import com.terp.erp.project.project.ActivityService;
 import com.terp.erp.project.project.Milestone;
@@ -53,6 +55,7 @@ public class TaskService {
     private final SubtaskRepository subtasks;
     private final TaskCommentRepository comments;
     private final ActivityService activity;
+    private final OutboxPublisher outbox;
 
     public record TaskForm(
             @Schema(description = "Milestone of the same project") Long milestoneId,
@@ -188,6 +191,10 @@ public class TaskService {
         t.setPosition(tasks.maxPosition(p.getId(), stage.getId()) + 1);
         tasks.save(t);
         activity.log(p.getCompanyId(), p.getId(), "TASK_CREATED", t.getTitle());
+        outbox.publish(p.getCompanyId(), "project.task.created", "TASK", t.getId(), Payload.of(
+                "taskId", t.getId(), "title", t.getTitle(), "projectId", p.getId(), "projectName", p.getName(),
+                "priority", t.getPriority().name(), "dueDate", t.getDueDate() == null ? null : t.getDueDate().toString(),
+                "recipientUserIds", Payload.ids(t.getAssigneeIds())));
         return new Ctx(stages.ordered(p.getCompanyId(), EStageKind.TASK)).dto(t);
     }
 
@@ -219,6 +226,9 @@ public class TaskService {
         Ctx ctx = new Ctx(stages.ordered(t.getCompanyId(), EStageKind.TASK));
         if (!target.getId().equals(from)) {
             activity.log(t.getCompanyId(), t.getProjectId(), "TASK_MOVED", t.getTitle() + " -> " + target.getName());
+            outbox.publish(t.getCompanyId(), "project.task.moved", "TASK", t.getId(), Payload.of(
+                    "taskId", t.getId(), "title", t.getTitle(), "projectId", t.getProjectId(),
+                    "fromStageId", from, "toStageId", target.getId(), "toStageName", target.getName()));
         }
         return ctx.dto(t);
     }
@@ -275,6 +285,10 @@ public class TaskService {
         c.setBody(f.body().trim());
         comments.save(c);
         activity.log(t.getCompanyId(), t.getProjectId(), "TASK_COMMENTED", t.getTitle());
+        // The comment body stays out of the event: it may hold internal notes.
+        outbox.publish(t.getCompanyId(), "project.task.commented", "TASK", t.getId(), Payload.of(
+                "taskId", t.getId(), "title", t.getTitle(), "projectId", t.getProjectId(),
+                "commentId", c.getId(), "authorUserId", c.getAuthorUserId()));
         return CommentDto.of(c);
     }
 

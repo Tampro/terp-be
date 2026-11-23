@@ -1,5 +1,6 @@
 package com.terp.erp.recruitment.offer;
 
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class OfferConversionServiceTest {
@@ -53,12 +55,13 @@ class OfferConversionServiceTest {
     private final OrgClient org = mock(OrgClient.class);
     private final OfferTemplateRepository templateRepo = mock(OfferTemplateRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-19T17:30:00Z"), ZoneOffset.UTC);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final OfferService offerService = new OfferService(offers, candidateService, candidates,
             mock(JobPostingService.class), postings, mock(CatalogItemRepository.class), org, employees, clock);
     private final OfferConversionService service = new OfferConversionService(offerService, candidateService,
-            employees, clock);
+            employees, clock, outbox);
     private final OfferLetterService letters = new OfferLetterService(offerService,
-            new OfferTemplateService(templateRepo), candidates, postings, mock(CareerSettingsRepository.class), org);
+            new OfferTemplateService(templateRepo), candidates, postings, mock(CareerSettingsRepository.class), org, outbox);
 
     private Candidate candidate;
     private Offer offer;
@@ -107,6 +110,11 @@ class OfferConversionServiceTest {
         assertThat(profile).containsEntry("fullName", "Test Candidate").containsEntry("dateOfJoining", "2027-01-04")
                 .containsEntry("departmentId", 3L).containsEntry("employmentType", "FULL_TIME")
                 .containsEntry("status", "PROBATION");
+        var event = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq(10L), eq("recruitment.candidate.converted"), eq("CANDIDATE"), eq(7L), event.capture());
+        assertThat((Map<String, Object>) event.getValue())
+                .containsKeys("candidateId", "title", "name", "offerId", "employeeId", "jobPostingId")
+                .containsEntry("employeeId", "55");
         // once only
         assertCode(() -> service.convert(9L, form()), ERecruitmentError.REC_061);
     }
@@ -161,6 +169,53 @@ class OfferConversionServiceTest {
         // another company's template
         t.setCompanyId(11L);
         assertCode(() -> letters.letter(9L, 4L), ERecruitmentError.REC_032);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sendLetterPublishesThePlainTextToTheCandidate() {
+        OfferTemplate t = template(10L);
+        when(templateRepo.findByIdAndDeletedFalse(4L)).thenReturn(Optional.of(t));
+        when(outbox.publish(any(), any(), any(), any(), any())).thenReturn("evt-1");
+        for (Offer.EStatus ok : List.of(Offer.EStatus.SENT, Offer.EStatus.NEGOTIATING, Offer.EStatus.ACCEPTED)) {
+            offer.setStatus(ok);
+            assertThat(letters.send(9L, 4L)).isEqualTo(new OfferLetterService.LetterSent("9", "evt-1"));
+        }
+        var event = ArgumentCaptor.forClass(Object.class);
+        verify(outbox, times(3)).publish(eq(10L), eq("recruitment.offer.letter_sent"), eq("OFFER"),
+                eq(9L), event.capture());
+        Map<String, Object> m = (Map<String, Object>) event.getValue();
+        assertThat(m).containsKeys("offerId", "title", "candidateId", "candidateName", "jobTitle", "templateId")
+                .containsEntry("recipientEmail", "test.candidate@example.invalid")
+                .containsEntry("letterText", "Dear Test Candidate,\n\nWelcome aboard.");
+    }
+
+    @Test
+    void sendLetterRules() {
+        when(templateRepo.findByIdAndDeletedFalse(4L)).thenReturn(Optional.of(template(10L)));
+        for (Offer.EStatus bad : List.of(Offer.EStatus.DRAFT, Offer.EStatus.DECLINED, Offer.EStatus.EXPIRED)) {
+            offer.setStatus(bad);
+            assertCode(() -> letters.send(9L, 4L), ERecruitmentError.REC_068);
+        }
+        offer.setStatus(Offer.EStatus.SENT);
+        when(templateRepo.findByIdAndDeletedFalse(4L)).thenReturn(Optional.of(template(11L)));
+        assertCode(() -> letters.send(9L, 4L), ERecruitmentError.REC_032);
+        offer.setCompanyId(11L);
+        assertCode(() -> letters.send(9L, 4L), ERecruitmentError.REC_035);
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
+        // the 20 KB cap never splits a multi-byte character
+        String cut = OfferLetterService.truncate("\u1EA0".repeat(10_000), OfferLetterService.MAX_LETTER_BYTES);
+        assertThat(cut.getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(20 * 1024).isGreaterThan(20 * 1024 - 3);
+    }
+
+    private static OfferTemplate template(Long companyId) {
+        OfferTemplate t = new OfferTemplate();
+        t.setId(4L);
+        t.setCompanyId(companyId);
+        t.setName("Standard offer");
+        t.setContent("<p>Dear {{candidate_name}},</p><p>Welcome aboard.</p>");
+        t.setVariables(new java.util.ArrayList<>(List.of("candidate_name")));
+        return t;
     }
 
     private static ConvertForm form() {

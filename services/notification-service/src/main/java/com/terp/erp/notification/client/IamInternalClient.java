@@ -40,14 +40,36 @@ public class IamInternalClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Webhook(String id, String url, String secret) {
+    public record Twilio(String accountSid, String authToken, String fromNumber) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Webhook(String id, String url, String secret) {
+    }
+
+    /**
+     * …EnabledForEvent: the company's per-event switch of that chat channel; null (an IAM without the switch) = on.
+     * twilio: null when SMS is off.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
-                                     Slack slack, Telegram telegram, List<Webhook> webhooks) {
+                                     Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
+                                     Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
+                                     Boolean smsEnabledForEvent) {
         public List<Webhook> webhooks() {
             return webhooks == null ? List.of() : webhooks;
+        }
+
+        public boolean slackOn() {
+            return !Boolean.FALSE.equals(slackEnabledForEvent);
+        }
+
+        public boolean telegramOn() {
+            return !Boolean.FALSE.equals(telegramEnabledForEvent);
+        }
+
+        public boolean smsOn() {
+            return !Boolean.FALSE.equals(smsEnabledForEvent);
         }
     }
 
@@ -68,10 +90,12 @@ public class IamInternalClient {
         this.mapper = mapper;
     }
 
-    /** eventCode / webhookEvent may be null. */
-    public NotificationConfig config(Long companyId, String eventCode, String webhookEvent) {
-        JsonNode data = get("/api/v1/internal/notification-config?companyId={c}&eventCode={e}&webhookEvent={w}",
-                companyId, eventCode == null ? "" : eventCode, webhookEvent == null ? "" : webhookEvent)
+    /** eventCode / webhookEvent may be null; eventType (routing key) selects the per-event chat switches. */
+    public NotificationConfig config(Long companyId, String eventType, String eventCode, String webhookEvent) {
+        JsonNode data = get("/api/v1/internal/notification-config?companyId={c}&eventType={t}&eventCode={e}"
+                        + "&webhookEvent={w}",
+                companyId, eventType == null ? "" : eventType, eventCode == null ? "" : eventCode,
+                webhookEvent == null ? "" : webhookEvent)
                 .orElseThrow(() -> new ApiException(HttpStatus.SERVICE_UNAVAILABLE, ENotificationError.NTF_004));
         return mapper.convertValue(data, NotificationConfig.class);
     }

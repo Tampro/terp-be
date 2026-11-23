@@ -326,7 +326,8 @@ public class PaymentService {
                     "paymentId", p.getId(), "number", p.getNumber(), "vendorId", p.getPartyId(),
                     "vendorName", p.getPartyName(), "amount", p.getAmount(), "paymentDate", p.getPaymentDate(),
                     "invoiceIds", p.getAllocations().stream().map(PaymentAllocation::getInvoiceId).toList(),
-                    "allocations", allocations));
+                    "allocations", allocations,
+                    "recipientEmail", vendors.require(p.getPartyId()).getEmail()));
         }
         return PaymentDto.of(p);
     }

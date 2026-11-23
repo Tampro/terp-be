@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.employee.common.EEmployeeError;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.employee.org.Branch;
 import com.terp.erp.employee.org.BranchRepository;
 import com.terp.erp.employee.org.Department;
@@ -40,6 +42,7 @@ public class TrainerService {
     private final TrainingSessionRepository sessions;
     private final BranchRepository branches;
     private final DepartmentRepository departments;
+    private final OutboxPublisher outbox;
 
     public record TrainerDto(String id, String name, String contactPhone, String email, Integer experienceYears,
                              Ref branch, Ref department, String expertise, String qualification, boolean active,
@@ -86,7 +89,13 @@ public class TrainerService {
         Trainer t = new Trainer();
         t.setCompanyId(TrainingSupport.company(requestedCompanyId));
         apply(t, form);
-        return detail(trainers.save(t));
+        Trainer saved = trainers.save(t);
+        // webhook NEW_TRAINER; no recipient (contact phone/email of the trainer are not sent)
+        outbox.publish(saved.getCompanyId(), "employee.trainer.created", "TRAINER", saved.getId(), Payload.of(
+                "trainerId", saved.getId(), "title", saved.getName(), "name", saved.getName(),
+                "expertise", saved.getExpertise(), "branchId", saved.getBranchId(),
+                "departmentId", saved.getDepartmentId()));
+        return detail(saved);
     }
 
     /** Full replacement; active omitted = true. */

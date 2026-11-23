@@ -34,7 +34,7 @@ class StockServiceTest {
     private final ItemRepository items = mock(ItemRepository.class);
     private final WarehouseRepository warehouseRows = mock(WarehouseRepository.class);
     private final StockService service = new StockService(stocks, movements, items, warehouseRows,
-            new WarehouseService(warehouseRows, stocks));
+            new WarehouseService(warehouseRows, stocks, org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class)));
     private final Item mouse = item(1L, "MOUSE-01");
     private final Item cable = item(2L, "CABLE-01");
     private final WarehouseStock mouseStock = stock(1L, "5");

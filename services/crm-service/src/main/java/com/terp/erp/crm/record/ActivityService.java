@@ -21,6 +21,8 @@ import com.terp.erp.crm.record.CrmEnums.ETaskStatus;
 import com.terp.erp.crm.setup.Label;
 import com.terp.erp.crm.setup.SetupService;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.OwnScope;
 import com.terp.erp.security.TenantGuard;
@@ -53,6 +55,7 @@ public class ActivityService {
     private final InventoryClient inventory;
     private final AccountingClient accounting;
     private final MediaClient media;
+    private final OutboxPublisher outbox;
 
     /** A lead or deal the caller may touch: its company and pipeline. */
     public record Subject(ESubject type, Long id, Long companyId, Long pipelineId) {
@@ -258,6 +261,13 @@ public class ActivityService {
         apply(t, f);
         tasks.save(t);
         log(s, "Task added", t.getName());
+        // TODO(assumption): a CRM task has no assignee column; the people responsible for the lead (owner) or the
+        // deal (MEMBER links) are told instead.
+        outbox.publish(s.companyId(), "crm.task.created", "CRM_TASK", t.getId(), Payload.of("taskId", t.getId(),
+                "title", t.getName(), "subjectType", s.type().name(), "subjectId", s.id(),
+                "subjectName", subjectName(s), "date", t.getTaskDate() == null ? null : t.getTaskDate().toString(),
+                "time", t.getTaskTime() == null ? null : t.getTaskTime().toString(),
+                "priority", t.getPriority().name(), "recipientUserIds", Payload.ids(responsible(s))));
         return TaskDto.of(t);
     }
 
@@ -331,7 +341,13 @@ public class ActivityService {
     /** Logged on the record only: no email is sent (ERP manual lists sending; out of scope here). */
     @Transactional
     public EntryDto addEmail(Subject s, EmailForm f) {
-        return EntryDto.of(entry(s, EEntryType.EMAIL, f.subject().trim(), f.body(), f.to().trim(), null));
+        CrmEntry e = entry(s, EEntryType.EMAIL, f.subject().trim(), f.body(), f.to().trim(), null);
+        // notification-service sends it to the address the user typed (LEAD_EMAIL / DEAL_EMAIL).
+        boolean lead = s.type() == ESubject.LEAD;
+        outbox.publish(s.companyId(), lead ? "crm.lead.emailed" : "crm.deal.emailed", lead ? "LEAD" : "DEAL", s.id(),
+                Payload.of(lead ? "leadId" : "dealId", s.id(), "title", subjectName(s), "entryId", e.getId(),
+                        "subject", e.getTitle(), "body", e.getBody(), "recipientEmail", e.getEmailTo()));
+        return EntryDto.of(e);
     }
 
     @Transactional
@@ -432,6 +448,22 @@ public class ActivityService {
                 entries.save(c);
             }
         }
+    }
+
+    private String subjectName(Subject s) {
+        return s.type() == ESubject.LEAD
+                ? leads.findById(s.id()).map(Lead::getName).orElse(null)
+                : deals.findById(s.id()).map(Deal::getName).orElse(null);
+    }
+
+    /** The lead owner, or the deal's MEMBER users. */
+    private List<Long> responsible(Subject s) {
+        if (s.type() == ESubject.LEAD) {
+            Long owner = leads.findById(s.id()).map(Lead::getOwnerUserId).orElse(null);
+            return owner == null ? List.of() : List.of(owner);
+        }
+        return links.findBySubjectTypeAndSubjectIdOrderByIdAsc(ESubject.DEAL, s.id()).stream()
+                .filter(l -> l.getLinkType() == ELinkType.MEMBER).map(CrmLink::getRefId).toList();
     }
 
     private CrmEntry entry(Subject s, EEntryType type, String title, String body, String to, Long fileId) {

@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261121110000_zoom_meeting_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122340000_zoom_meeting_options_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123400000_outbox_changelog.mysql.sql

@@ -50,7 +50,9 @@ class DeliveryDispatcherTest {
     private final NotificationProperties props = new NotificationProperties("http://iam", "erp.events", "q", "dlq",
             3, Duration.ofMinutes(1), Duration.ofMinutes(10), 50);
     private final DeliveryDispatcher dispatcher = new DeliveryDispatcher(deliveries, processed, iam, email,
-            new ChatChannel(guard, http, mapper), new WebhookChannel(guard, http, mapper, clock), props, mapper,
+            new ChatChannel(guard, http, mapper), new WebhookChannel(guard, http, mapper, clock),
+            new com.terp.erp.notification.channel.SmsChannel(guard,
+                    mock(com.terp.erp.notification.channel.FormHttp.class)), props, mapper,
             clock);
     private final Smtp smtp = new Smtp("smtp.example.com", 587, null, null, "TLS", "noreply@example.com", null);
 
@@ -80,8 +82,9 @@ class DeliveryDispatcherTest {
     void anEmailIsSentInTheCompanyLanguage() {
         Delivery d = delivery(1, EChannel.EMAIL);
         d.setRecipientRef("payload");
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null))
-                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, null, List.of(),
+                        null, null, null));
         when(email.send(any(), anyString(), anyString(), anyString())).thenReturn(SendResult.ok());
 
         dispatcher.dispatch(List.of(1L));
@@ -97,8 +100,9 @@ class DeliveryDispatcherTest {
     void aSwitchTurnedOffSinceTheEventSkipsTheEmail() {
         Delivery d = delivery(1, EChannel.EMAIL);
         d.setRecipientRef("payload");
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null))
-                .thenReturn(new NotificationConfig("7", "en", false, null, null, null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "en", false, null, null, null, null, List.of(),
+                        null, null, null));
 
         dispatcher.dispatch(List.of(1L));
 
@@ -111,8 +115,9 @@ class DeliveryDispatcherTest {
     void aRetryableFailureBacksOffThenFails() {
         Delivery d = delivery(1, EChannel.EMAIL);
         d.setRecipientRef("payload");
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null))
-                .thenReturn(new NotificationConfig("7", "vi", true, smtp, null, null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "vi", true, smtp, null, null, null, List.of(),
+                        null, null, null));
         when(email.send(any(), anyString(), anyString(), anyString())).thenReturn(SendResult.retry("SMTP_ERROR"));
 
         dispatcher.dispatch(List.of(1L));
@@ -132,8 +137,9 @@ class DeliveryDispatcherTest {
         Delivery d = delivery(2, EChannel.SLACK);
         d.setEventType("support.ticket.created");
         // The fake DNS resolves every name to 10.1.1.1 (private): the guard refuses before any connection.
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null)).thenReturn(new NotificationConfig("7", "en", true, smtp,
-                new IamInternalClient.Slack("https://hooks.slack.com/services/x"), null, List.of()));
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null)).thenReturn(
+                new NotificationConfig("7", "en", true, smtp, new IamInternalClient.Slack(
+                        "https://hooks.slack.com/services/x"), null, null, List.of(), null, null, null));
 
         dispatcher.dispatch(List.of(2L));
 
@@ -145,7 +151,8 @@ class DeliveryDispatcherTest {
     @Test
     void iamDownKeepsTheDeliveryPending() {
         Delivery d = delivery(1, EChannel.EMAIL);
-        when(iam.config(7L, "SUPPORT_TICKET_CREATED", null)).thenThrow(new com.terp.erp.exception.ApiException(
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null)).thenThrow(
+                new com.terp.erp.exception.ApiException(
                 org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
                 com.terp.erp.notification.common.ENotificationError.NTF_004));
 
@@ -154,5 +161,19 @@ class DeliveryDispatcherTest {
         assertThat(d.getStatus()).isEqualTo(EStatus.PENDING);
         assertThat(d.getLastErrorCode()).isEqualTo("IAM_UNAVAILABLE");
         verify(deliveries).save(d);
+    }
+
+    @Test
+    void aChatChannelSwitchedOffForTheEventSinceIntakeIsSkipped() {
+        Delivery d = delivery(2, EChannel.SLACK);
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null)).thenReturn(
+                new NotificationConfig("7", "en", true, smtp, new IamInternalClient.Slack(
+                        "https://hooks.slack.com/services/x"), null, null, List.of(), false, null, null));
+
+        dispatcher.dispatch(List.of(2L));
+
+        assertThat(d.getStatus()).isEqualTo(EStatus.SKIPPED);
+        assertThat(d.getLastErrorCode()).isEqualTo("CHANNEL_EVENT_DISABLED");
+        verify(http, never()).postJson(any(), anyString(), anyMap());
     }
 }

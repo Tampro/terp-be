@@ -8,6 +8,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.employee.common.EEmployeeError;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.employee.holiday.HolidayDtos.CategoryDto;
 import com.terp.erp.employee.holiday.HolidayDtos.CategoryForm;
 import com.terp.erp.employee.holiday.HolidayDtos.Filter;
@@ -50,6 +52,7 @@ public class HolidayService {
     private final HolidayCategoryRepository categories;
     private final BranchRepository branches;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     // ------------------------------------------------------------------ holidays
 
@@ -105,6 +108,11 @@ public class HolidayService {
         h.setCompanyId(companyId);
         apply(h, form);
         holidays.save(h);
+        // webhook NEW_HOLIDAY; no recipient
+        outbox.publish(companyId, "employee.holiday.created", "HOLIDAY", h.getId(), Payload.of(
+                "holidayId", h.getId(), "title", h.getName(), "name", h.getName(), "categoryId", h.getCategoryId(),
+                "startDate", h.getStartDate(), "endDate", h.getEndDate(), "paid", h.isPaid(),
+                "branchIds", Payload.ids(h.getBranchIds())));
         return dtos(companyId, List.of(h)).get(h.getId());
     }
 

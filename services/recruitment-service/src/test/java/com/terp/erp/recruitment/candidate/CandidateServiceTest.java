@@ -59,7 +59,7 @@ class CandidateServiceTest {
     private final CatalogService catalog = new CatalogService(items, postings, candidates, interviews);
     private final JobPostingService postingService = new JobPostingService(postings, catalog, items,
             new JobLocationService(locations, postings), locations, new CustomQuestionService(questions), questions,
-            org, clock, candidates);
+            org, clock, candidates, mock(com.terp.erp.outbox.OutboxPublisher.class));
 
     @TempDir
     Path dir;

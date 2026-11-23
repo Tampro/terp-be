@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.project.client.AccountingClient;
 import com.terp.erp.project.client.IamClient;
 import com.terp.erp.project.common.EProjectError;
@@ -45,6 +47,7 @@ public class ProjectService {
     private final IamClient iam;
     private final AccountingClient accounting;
     private final ActivityService activity;
+    private final OutboxPublisher outbox;
     private final Clock clock;
 
     /** Also the body of PUT /projects/{id} (full replacement; companyId is then ignored). */
@@ -119,6 +122,10 @@ public class ProjectService {
         p.setUserIds(checkedTeam(company, Set.of(), f.userIds()));
         projects.save(p);
         activity.log(company, p.getId(), "PROJECT_CREATED", p.getName());
+        outbox.publish(company, "project.project.created", "PROJECT", p.getId(), Payload.of(
+                "projectId", p.getId(), "title", p.getName(), "status", p.getStatus().name(),
+                "startDate", p.getStartDate() == null ? null : p.getStartDate().toString(),
+                "endDate", p.getEndDate() == null ? null : p.getEndDate().toString()));
         return dto(p);
     }
 

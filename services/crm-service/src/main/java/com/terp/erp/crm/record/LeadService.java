@@ -44,6 +44,8 @@ import java.util.Set;
 public class LeadService {
     static final String EVENT_ASSIGNED = "crm.lead.assigned";
     static final String EVENT_MOVED = "crm.lead.moved";
+    static final String EVENT_CREATED = "crm.lead.created";
+    static final String EVENT_CONVERTED = "crm.lead.converted";
     /** What a conversion can copy, as named in the manual's "Copy To" list. */
     static final Set<String> COPYABLE = Set.of("PRODUCTS", "SOURCES", "FILES", "DISCUSSIONS", "NOTES", "CALLS",
             "EMAILS", "TASKS", "USERS");
@@ -167,6 +169,9 @@ public class LeadService {
         apply(l, f);
         leads.save(l);
         activity.log(subject(l), "Lead created", l.getName());
+        outbox.publish(l.getCompanyId(), EVENT_CREATED, "LEAD", l.getId(), Payload.of("leadId", l.getId(),
+                "title", l.getName(), "pipelineId", l.getPipelineId(), "name", l.getName(), "subject", l.getSubject(),
+                "stage", s.getName(), "ownerUserId", l.getOwnerUserId()));
         assigned(l);
         return detail(l);
     }
@@ -264,6 +269,9 @@ public class LeadService {
         l.setConvertedDealId(d.getId());
         activity.log(from, "Converted to deal", d.getName());
         activity.log(to, "Created from lead", l.getName());
+        outbox.publish(l.getCompanyId(), EVENT_CONVERTED, "LEAD", l.getId(), Payload.of("leadId", l.getId(),
+                "title", l.getName(), "name", l.getName(), "dealId", d.getId(), "dealName", d.getName(),
+                "customerId", client.id(), "ownerUserId", l.getOwnerUserId()));
         return Map.of("dealId", d.getId().toString(), "customerId", client.id());
     }
 

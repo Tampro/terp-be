@@ -58,9 +58,10 @@ class ProjectOwnScopeTest {
     private final AccountingClient accounting = mock(AccountingClient.class);
     private final StageService stages = new StageService(stageRepo, taskRepo, mock(BugRepository.class));
     private final ProjectService projects = new ProjectService(projectRepo, taskRepo, stages, mock(IamClient.class),
-            accounting, mock(ActivityService.class), CLOCK);
+            accounting, mock(ActivityService.class), mock(com.terp.erp.outbox.OutboxPublisher.class), CLOCK);
     private final TaskService taskService = new TaskService(projects, projectRepo, milestoneRepo, stages, taskRepo,
-            mock(SubtaskRepository.class), mock(TaskCommentRepository.class), mock(ActivityService.class));
+            mock(SubtaskRepository.class), mock(TaskCommentRepository.class), mock(ActivityService.class),
+            mock(com.terp.erp.outbox.OutboxPublisher.class));
     private final ProjectPortalService portal = new ProjectPortalService(projectRepo, milestoneRepo, taskRepo, stages,
             projects, accounting);
     private final List<Stage> taskStages = new ArrayList<>();

@@ -6,6 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.recruitment.catalog.CatalogItem;
 import com.terp.erp.recruitment.catalog.CatalogItemRepository;
 import com.terp.erp.recruitment.catalog.CatalogService;
@@ -58,6 +60,7 @@ public class JobPostingService {
     private final OrgClient org;
     private final Clock clock;
     private final com.terp.erp.recruitment.candidate.CandidateRepository candidates;
+    private final OutboxPublisher outbox;
 
     @Transactional(readOnly = true)
     public Page<PostingDto> search(Long requestedCompanyId, String keyword, JobPosting.EStatus status, Boolean published,
@@ -118,6 +121,7 @@ public class JobPostingService {
         if (!published && p.getStatus() == JobPosting.EStatus.CLOSED) {
             throw ApiException.badRequest(ERecruitmentError.REC_055);
         }
+        boolean wasPublished = p.isPublished();
         p.setPublished(published);
         p.setStatus(published ? JobPosting.EStatus.PUBLISHED : JobPosting.EStatus.DRAFT);
         if (published) {
@@ -130,6 +134,14 @@ public class JobPostingService {
             String department = org.departmentName(p.getDepartmentId());
             if (department != null) {
                 p.setDepartmentName(department);
+            }
+            if (!wasPublished) {
+                // No salary range in the event (contract: no salaries).
+                outbox.publish(p.getCompanyId(), "recruitment.job_posting.published", "JOB_POSTING", p.getId(),
+                        Payload.of("jobPostingId", p.getId(), "title", p.getTitle(), "jobCode", p.getJobCode(),
+                                "branchName", p.getBranchName(), "departmentName", p.getDepartmentName(),
+                                "positions", p.getPositions(), "applicationDeadline",
+                                p.getApplicationDeadline() == null ? null : p.getApplicationDeadline().toString()));
             }
         }
         return detail(p);

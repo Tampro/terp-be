@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.meeting.client.EmployeeClient;
 import com.terp.erp.meeting.client.EmployeeClient.Department;
 import com.terp.erp.meeting.common.EMeetingError;
@@ -49,6 +51,7 @@ public class CompanyEventService {
     private final EventTypeRepository types;
     private final EmployeeClient employees;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     public record EventForm(
             @Schema(example = "Year-end party", requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank
@@ -125,7 +128,13 @@ public class CompanyEventService {
         CompanyEvent e = new CompanyEvent();
         e.setCompanyId(Texts.company(requestedCompanyId));
         apply(e, form);
-        return detail(events.save(e));
+        CompanyEvent saved = events.save(e);
+        // webhook NEW_EVENT (created PENDING approval); no recipient
+        outbox.publish(saved.getCompanyId(), "meeting.event.created", "COMPANY_EVENT", saved.getId(), Payload.of(
+                "eventId", saved.getId(), "title", saved.getTitle(), "eventTypeId", saved.getEventTypeId(),
+                "startDate", saved.getStartDate(), "endDate", saved.getEndDate(), "startTime", saved.getStartTime(),
+                "endTime", saved.getEndTime(), "location", saved.getLocation(), "status", saved.getStatus()));
+        return detail(saved);
     }
 
     /** Full replacement; an approved or rejected event goes back to PENDING. */

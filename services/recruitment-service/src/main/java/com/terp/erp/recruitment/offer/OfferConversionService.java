@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.recruitment.candidate.Candidate;
 import com.terp.erp.recruitment.candidate.CandidateService;
 import com.terp.erp.recruitment.client.EmployeeClient;
@@ -33,6 +35,7 @@ public class OfferConversionService {
     private final CandidateService candidateService;
     private final EmployeeClient employees;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     /** Same values as employee-service's EEmploymentType / EEmployeeStatus. */
     public enum EEmploymentType { FULL_TIME, PART_TIME, CONTRACT, INTERN, TEMPORARY }
@@ -72,6 +75,9 @@ public class OfferConversionService {
         EmployeeClient.Employee e = employees.create(o.getCompanyId(), employeeForm(o, c, f));
         c.setEmployeeId(Long.valueOf(e.id()));
         c.setStatus(Candidate.EStatus.HIRED);
+        outbox.publish(o.getCompanyId(), "recruitment.candidate.converted", "CANDIDATE", c.getId(), Payload.of(
+                "candidateId", c.getId(), "title", c.fullName(), "name", c.fullName(), "offerId", o.getId(),
+                "employeeId", e.id(), "jobPostingId", o.getJobPostingId()));
         return new Converted(o.getId().toString(), c.getId().toString(), e.id(), c.getStatus());
     }
 

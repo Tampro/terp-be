@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.employee.award.AwardType;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.employee.award.AwardTypeRepository;
 import com.terp.erp.employee.common.EEmployeeError;
 import com.terp.erp.employee.employee.Employee;
@@ -33,6 +35,7 @@ public class AwardService {
     private final EmployeeAwardRepository awards;
     private final AwardTypeRepository types;
     private final LifecycleSupport support;
+    private final OutboxPublisher outbox;
 
     /** certificate / photo are only filled on the details. */
     public record AwardDto(String id, EmployeeRef employee, Ref awardType, LocalDate awardDate, String gift,
@@ -70,7 +73,15 @@ public class AwardService {
     public AwardDto create(AwardForm form) {
         EmployeeAward a = new EmployeeAward();
         apply(a, form);
-        return detail(awards.save(a));
+        AwardDto dto = detail(awards.save(a));
+        // webhook NEW_AWARD; no recipient (gift and description are not sent)
+        String employee = dto.employee() == null ? null : dto.employee().fullName();
+        String type = dto.awardType() == null ? null : dto.awardType().name();
+        outbox.publish(a.getCompanyId(), "employee.award.created", "AWARD", a.getId(), Payload.of(
+                "awardId", a.getId(), "title", type == null ? employee : type + " - " + employee,
+                "employeeId", a.getEmployeeId(), "employeeName", employee, "awardTypeId", a.getAwardTypeId(),
+                "awardTypeName", type, "awardDate", a.getAwardDate()));
+        return dto;
     }
 
     /** Full replacement. */

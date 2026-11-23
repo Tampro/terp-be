@@ -26,7 +26,9 @@ public enum ESettingsError implements ErrorCode {
     SETTINGS_016("The Google service account JSON is not valid."),
     SETTINGS_017("The {0} integration is not configured."),
     SETTINGS_018("Unknown integration: {0}."),
-    SETTINGS_019("The value of {0} is not valid.");
+    SETTINGS_019("The value of {0} is not valid."),
+    SETTINGS_020("Unknown notification channel: {0}."),
+    SETTINGS_021("Unknown notification event: {0}.");
 
     private final String message;
 }

@@ -41,6 +41,7 @@ import java.util.Map;
 public class DealService {
     static final String EVENT_ASSIGNED = "crm.deal.assigned";
     static final String EVENT_MOVED = "crm.deal.moved";
+    static final String EVENT_CREATED = "crm.deal.created";
     private final DealRepository deals;
     private final SetupService setup;
     private final ActivityService activity;
@@ -130,6 +131,9 @@ public class DealService {
         apply(d, f);
         deals.save(d);
         activity.log(subject(d), "Deal created", d.getName());
+        outbox.publish(d.getCompanyId(), EVENT_CREATED, "DEAL", d.getId(), Payload.of("dealId", d.getId(),
+                "title", d.getName(), "pipelineId", d.getPipelineId(), "name", d.getName(), "price", d.getPrice(),
+                "stage", s.getName()));
         if (f.clientIds() != null) {
             activity.setLinks(subject(d), ELinkType.CLIENT, f.clientIds());
         }

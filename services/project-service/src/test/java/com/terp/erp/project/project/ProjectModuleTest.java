@@ -63,9 +63,9 @@ class ProjectModuleTest {
 
     private final StageService stages = new StageService(stageRepo, taskRepo, bugRepo);
     private final ProjectService projects = new ProjectService(projectRepo, taskRepo, stages, iam,
-            mock(AccountingClient.class), activity, CLOCK);
+            mock(AccountingClient.class), activity, mock(com.terp.erp.outbox.OutboxPublisher.class), CLOCK);
     private final TaskService taskService = new TaskService(projects, projectRepo, milestoneRepo, stages, taskRepo,
-            subtaskRepo, commentRepo, activity);
+            subtaskRepo, commentRepo, activity, mock(com.terp.erp.outbox.OutboxPublisher.class));
     private final ProjectReportService reports = new ProjectReportService(projects, taskRepo, milestoneRepo, stages);
     private final ProjectDuplicateService duplicates = new ProjectDuplicateService(projects, projectRepo, milestoneRepo,
             attachmentRepo, activityRepo, taskRepo, subtaskRepo, commentRepo, bugRepo, activity);

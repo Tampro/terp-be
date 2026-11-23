@@ -41,6 +41,9 @@ import java.util.Map;
 public class SalesDocumentService {
     static final String STOCK_SOURCE = "SALES_INVOICE";
     static final String EVENT_POSTED = "sales.invoice.posted";
+    static final String EVENT_INVOICE_STATUS = "sales.invoice.status_changed";
+    static final String EVENT_PROPOSAL_CREATED = "sales.proposal.created";
+    static final String EVENT_PROPOSAL_STATUS = "sales.proposal.status_changed";
     /** The unified calendar (report-service) shows a month with the weeks around it. */
     public static final int MAX_CALENDAR_DAYS = 62;
 
@@ -113,7 +116,9 @@ public class SalesDocumentService {
         d.setKind(kind);
         apply(d, f);
         d.setNumber(numbering.next(company, kind.prefix(), d.getDocDate()));
-        return DocumentDetail.of(documents.save(d), today());
+        SalesDocument saved = documents.save(d);
+        proposalCreated(saved);
+        return DocumentDetail.of(saved, today());
     }
 
     /** Full replacement of a draft; the number never changes. */
@@ -135,6 +140,7 @@ public class SalesDocumentService {
     public DocumentDetail send(EDocumentKind kind, Long id) {
         SalesDocument d = requireDraft(kind, id, Access.MANAGE);
         d.setStatus(EDocumentStatus.SENT);
+        proposalStatusChanged(d, EDocumentStatus.DRAFT);
         return DocumentDetail.of(d, today());
     }
 
@@ -154,6 +160,7 @@ public class SalesDocumentService {
             throw ApiException.badRequest(ECommerceError.SAL_003);
         }
         d.setStatus(accept ? EDocumentStatus.ACCEPTED : EDocumentStatus.REJECTED);
+        proposalStatusChanged(d, EDocumentStatus.SENT);
         return DocumentDetail.of(d, today());
     }
 
@@ -163,7 +170,9 @@ public class SalesDocumentService {
         SalesDocument src = require(kind, id, Access.MANAGE);
         SalesDocument d = copy(src, kind);
         d.setNumber(numbering.next(d.getCompanyId(), kind.prefix(), d.getDocDate()));
-        return DocumentDetail.of(documents.save(d), today());
+        SalesDocument saved = documents.save(d);
+        proposalCreated(saved);
+        return DocumentDetail.of(saved, today());
     }
 
     /** Quotation only: a new DRAFT version of a sent, accepted or rejected quotation (ERP manual 6.4). */
@@ -249,6 +258,8 @@ public class SalesDocumentService {
                 "invoiceId", d.getId(), "number", d.getNumber(), "invoiceType", d.getInvoiceType(),
                 "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "docDate", d.getDocDate(),
                 "dueDate", d.getDueDate(), "total", d.getTotal(), "balance", d.getBalance()));
+        outbox.publish(d.getCompanyId(), EVENT_INVOICE_STATUS, "SALES_INVOICE", d.getId(),
+                invoiceStatusPayload(d, EDocumentStatus.DRAFT));
         return DocumentDetail.of(d, today());
     }
 
@@ -315,6 +326,41 @@ public class SalesDocumentService {
         return d;
     }
 
+    // ---------- events ----------
+
+    /** Payload of sales.invoice.status_changed (webhook SALES_INVOICE_STATUS_UPDATED); no recipient. */
+    static java.util.Map<String, Object> invoiceStatusPayload(SalesDocument d, EDocumentStatus from) {
+        return Payload.of("invoiceId", d.getId(), "title", d.getNumber(), "number", d.getNumber(),
+                "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "fromStatus", from,
+                "status", d.getStatus(), "total", d.getTotal(), "balance", d.getBalance());
+    }
+
+    /** Webhook NEW_SALES_PROPOSAL; quotations and invoices have no "created" event. */
+    private void proposalCreated(SalesDocument d) {
+        if (d.getKind() != EDocumentKind.PROPOSAL) {
+            return;
+        }
+        outbox.publish(d.getCompanyId(), EVENT_PROPOSAL_CREATED, "SALES_PROPOSAL", d.getId(), Payload.of(
+                "proposalId", d.getId(), "title", d.getNumber(), "number", d.getNumber(),
+                "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "docDate", d.getDocDate(),
+                "dueDate", d.getDueDate(), "total", d.getTotal(), "status", d.getStatus()));
+    }
+
+    /**
+     * Webhook SALES_PROPOSAL_STATUS_UPDATED + email PROPOSAL_STATUS_UPDATED. TODO(assumption): the email should go
+     * to the proposal's creator, but created_by is a Keycloak sub, not an IAM user id: no recipientUserIds yet
+     * (createdBy is carried so notification-service could resolve it later).
+     */
+    private void proposalStatusChanged(SalesDocument d, EDocumentStatus from) {
+        if (d.getKind() != EDocumentKind.PROPOSAL) {
+            return;
+        }
+        outbox.publish(d.getCompanyId(), EVENT_PROPOSAL_STATUS, "SALES_PROPOSAL", d.getId(), Payload.of(
+                "proposalId", d.getId(), "title", d.getNumber(), "number", d.getNumber(),
+                "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "fromStatus", from,
+                "status", d.getStatus(), "total", d.getTotal(), "createdBy", d.getCreatedBy()));
+    }
+
     // ---------- helpers ----------
 
     SalesDocument require(EDocumentKind kind, Long id, Access access) {
@@ -358,6 +404,7 @@ public class SalesDocumentService {
         AccountingClient.Customer customer = accounting.customer(f.customerId());
         d.setCustomerId(f.customerId());
         d.setCustomerName(customer.companyName());
+        d.setCustomerEmail(customer.email());
         d.setInvoiceType(type);
         d.setWarehouseId(f.warehouseId());
         d.setDocDate(f.docDate());
@@ -420,6 +467,7 @@ public class SalesDocumentService {
         d.setInvoiceType(kind == EDocumentKind.INVOICE ? src.getInvoiceType() : null);
         d.setCustomerId(src.getCustomerId());
         d.setCustomerName(src.getCustomerName());
+        d.setCustomerEmail(src.getCustomerEmail());
         d.setWarehouseId(src.getWarehouseId());
         LocalDate today = today();
         long days = java.time.temporal.ChronoUnit.DAYS.between(src.getDocDate(), src.getDueDate());

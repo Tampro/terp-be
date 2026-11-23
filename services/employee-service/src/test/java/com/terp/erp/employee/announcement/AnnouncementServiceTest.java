@@ -47,8 +47,9 @@ class AnnouncementServiceTest {
     private final DepartmentRepository departments = mock(DepartmentRepository.class);
     private final EmployeeRepository employees = mock(EmployeeRepository.class);
     private final MediaClient media = mock(MediaClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final AnnouncementService service = new AnnouncementService(announcements, categories, views, branches,
-            departments, employees, media, Clock.fixed(NOW, ZoneOffset.UTC));
+            departments, employees, media, Clock.fixed(NOW, ZoneOffset.UTC), outbox);
 
     @AfterEach
     void tearDown() {
@@ -67,6 +68,15 @@ class AnnouncementServiceTest {
         when(announcements.countAudience(eq(10L), eq(true), anyCollection(), anyCollection())).thenReturn(8L);
         var d = service.create(null, form("<p onclick=\"x()\">Hi<script>alert(1)</script></p>", true, List.of(1L),
                 List.of()));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("employee.announcement.published"), org.mockito.ArgumentMatchers.eq("ANNOUNCEMENT"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("announcementId", "title", "startDate", "companyWide");
+            org.assertj.core.api.Assertions.assertThat(p).doesNotContainKeys("content");
+        }
         assertThat(d.content()).isEqualTo("<p>Hi</p>");
         assertThat(d.companyWide()).isTrue();
         assertThat(d.branches()).isEmpty();

@@ -27,7 +27,8 @@ class TrainerTest {
     private final TrainingSessionRepository sessionRepo = mock(TrainingSessionRepository.class);
     private final BranchRepository branches = mock(BranchRepository.class);
     private final DepartmentRepository departments = mock(DepartmentRepository.class);
-    private final TrainerService service = new TrainerService(trainerRepo, sessionRepo, branches, departments);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final TrainerService service = new TrainerService(trainerRepo, sessionRepo, branches, departments, outbox);
 
     @BeforeEach
     void setUp() {
@@ -72,6 +73,15 @@ class TrainerTest {
     @Test
     void crud() {
         var t = service.create(null, form(1L, 2L, null));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("employee.trainer.created"), org.mockito.ArgumentMatchers.eq("TRAINER"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("trainerId", "title", "name");
+            org.assertj.core.api.Assertions.assertThat(p).doesNotContainKeys("contactPhone", "email");
+        }
         assertThat(t.name()).isEqualTo("Jane Trainer");
         assertThat(t.branch().name()).isEqualTo("HQ");
         assertThat(t.department().name()).isEqualTo("Sales");

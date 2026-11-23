@@ -52,7 +52,8 @@ class LifecycleTest {
     private final EmployeeTransferRepository transfers = mock(EmployeeTransferRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-20T03:00:00Z"), ZoneOffset.UTC);
     private final LifecycleSupport support = new LifecycleSupport(employees, media);
-    private final AwardService awardService = new AwardService(awards, awardTypes, support);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final AwardService awardService = new AwardService(awards, awardTypes, support, outbox);
     private final PromotionService promotionService = new PromotionService(promotions, designations, orgs, support,
             clock);
     private final TransferService transferService = new TransferService(transfers, orgs, support, clock);
@@ -100,6 +101,15 @@ class LifecycleTest {
         other.setStatus(EOrgStatus.ACTIVE);
         when(awardTypes.findById(5L)).thenReturn(Optional.of(other));
         assertThat(awardService.create(award(5L)).gift()).isEqualTo("Voucher");
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("employee.award.created"), org.mockito.ArgumentMatchers.eq("AWARD"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("awardId", "title", "employeeId", "awardTypeName", "awardDate");
+            org.assertj.core.api.Assertions.assertThat(p).doesNotContainKeys("gift", "description");
+        }
     }
 
     @Test

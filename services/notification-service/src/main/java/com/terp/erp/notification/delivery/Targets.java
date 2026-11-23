@@ -13,4 +13,13 @@ public final class Targets {
         int at = email.lastIndexOf('@');
         return at < 0 || at == email.length() - 1 ? null : "*@" + email.substring(at + 1).trim().toLowerCase();
     }
+
+    /** "*123" (last 3 digits); null when it has fewer than 3 digits. */
+    public static String maskPhone(String phone) {
+        if (phone == null) {
+            return null;
+        }
+        String digits = phone.replaceAll("[^0-9]", "");
+        return digits.length() < 3 ? null : "*" + digits.substring(digits.length() - 3);
+    }
 }

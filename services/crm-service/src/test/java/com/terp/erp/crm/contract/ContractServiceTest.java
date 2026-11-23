@@ -41,10 +41,11 @@ class ContractServiceTest {
     private final ContractAttachmentRepository attachments = mock(ContractAttachmentRepository.class);
     private final AccountingClient accounting = mock(AccountingClient.class);
     private final MediaClient media = mock(MediaClient.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final ContractTypeService typeService = new ContractTypeService(types, contracts);
     private final ContractSettingService settingService = new ContractSettingService(settingRepo, contracts);
     private final ContractService service = new ContractService(contracts, typeService, settingService, renewals,
-            comments, notes, attachments, accounting, media,
+            comments, notes, attachments, accounting, media, outbox,
             Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
     private final ContractSetting setting = new ContractSetting();
 
@@ -111,6 +112,21 @@ class ContractServiceTest {
         assertThat(third.contract().number()).isEqualTo("AGR0003");
         assertThat(third.contract().status()).isEqualTo(Contract.EStatus.PENDING);
         assertThat(third.contract().subject()).isEqualTo("Test support agreement");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void createAndDuplicatePublishContractCreated() {
+        TestLogin.as(10L, "CRM_CONTRACT_MANAGE");
+        var first = service.create(form(TODAY, TODAY.plusDays(30)));
+        service.duplicate(stubbed(first));
+        org.mockito.ArgumentCaptor<Object> payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox, org.mockito.Mockito.times(2)).publish(eq(10L), eq("crm.contract.created"), eq("CONTRACT"),
+                eq(70L), payload.capture());
+        assertThat((java.util.Map<String, Object>) payload.getAllValues().get(0))
+                .containsKeys("contractId", "title", "number", "subject", "customerId", "customerName", "value",
+                        "status", "startDate", "endDate")
+                .containsEntry("title", "CON0001");
     }
 
     /** Lets duplicate() find the contract created first. */

@@ -1,6 +1,8 @@
 package com.terp.erp.inventory.warehouse;
 
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.inventory.common.EInventoryError;
 import com.terp.erp.inventory.common.Texts;
 import com.terp.erp.inventory.stock.WarehouseStockRepository;
@@ -25,6 +27,7 @@ import java.util.Objects;
 public class WarehouseService {
     private final WarehouseRepository warehouses;
     private final WarehouseStockRepository stocks;
+    private final OutboxPublisher outbox;
 
     public record WarehouseForm(
             @Schema(example = "Main warehouse", requiredMode = Schema.RequiredMode.REQUIRED) @NotBlank
@@ -62,7 +65,12 @@ public class WarehouseService {
         Warehouse w = new Warehouse();
         w.setCompanyId(Texts.company(requestedCompanyId));
         apply(w, form);
-        return dto(warehouses.save(w));
+        Warehouse saved = warehouses.save(w);
+        // webhook NEW_WAREHOUSE; no recipient
+        outbox.publish(saved.getCompanyId(), "inventory.warehouse.created", "WAREHOUSE", saved.getId(), Payload.of(
+                "warehouseId", saved.getId(), "title", saved.getName(), "name", saved.getName(),
+                "city", saved.getCity(), "active", saved.isActive()));
+        return dto(saved);
     }
 
     /** Full replacement: a missing active becomes true. */

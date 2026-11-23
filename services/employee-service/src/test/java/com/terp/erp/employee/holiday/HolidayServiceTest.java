@@ -36,8 +36,9 @@ class HolidayServiceTest {
     private final HolidayRepository holidays = mock(HolidayRepository.class);
     private final HolidayCategoryRepository categories = mock(HolidayCategoryRepository.class);
     private final BranchRepository branches = mock(BranchRepository.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final HolidayService service = new HolidayService(holidays, categories, branches,
-            Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC));
+            Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC), outbox);
 
     @AfterEach
     void tearDown() {
@@ -55,6 +56,14 @@ class HolidayServiceTest {
             return h;
         });
         HolidayDto d = service.create(null, new HolidayForm(" Christmas ", 1L, XMAS, XMAS.plusDays(1), " ", null, null));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("employee.holiday.created"), org.mockito.ArgumentMatchers.eq("HOLIDAY"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("holidayId", "title", "startDate", "endDate", "branchIds");
+        }
         assertThat(d.name()).isEqualTo("Christmas");
         assertThat(d.allBranches()).isTrue();
         assertThat(d.days()).isEqualTo(2);

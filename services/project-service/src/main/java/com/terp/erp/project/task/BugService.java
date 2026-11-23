@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.project.common.EProjectError;
@@ -33,6 +35,7 @@ public class BugService {
     private final StageService stages;
     private final BugRepository bugs;
     private final ActivityService activity;
+    private final OutboxPublisher outbox;
 
     public record BugForm(
             @Schema(description = "Title", example = "Login button misaligned", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -85,6 +88,10 @@ public class BugService {
         b.setPosition(bugs.maxPosition(p.getId(), stage.getId()) + 1);
         bugs.save(b);
         activity.log(p.getCompanyId(), p.getId(), "BUG_CREATED", b.getTitle());
+        outbox.publish(p.getCompanyId(), "project.bug.created", "BUG", b.getId(), Payload.of(
+                "bugId", b.getId(), "title", b.getTitle(), "projectId", p.getId(), "projectName", p.getName(),
+                "priority", b.getPriority().name(),
+                "recipientUserIds", Payload.ids(b.getAssigneeUserId() == null ? List.of() : List.of(b.getAssigneeUserId()))));
         return dto(b, byId(stages.ordered(p.getCompanyId(), EStageKind.BUG)));
     }
 

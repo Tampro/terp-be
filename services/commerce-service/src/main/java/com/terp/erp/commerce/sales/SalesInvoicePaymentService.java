@@ -8,6 +8,7 @@ import com.terp.erp.commerce.common.InvoicePaymentForm;
 import com.terp.erp.commerce.sales.SalesDtos.DocumentDetail;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
+import com.terp.erp.outbox.OutboxPublisher;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -25,6 +26,7 @@ public class SalesInvoicePaymentService {
     private final SalesDocumentRepository documents;
     private final SalesInvoicePaymentRepository payments;
     private final Clock clock;
+    private final OutboxPublisher outbox;
 
     @Transactional
     public DocumentDetail apply(Long invoiceId, InvoicePaymentForm f) {
@@ -69,7 +71,12 @@ public class SalesInvoicePaymentService {
         payments.save(p);
         d.setPaidAmount(d.getPaidAmount().add(f.amount()));
         d.setBalance(d.getTotal().subtract(d.getPaidAmount()));
+        EDocumentStatus from = d.getStatus();
         d.setStatus(d.getBalance().compareTo(BigDecimal.ZERO) <= 0 ? EDocumentStatus.PAID : EDocumentStatus.PARTIAL);
+        if (from != d.getStatus()) {
+            outbox.publish(d.getCompanyId(), SalesDocumentService.EVENT_INVOICE_STATUS, "SALES_INVOICE", d.getId(),
+                    SalesDocumentService.invoiceStatusPayload(d, from));
+        }
         return DocumentDetail.of(d, LocalDate.now(clock));
     }
 }

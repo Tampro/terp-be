@@ -40,7 +40,7 @@ class StockTransferServiceTest {
     private final ItemRepository items = mock(ItemRepository.class);
     private final WarehouseRepository warehouseRows = mock(WarehouseRepository.class);
     private final StockTransferRepository transfers = mock(StockTransferRepository.class);
-    private final WarehouseService warehouses = new WarehouseService(warehouseRows, stocks);
+    private final WarehouseService warehouses = new WarehouseService(warehouseRows, stocks, org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class));
     private final StockTransferService service = new StockTransferService(transfers, warehouses, items,
             new StockService(stocks, movements, items, warehouseRows, warehouses));
     private final Item mouse = new Item();

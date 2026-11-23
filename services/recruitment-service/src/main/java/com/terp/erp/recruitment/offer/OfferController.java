@@ -171,6 +171,24 @@ public class OfferController {
                 .body(l.pdf());
     }
 
+    @Operation(summary = "Email the offer letter to the candidate",
+            description = "Fills the template like the PDF download, reduces it to plain text (at most 20 KB) and "
+                    + "records the event recruitment.offer.letter_sent; notification-service emails it to the "
+                    + "candidate's address (OFFER_LETTER) after this call commits, so 200 means queued, not delivered. "
+                    + "Only a SENT, NEGOTIATING or ACCEPTED offer. Returns the offer id and the event id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Queued: {offerId, eventId}"),
+            @ApiResponse(responseCode = "400", description = "Offer is DRAFT, DECLINED or EXPIRED (REC_068)"),
+            @ApiResponse(responseCode = "404", description = "No such offer (REC_035) or template (REC_032) in your "
+                    + "company"),
+            @ApiResponse(responseCode = "503", description = "employee-service unavailable (REC_012)")})
+    @PreAuthorize("@PermissionChecker.has('RECRUITMENT_MANAGE')")
+    @PostMapping("/{id}/letter/send")
+    public ApiMessageDto<OfferLetterService.LetterSent> sendLetter(@PathVariable Long id,
+                                                                   @RequestParam Long templateId) {
+        return ApiMessageDto.ok(letters.send(id, templateId));
+    }
+
     @Operation(summary = "Convert to Employee",
             description = "Only an ACCEPTED offer, once per candidate. Creates the employee in employee-service as the "
                     + "caller (needs EMPLOYEE_CREATE there and IAM_USER_CREATE in IAM) with the candidate's name, "

@@ -25,7 +25,8 @@ import static org.mockito.Mockito.when;
 class VendorServiceTest {
     private final VendorRepository vendors = mock(VendorRepository.class);
     private final VendorCodeSequenceRepository sequences = mock(VendorCodeSequenceRepository.class);
-    private final VendorService service = new VendorService(vendors, sequences);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = org.mockito.Mockito.mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final VendorService service = new VendorService(vendors, sequences, outbox);
     private final VendorCodeSequence seq = new VendorCodeSequence();
     private final AddressForm billing = new AddressForm("Example Trading Co.", "1 Example Street", null,
             "Testville", "Test State", "Testland", "00000");
@@ -59,6 +60,14 @@ class VendorServiceTest {
     void shippingCopiedFromBillingWhenSame() {
         AddressForm other = new AddressForm("Other", "9 Other Road", null, "Elsewhere", null, null, null);
         var dto = service.create(null, form(null, true, other));
+        {
+            var ev = org.mockito.ArgumentCaptor.forClass(Object.class);
+            org.mockito.Mockito.verify(outbox, org.mockito.Mockito.atLeastOnce()).publish(org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.eq("accounting.vendor.created"), org.mockito.ArgumentMatchers.eq("VENDOR"),
+                    org.mockito.ArgumentMatchers.any(), ev.capture());
+            @SuppressWarnings("unchecked") var p = (java.util.Map<String, Object>) ev.getValue();
+            org.assertj.core.api.Assertions.assertThat(p).containsKeys("vendorId", "title", "vendorCode", "companyName");
+        }
         assertThat(dto.shipping().address()).isEqualTo("1 Example Street");
         assertThat(dto.shipping().city()).isEqualTo("Testville");
         assertThat(dto.shippingSameAsBilling()).isTrue();

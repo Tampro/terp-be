@@ -36,8 +36,10 @@ class InternalNotificationServiceTest {
     private final CompanyIntegrationService integrations = mock(CompanyIntegrationService.class);
     private final CompanyWebhookRepository webhooks = mock(CompanyWebhookRepository.class);
     private final SecretCipher cipher = mock(SecretCipher.class);
+    private final com.terp.erp.iam.integration.ChannelEventService channelEvents =
+            mock(com.terp.erp.iam.integration.ChannelEventService.class);
     private final InternalNotificationService service = new InternalNotificationService(companies, toggles,
-            companyEmail, settings, integrations, webhooks, mock(UserAccountRepository.class), cipher);
+            companyEmail, settings, integrations, webhooks, channelEvents, mock(UserAccountRepository.class), cipher);
 
     @Test
     void returnsTheChannelsOfTheCompanyWithSecretsDecrypted() {
@@ -84,6 +86,27 @@ class InternalNotificationServiceTest {
         assertThat(c.webhooks()).isEmpty();
         verify(companyEmail, never()).smtpFor(7L);
         verify(cipher, never()).decrypt(anyString());
+    }
+
+    @Test
+    void carriesTwilioAndThePerEventChatSwitches() {
+        when(companies.existsById(7L)).thenReturn(true);
+        when(integrations.twilioTarget(7L)).thenReturn(Optional.of(
+                new CompanyIntegrationService.TwilioTarget("AC" + "0".repeat(32), "tw-token", "+15005550006")));
+        var slack = com.terp.erp.iam.integration.CompanyChannelEvent.EChatChannel.SLACK;
+        var telegram = com.terp.erp.iam.integration.CompanyChannelEvent.EChatChannel.TELEGRAM;
+        var sms = com.terp.erp.iam.integration.CompanyChannelEvent.EChatChannel.SMS;
+        when(channelEvents.enabled(7L, slack, "crm.lead.created")).thenReturn(false);
+        when(channelEvents.enabled(7L, telegram, "crm.lead.created")).thenReturn(true);
+        when(channelEvents.enabled(7L, sms, "crm.lead.created")).thenReturn(false);
+
+        var c = service.config(7L, "crm.lead.created", null, "NEW_LEAD");
+
+        assertThat(c.twilio().authToken()).isEqualTo("tw-token");
+        assertThat(c.twilio().fromNumber()).isEqualTo("+15005550006");
+        assertThat(c.slackEnabledForEvent()).isFalse();
+        assertThat(c.telegramEnabledForEvent()).isTrue();
+        assertThat(c.smsEnabledForEvent()).isFalse();
     }
 
     @Test

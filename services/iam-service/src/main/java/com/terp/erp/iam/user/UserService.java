@@ -20,6 +20,8 @@ import com.terp.erp.iam.user.UserDtos.CreatedUserDto;
 import com.terp.erp.iam.user.UserDtos.UserCreateForm;
 import com.terp.erp.iam.user.UserDtos.UserDto;
 import com.terp.erp.iam.user.UserDtos.UserProfileForm;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    static final String EVENT_USER_CREATED = "iam.user.created";
     private static final String PASSWORD_CHARS =
             "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -45,6 +48,7 @@ public class UserService {
     private final com.terp.erp.iam.repository.CompanyRepository companies;
     private final com.terp.erp.iam.saas.SubscriptionService subscriptions;
     private final com.terp.erp.iam.email.EmailNotifier notifier;
+    private final OutboxPublisher outbox;
 
     @Transactional(readOnly = true)
     public Page<UserDto> search(Long requestedCompanyId, String keyword, Pageable pageable) {
@@ -110,6 +114,7 @@ public class UserService {
         u.setStatus(EUserStatus.ACTIVE);
         u.setRoles(assigned);
         UserAccount saved = users.save(u);
+        publishCreated(saved);
         // Sent after commit; the temporary password only travels in this email and the response.
         if (firstAdminOfNewCompany) {
             notifier.companyCreated(saved, company, temporaryPassword);
@@ -139,7 +144,19 @@ public class UserService {
         u.setFullName(fullName);
         u.setStatus(EUserStatus.ACTIVE);
         u.setRoles(new HashSet<>(Set.of(admin)));
-        return users.save(u);
+        UserAccount saved = users.save(u);
+        publishCreated(saved);
+        return saved;
+    }
+
+    /**
+     * NEW_USER webhook / chat line. In the same transaction as the row: a failed DB write publishes nothing (the
+     * Keycloak user it leaves behind is the known orphan case above). No email address, username (often the
+     * email) or password in the payload.
+     */
+    private void publishCreated(UserAccount u) {
+        outbox.publish(u.getCompanyId(), EVENT_USER_CREATED, "USER", u.getId(), Payload.of(
+                "userId", u.getId(), "title", u.getFullName(), "name", u.getFullName()));
     }
 
     @Transactional

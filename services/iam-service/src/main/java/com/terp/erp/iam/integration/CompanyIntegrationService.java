@@ -41,8 +41,8 @@ import java.util.Optional;
  * Company integrations (ERP manual 19). Kept in iam-service next to the other company settings: they are a few
  * rows of company configuration, with the same permission, encryption key (ERP_SETTINGS_ENC_KEY through
  * {@link SecretCipher}) and table (company_setting, one section per integration). Secrets are stored encrypted and
- * never returned. TODO: nothing uses these yet (Slack / Telegram / Twilio messages on business events, AI assistant,
- * Google Calendar sync); that needs the notification service and a broker.
+ * never returned. Slack / Telegram / Twilio are read (decrypted) by notification-service through the internal
+ * notification-config; TODO: AI assistant and Google Calendar sync have no consumer yet.
  */
 @Slf4j
 @Service
@@ -202,6 +202,18 @@ public class CompanyIntegrationService {
         return read(companyId, EIntegration.TELEGRAM, TelegramStored.class)
                 .filter(s -> s.enabled() && s.botTokenEnc() != null && s.chatId() != null)
                 .map(s -> new TelegramTarget(cipher.decrypt(s.botTokenEnc()), s.chatId()));
+    }
+
+    public record TwilioTarget(String accountSid, String authToken, String fromNumber) {
+    }
+
+    /** Decrypted Twilio credentials when SMS is on for the company; empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<TwilioTarget> twilioTarget(Long companyId) {
+        return read(companyId, EIntegration.TWILIO, TwilioStored.class)
+                .filter(s -> s.enabled() && s.accountSid() != null && s.authTokenEnc() != null
+                        && s.fromNumber() != null)
+                .map(s -> new TwilioTarget(s.accountSid(), cipher.decrypt(s.authTokenEnc()), s.fromNumber()));
     }
 
     // ------------------------------------------------------------------ views

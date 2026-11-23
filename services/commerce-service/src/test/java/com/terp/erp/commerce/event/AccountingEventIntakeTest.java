@@ -56,7 +56,8 @@ class AccountingEventIntakeTest {
     private final SalesInvoicePaymentRepository salesPayments = mock(SalesInvoicePaymentRepository.class);
     private final PurchaseInvoicePaymentRepository purchasePayments = mock(PurchaseInvoicePaymentRepository.class);
     private final AccountingEventIntake intake = new AccountingEventIntake(processed, salesDocs, salesReturns,
-            purchaseDocs, purchaseReturns, new SalesInvoicePaymentService(salesDocs, salesPayments, clock),
+            purchaseDocs, purchaseReturns, new SalesInvoicePaymentService(salesDocs, salesPayments, clock,
+                    mock(com.terp.erp.outbox.OutboxPublisher.class)),
             new PurchaseInvoicePaymentService(purchaseDocs, purchasePayments, clock), clock);
     private final Set<String> seen = new java.util.HashSet<>();
 
