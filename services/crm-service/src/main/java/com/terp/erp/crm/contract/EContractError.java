@@ -19,7 +19,14 @@ public enum EContractError implements ErrorCode {
     CTR_009("The comment does not exist."),
     CTR_010("The note does not exist."),
     CTR_011("The attachment does not exist."),
-    CTR_012("An attachment must be a file in the media library of the contract company.");
+    CTR_012("An attachment must be a file in the media library of the contract company."),
+    CTR_013("The signature must be a PNG image sent as data:image/png;base64,..."),
+    CTR_014("The signature image must be at most {0} KB."),
+    CTR_015("The signature image must be at most {0} x {1} pixels."),
+    CTR_016("This side has already signed the contract."),
+    CTR_017("Only a pending contract can be signed."),
+    CTR_018("The contract has been signed and can no longer be edited or deleted."),
+    CTR_019("The signature does not exist.");
 
     private final String message;
 }

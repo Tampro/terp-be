@@ -151,11 +151,11 @@ class CrmPortalTest {
     }
 
     @Test
-    void portalHandlersNeedPortalClientAndAreReadOnly() {
+    void portalHandlersNeedPortalClientAndOnlySigningWrites() {
         List<Method> hs = handlers(ClientPortalController.class);
-        assertThat(hs).hasSize(4).allSatisfy(m -> {
+        assertThat(hs).hasSize(8).allSatisfy(m -> {
             assertThat(m.getAnnotation(PreAuthorize.class).value()).isEqualTo("@PermissionChecker.has('PORTAL_CLIENT')");
-            assertThat(m.isAnnotationPresent(GetMapping.class)).isTrue();
+            assertThat(m.isAnnotationPresent(GetMapping.class) || m.getName().equals("sign")).as(m.getName()).isTrue();
         });
     }
 

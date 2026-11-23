@@ -31,7 +31,8 @@ import java.util.Map;
 
 /**
  * Customer contracts (ERP manual 7.5) with their renewals, comments, notes and attachments. Every sub-resource is
- * reached through its contract, so the contract's company check covers it. Electronic signatures are out of scope.
+ * reached through its contract, so the contract's company check covers it. Hand-drawn signatures live in
+ * {@link ContractSignatureService}; once a side has signed, the signed fields are locked (no edit, no delete).
  */
 @Service
 @RequiredArgsConstructor
@@ -48,6 +49,7 @@ public class ContractService {
     private final AccountingClient accounting;
     private final MediaClient media;
     private final OutboxPublisher outbox;
+    private final ContractSignatureRepository signatures;
     private final Clock clock;
 
     // ---- forms -------------------------------------------------------------------------------------------------
@@ -187,11 +189,7 @@ public class ContractService {
 
     @Transactional(readOnly = true)
     public ContractDetail get(Long id) {
-        Contract c = requireInCompany(id);
-        if (ownView()) {
-            OwnScope.assertMine(mine(c), EContractError.CTR_002);
-        }
-        return detail(c);
+        return detail(requireForView(id));
     }
 
     @Transactional
@@ -208,13 +206,17 @@ public class ContractService {
     @Transactional
     public ContractDetail update(Long id, ContractForm f) {
         Contract c = require(id);
+        assertUnsigned(c);
         apply(c, f, c.getContractTypeId());
         return detail(c);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        Contract c = require(id);
+        // TODO(assumption): a signed contract is kept as evidence; it is closed (status), never deleted.
+        assertUnsigned(c);
+        c.setDeleted(true);
     }
 
     @Transactional
@@ -427,6 +429,30 @@ public class ContractService {
                 comments.findByContractIdAndDeletedFalseOrderByIdAsc(id).stream().map(CommentDto::of).toList(),
                 notes.findByContractIdAndDeletedFalseOrderByIdAsc(id).stream().map(NoteDto::of).toList(),
                 attachments.findByContractIdAndDeletedFalseOrderByIdAsc(id).stream().map(AttachmentDto::of).toList());
+    }
+
+    /**
+     * After the first signature the signed content is locked. Locking (not clearing the signatures) keeps what a
+     * signer accepted; a changed agreement is a new (duplicated) contract.
+     */
+    private void assertUnsigned(Contract c) {
+        if (signatures.existsByContractId(c.getId())) {
+            throw ApiException.badRequest(EContractError.CTR_018);
+        }
+    }
+
+    /** Signing (company side): same scope as any other write. */
+    Contract requireForWrite(Long id) {
+        return require(id);
+    }
+
+    /** Reading signatures / the PDF: same scope as {@link #get}. */
+    Contract requireForView(Long id) {
+        Contract c = requireInCompany(id);
+        if (ownView()) {
+            OwnScope.assertMine(mine(c), EContractError.CTR_002);
+        }
+        return c;
     }
 
     /** Every caller but {@link #get} writes: with CRM_CONTRACT_MANAGE_OWN only, another user's contract is 404. */

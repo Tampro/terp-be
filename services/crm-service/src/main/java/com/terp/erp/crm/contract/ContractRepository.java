@@ -2,7 +2,9 @@ package com.terp.erp.crm.contract;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,6 +14,11 @@ import java.util.Optional;
 
 public interface ContractRepository extends JpaRepository<Contract, Long> {
     Optional<Contract> findByIdAndDeletedFalse(Long id);
+
+    /** Row lock for signing: two sides signing at once are serialised, so the second sees the first. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Contract c where c.id = :id")
+    Optional<Contract> lockById(@Param("id") Long id);
 
     boolean existsByContractTypeIdAndDeletedFalse(Long contractTypeId);
 
