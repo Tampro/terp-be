@@ -171,8 +171,10 @@ public class SettingsController {
         return ApiMessageDto.ok(settings.storage());
     }
 
-    @Operation(summary = "Save Storage Settings", description = "Allowed types must be among the types media-service "
-            + "verifies by content; media-service applies the change within a minute.")
+    @Operation(summary = "Save Storage Settings", description = "Full replacement. Allowed types must be among the types "
+            + "media-service verifies by content; driver LOCAL / S3 / WASABI (omitted = LOCAL) picks where new uploads "
+            + "go. media-service applies the change within a minute. S3 credentials are not set here: they are "
+            + "media-service's MEDIA_S3_* environment.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Unsupported type (SETTINGS_005)"))
     @PreAuthorize("@PermissionChecker.isSuperAdmin()")
     @PutMapping("/admin/storage")

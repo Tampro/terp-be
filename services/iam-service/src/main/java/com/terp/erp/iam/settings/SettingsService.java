@@ -145,7 +145,7 @@ public class SettingsService {
         if (!unsupported.isEmpty()) {
             throw ApiException.badRequest(ESettingsError.SETTINGS_005, String.join(", ", unsupported));
         }
-        return write(ESection.STORAGE, new StorageSettings(types, s.maxUploadSizeKb()));
+        return write(ESection.STORAGE, new StorageSettings(types, s.maxUploadSizeKb(), s.driver()));
     }
 
     // ------------------------------------------------------------------ email (secret)

@@ -22,6 +22,9 @@ import com.terp.erp.media.storage.LinkSigner;
 import com.terp.erp.media.storage.StoragePolicyClient;
 import com.terp.erp.media.storage.StorageQuotaClient;
 import com.terp.erp.media.storage.StorageQuotaClientAccess;
+import com.terp.erp.media.storage.StorageRouter;
+import com.terp.erp.media.storage.S3FileStorage;
+import com.terp.erp.media.config.S3Properties;
 import com.terp.erp.security.ErpPrincipal;
 
 import java.math.BigDecimal;
@@ -57,7 +60,6 @@ class StorageQuotaTest {
     @BeforeEach
     void setUp() {
         when(policy.current()).thenReturn(new StoragePolicyClient.Policy(null, DataSize.ofMegabytes(10).toBytes()));
-        when(storage.save(any(), any(), any())).thenReturn("c10/key.png");
         when(files.save(any())).thenAnswer(i -> {
             MediaFile m = i.getArgument(0);
             m.setId(1L);
@@ -75,7 +77,12 @@ class StorageQuotaTest {
                 Duration.ofMinutes(10), DataSize.ofMegabytes(10), "http://localhost:8080", "http://iam",
                 List.of("erp-employee-service"));
         LinkSigner signer = new LinkSigner(props, Clock.fixed(Instant.parse("2026-11-23T00:00:00Z"), ZoneOffset.UTC));
-        return new MediaService(files, mock(MediaFolderRepository.class), storage, signer, props, policy, quota);
+        return new MediaService(files, mock(MediaFolderRepository.class), new StorageRouter(storage, unconfiguredS3()),
+                signer, props, policy, quota);
+    }
+
+    static S3FileStorage unconfiguredS3() {
+        return new S3FileStorage(new S3Properties(null, null, null, null, null, false, null, false, null, null, null));
     }
 
     private static void login(Long companyId, boolean superAdmin) {
@@ -117,7 +124,7 @@ class StorageQuotaTest {
                     assertThat(e.getErrorCode()).isEqualTo(EMediaError.MEDIA_010);
                     assertThat(e.getArgs()).containsExactly("0.01");
                 });
-        verify(storage, never()).save(any(), any(), any());
+        verify(storage, never()).put(any(), any(), anyLong(), any());
     }
 
     @Test

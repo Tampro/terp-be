@@ -139,10 +139,17 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #                                          notification-service — an existing realm needs the client added by hand)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
 #                                          commerce, accounting, support, recruitment, crm)
+#   SEAWEEDFS_S3_ACCESS_KEY, SEAWEEDFS_S3_SECRET_KEY (local SeaweedFS, the S3 storage of media-service; random —
+#                                          media-service uses this key unless MEDIA_S3_ACCESS_KEY/SECRET_KEY are set)
 #   ERP_SETTINGS_ENC_KEY                  (optional; base64 of 32 random bytes — needed to save the SMTP password
 #                                          or reCAPTCHA secret in Settings: openssl rand -base64 32)
 # optional: ERP_CORS_ORIGINS, ERP_WEB_REDIRECT_URI (FE origin, default http://localhost:5173), SAAS_BANK_NAME,
 #   SAAS_BANK_ACCOUNT_NUMBER, SAAS_BANK_ACCOUNT_NAME, *_DB_USERNAME (default erp_<service>)
+#   MEDIA_S3_ENDPOINT, MEDIA_S3_REGION, MEDIA_S3_BUCKET, MEDIA_S3_ACCESS_KEY, MEDIA_S3_SECRET_KEY,
+#   MEDIA_S3_PATH_STYLE, MEDIA_S3_PREFIX, MEDIA_S3_CREATE_BUCKET (media-service S3 / Wasabi storage; compose defaults
+#     to SeaweedFS http://seaweedfs:8333, bucket erp-media, path style, bucket created on first use. Real S3/Wasabi: https
+#     endpoint, a key limited to the bucket, CREATE_BUCKET=false. The driver itself is chosen by the super admin in
+#     Settings -> Storage (LOCAL / S3 / WASABI); test it with POST /api/v1/media/storage/test)
 #   DB_POOL_SIZE (Hikari pool per service, default 5; MySQL runs with --max-connections=400)
 #   GEOIP_CITY_DB, GEOIP_ASN_DB (iam-service; compose mounts deploy/geoip read-only — put GeoLite2-City.mmdb and
 #                                 GeoLite2-ASN.mmdb there for login city/country/ISP, see deploy/geoip/README.md)

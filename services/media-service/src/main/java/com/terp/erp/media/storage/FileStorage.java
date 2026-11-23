@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-public class FileStorage {
+public class FileStorage implements ObjectStorage {
     private final Path root;
 
     public FileStorage(MediaProperties props) throws IOException {
@@ -41,11 +41,42 @@ public class FileStorage {
         }
     }
 
+    @Override
+    public void put(String key, InputStream content, long size, String contentType) {
+        Path target = resolve(key);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(content, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            log.error("Could not store a file: {}", e.getClass().getSimpleName());
+            throw ApiException.badRequest(EMediaError.MEDIA_009);
+        }
+    }
+
+    @Override
+    public InputStream get(String key) {
+        Path p = resolve(key);
+        if (!Files.isRegularFile(p)) {
+            throw ApiException.notFound(EMediaError.MEDIA_001);
+        }
+        try {
+            return Files.newInputStream(p);
+        } catch (IOException e) {
+            throw ApiException.notFound(EMediaError.MEDIA_001);
+        }
+    }
+
+    @Override
+    public boolean exists(String key) {
+        return Files.isRegularFile(resolve(key));
+    }
+
     public Path path(String key) {
         return resolve(key);
     }
 
     /** Best effort: a missing file is already the wanted outcome. */
+    @Override
     public void delete(String key) {
         try {
             Files.deleteIfExists(resolve(key));
