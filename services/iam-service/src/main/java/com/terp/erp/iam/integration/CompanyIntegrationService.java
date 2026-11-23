@@ -8,6 +8,7 @@ import com.terp.erp.iam.constant.EIamError;
 import com.terp.erp.iam.integration.IntegrationDtos.AiForm;
 import com.terp.erp.iam.integration.IntegrationDtos.AiStored;
 import com.terp.erp.iam.integration.IntegrationDtos.AiView;
+import com.terp.erp.iam.integration.IntegrationDtos.EAiProvider;
 import com.terp.erp.iam.integration.IntegrationDtos.EIntegration;
 import com.terp.erp.iam.integration.IntegrationDtos.GoogleCalendarForm;
 import com.terp.erp.iam.integration.IntegrationDtos.GoogleCalendarStored;
@@ -42,8 +43,8 @@ import java.util.Optional;
  * rows of company configuration, with the same permission, encryption key (ERP_SETTINGS_ENC_KEY through
  * {@link SecretCipher}) and table (company_setting, one section per integration). Secrets are stored encrypted and
  * never returned. Slack / Telegram / Twilio are read (decrypted) by notification-service through the internal
- * notification-config, Google Calendar too (calendar sync of holidays / sales invoices); TODO: AI assistant has no
- * consumer yet.
+ * notification-config, Google Calendar too (calendar sync of holidays / sales invoices). The AI key is read only
+ * inside IAM by {@link com.terp.erp.iam.ai.AiAssistantService}: it never leaves this service.
  */
 @Slf4j
 @Service
@@ -226,6 +227,22 @@ public class CompanyIntegrationService {
         return read(companyId, EIntegration.GOOGLE_CALENDAR, GoogleCalendarStored.class)
                 .filter(s -> s.enabled() && s.calendarId() != null && s.serviceAccountJsonEnc() != null)
                 .map(s -> new GoogleCalendarTarget(s.calendarId(), cipher.decrypt(s.serviceAccountJsonEnc())));
+    }
+
+    /** Provider, decrypted key and model of the AI assistant; toString never shows the key. */
+    public record AiTarget(EAiProvider provider, String apiKey, String model) {
+        @Override
+        public String toString() {
+            return "AiTarget[provider=" + provider + ", model=" + model + ", apiKey=***]";
+        }
+    }
+
+    /** The AI assistant settings when they are complete and enabled for the company; empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<AiTarget> aiTarget(Long companyId) {
+        return read(companyId, EIntegration.AI_ASSISTANT, AiStored.class)
+                .filter(s -> s.enabled() && s.provider() != null && s.apiKeyEnc() != null && s.model() != null)
+                .map(s -> new AiTarget(s.provider(), cipher.decrypt(s.apiKeyEnc()), s.model()));
     }
 
     // ------------------------------------------------------------------ views

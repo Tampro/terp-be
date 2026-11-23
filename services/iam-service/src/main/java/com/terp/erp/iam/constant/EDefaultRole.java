@@ -14,7 +14,8 @@ import java.util.Set;
 @Getter
 @RequiredArgsConstructor
 public enum EDefaultRole {
-    COMPANY_ADMIN("Company administrator",
+    // TODO(assumption): COMPANY_ADMIN, HR and MANAGER use the AI assistant (AiPermissions) — confirm with PO.
+    COMPANY_ADMIN("Company administrator", union(AiPermissions.ALL,
             union(union(union(union(union(union(union(IamPermissions.ALL, SupportPermissions.ALL), SalesPermissions.ALL),
                                     union(OwnPermissions.ALL, PortalPermissions.ALL)),
                             com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
@@ -27,10 +28,10 @@ public enum EDefaultRole {
                                                             union(AssetPermissions.ALL,
                                                                     union(MeetingPermissions.ALL,
                                                                             union(EventPermissions.ALL,
-                                                                                    union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
+                                                                                    union(ZoomPermissions.ALL, DocumentPermissions.ALL))))))))))))),
     // TODO(assumption): HR manages accounts but not roles, and sees banking data — confirm with BA.
     HR("HR", union(Set.of(IamPermissions.USER_VIEW, IamPermissions.USER_CREATE, IamPermissions.USER_UPDATE,
-            IamPermissions.ROLE_VIEW, IamPermissions.PERMISSION_VIEW, SupportPermissions.MESSENGER_USE), union(union(MediaPermissions.ALL, EmployeePermissions.ALL),
+            IamPermissions.ROLE_VIEW, IamPermissions.PERMISSION_VIEW, SupportPermissions.MESSENGER_USE, AiPermissions.USE), union(union(MediaPermissions.ALL, EmployeePermissions.ALL),
             union(union(AttendancePermissions.ALL, RecruitmentPermissions.ALL),
                     union(LifecyclePermissions.ALL, union(PerformancePermissions.ALL,
                             union(TrainingPermissions.ALL,
@@ -41,8 +42,8 @@ public enum EDefaultRole {
                                                                     union(ZoomPermissions.ALL, DocumentPermissions.ALL)))))))))))),
     // TODO(assumption): a manager works their own sales, quotations, purchases, leads/deals, contracts, projects,
     // tasks and tickets (OwnScope: rows they created or are assigned to); full codes stay with COMPANY_ADMIN — confirm.
-    MANAGER("Manager", union(union(OwnPermissions.SALES, OwnPermissions.PURCHASE),
-            union(union(OwnPermissions.CRM, OwnPermissions.PROJECT), OwnPermissions.SUPPORT))),
+    MANAGER("Manager", union(AiPermissions.ALL, union(union(OwnPermissions.SALES, OwnPermissions.PURCHASE),
+            union(union(OwnPermissions.CRM, OwnPermissions.PROJECT), OwnPermissions.SUPPORT)))),
     // TODO(assumption): every employee clocks in/out, reads their own profile (ERP manual 15) and chats with
     // colleagues (ERP manual 18, Messenger) — confirm with BA. Also (assumption) sees projects they are a member of,
     // works their own tasks and raises / follows their own support tickets.

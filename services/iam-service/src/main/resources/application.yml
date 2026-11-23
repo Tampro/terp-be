@@ -50,6 +50,10 @@ erp:
     initial-backoff: ${ERP_OUTBOX_INITIAL_BACKOFF:5s}
     max-backoff: ${ERP_OUTBOX_MAX_BACKOFF:10m}
     confirm-timeout: ${ERP_OUTBOX_CONFIRM_TIMEOUT:5s}
+  # AI assistant (POST /api/v1/iam/ai/compose): per-company limit, kept in memory per instance, and the output cap.
+  ai:
+    requests-per-minute: ${ERP_AI_REQUESTS_PER_MINUTE:30}
+    max-output-tokens: ${ERP_AI_MAX_OUTPUT_TOKENS:800}
   # Profile avatars are media library files (docs/analysis/06 §3 Profile Settings).
   media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
   stripe:
