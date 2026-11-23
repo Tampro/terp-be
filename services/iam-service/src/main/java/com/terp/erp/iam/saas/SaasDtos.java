@@ -109,12 +109,17 @@ public final class SaasDtos {
             @Schema(description = "Optional coupon code", example = "WELCOME10") @Size(max = 50) String couponCode,
             @Schema(description = "Bank transfer reference, if already paid", example = "FT2611180001")
             @Size(max = 100) String paymentReference,
-            @Schema(description = "BANK_TRANSFER (default) or STRIPE; STRIPE orders are paid with "
-                    + "POST /saas/orders/{id}/stripe-checkout") EPaymentMethod paymentMethod) {
+            @Schema(description = "BANK_TRANSFER (default), STRIPE or PAYPAL; STRIPE orders are paid "
+                    + "with POST /saas/orders/{id}/stripe-checkout, PAYPAL with POST /saas/orders/{id}/paypal then "
+                    + "/paypal/capture") EPaymentMethod paymentMethod) {
     }
 
     @Schema(description = "Redirect the browser to url; Stripe returns to the app when done")
     public record StripeCheckoutDto(String sessionId, String url) {
+    }
+
+    @Schema(description = "Where to send the payer: approveUrl; then call /orders/{orderId}/paypal/capture on return")
+    public record PaypalCheckoutDto(String orderId, String paypalOrderId, String approveUrl) {
     }
 
     public record QuoteDto(BigDecimal originalPrice, BigDecimal discountAmount, BigDecimal finalPrice, String couponCode) {

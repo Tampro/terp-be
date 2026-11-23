@@ -33,7 +33,8 @@ public enum ESettingsError implements ErrorCode {
     SETTINGS_023("Nothing to preview: the template is not customised and the request has no text."),
     SETTINGS_024("The text is too long for {0}: at most {1} characters."),
     SETTINGS_025("Unknown placeholder: {0}."),
-    SETTINGS_026("The platform webhook does not exist.");
+    SETTINGS_026("The platform webhook does not exist."),
+    SETTINGS_027("PayPal needs a client ID and a client secret to be enabled.");
 
     private final String message;
 }

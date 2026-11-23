@@ -24,7 +24,7 @@ public final class SettingsDtos {
 
     public enum ESection {
         SYSTEM, BRAND, CURRENCY_FORMAT, SEO, COOKIE, EMAIL, BANK_TRANSFER, STORAGE, RECAPTCHA, STRIPE,
-        PLATFORM_EMAIL_NOTIFICATIONS
+        PLATFORM_EMAIL_NOTIFICATIONS, PAYPAL
     }
 
     // ------------------------------------------------------------------ System
@@ -277,8 +277,52 @@ public final class SettingsDtos {
         }
     }
 
+    // ------------------------------------------------------------------ PayPal (manual §4.2–4.3 payment method)
+
+    /** The API host is fixed by the mode, never configurable: no other host ever receives the credentials. */
+    public enum EPaypalMode {
+        SANDBOX("https://api-m.sandbox.paypal.com"), LIVE("https://api-m.paypal.com");
+
+        private final String baseUrl;
+
+        EPaypalMode(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String baseUrl() {
+            return baseUrl;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PaypalSettings(boolean enabled, EPaypalMode mode, String clientId, String clientSecretEnc) {
+        static PaypalSettings defaults() {
+            return new PaypalSettings(false, EPaypalMode.SANDBOX, null, null);
+        }
+    }
+
+    public record PaypalSettingsForm(
+            @Schema(description = "Offer PayPal on plan orders", example = "true") boolean enabled,
+            @Schema(description = "SANDBOX (api-m.sandbox.paypal.com) or LIVE (api-m.paypal.com)",
+                    requiredMode = Schema.RequiredMode.REQUIRED) @NotNull EPaypalMode mode,
+            @Schema(description = "REST app client ID (not secret)", example = "AbCdEf123")
+            @Size(max = 255) @Pattern(regexp = "^$|[A-Za-z0-9_-]+") String clientId,
+            @Schema(description = "REST app client secret — write-only. Omitted = keep; empty = remove.")
+            @Size(max = 255) String clientSecret) {
+        @Override
+        public String toString() {
+            return "PaypalSettingsForm[enabled=" + enabled + ", mode=" + mode + "]";
+        }
+    }
+
+    public record PaypalSettingsView(boolean enabled, EPaypalMode mode, String clientId, boolean hasSecret) {
+        static PaypalSettingsView of(PaypalSettings s) {
+            return new PaypalSettingsView(s.enabled(), s.mode(), s.clientId(), s.clientSecretEnc() != null);
+        }
+    }
+
     @Schema(description = "Payment methods a company can choose on a plan order")
-    public record PublicPayments(boolean bankTransfer, boolean stripe, String stripePublishableKey) {
+    public record PublicPayments(boolean bankTransfer, boolean stripe, String stripePublishableKey, boolean paypal) {
     }
 
     // ------------------------------------------------------------------ public bundle

@@ -12,6 +12,11 @@ import java.util.Collection;
 public interface PlanOrderRepository extends JpaRepository<PlanOrder, Long> {
     java.util.Optional<PlanOrder> findByStripeSessionId(String stripeSessionId);
 
+    /** Row lock so two capture calls for one order (double click, two tabs) activate the plan once. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from PlanOrder o where o.id = :id")
+    java.util.Optional<PlanOrder> findLockedById(@org.springframework.data.repository.query.Param("id") Long id);
+
     Page<PlanOrder> findByCompanyId(Long companyId, Pageable pageable);
 
     Page<PlanOrder> findByStatus(EOrderStatus status, Pageable pageable);

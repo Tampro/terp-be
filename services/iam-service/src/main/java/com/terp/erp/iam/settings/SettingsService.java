@@ -347,6 +347,49 @@ public class SettingsService {
         return read(ESection.STRIPE, SettingsDtos.StripeSettings.class, SettingsDtos.StripeSettings::defaults);
     }
 
+    // ------------------------------------------------------------------ PayPal
+
+    @Transactional(readOnly = true)
+    public SettingsDtos.PaypalSettingsView paypal() {
+        return SettingsDtos.PaypalSettingsView.of(paypalStored());
+    }
+
+    /** The secret is write-only: omitted = keep, empty = remove. Enabled needs the client ID and the secret. */
+    @Transactional
+    public SettingsDtos.PaypalSettingsView savePaypal(SettingsDtos.PaypalSettingsForm f) {
+        String secret = paypalStored().clientSecretEnc();
+        if (f.clientSecret() != null) {
+            secret = f.clientSecret().isBlank() ? null : cipher.encrypt(f.clientSecret().trim());
+        }
+        String id = f.clientId() == null || f.clientId().isBlank() ? null : f.clientId().trim();
+        if (f.enabled() && (id == null || secret == null)) {
+            throw ApiException.badRequest(ESettingsError.SETTINGS_027);
+        }
+        return SettingsDtos.PaypalSettingsView.of(write(ESection.PAYPAL,
+                new SettingsDtos.PaypalSettings(f.enabled(), f.mode(), id, secret)));
+    }
+
+    /** For checkout and capture: the decrypted credentials; null while PayPal is off. Never logged. */
+    @Transactional(readOnly = true)
+    public ActivePaypal activePaypal() {
+        SettingsDtos.PaypalSettings s = paypalStored();
+        if (!s.enabled() || s.clientId() == null || s.clientSecretEnc() == null) {
+            return null;
+        }
+        return new ActivePaypal(s.mode(), s.clientId(), cipher.decrypt(s.clientSecretEnc()));
+    }
+
+    public record ActivePaypal(SettingsDtos.EPaypalMode mode, String clientId, String clientSecret) {
+        @Override
+        public String toString() {
+            return "ActivePaypal[" + mode + "]";
+        }
+    }
+
+    private SettingsDtos.PaypalSettings paypalStored() {
+        return read(ESection.PAYPAL, SettingsDtos.PaypalSettings.class, SettingsDtos.PaypalSettings::defaults);
+    }
+
     // ------------------------------------------------------------------ public bundle
 
     @Transactional(readOnly = true)
@@ -359,7 +402,10 @@ public class SettingsService {
     private SettingsDtos.PublicPayments payments() {
         SettingsDtos.StripeSettings st = stripeStored();
         boolean stripe = st.enabled() && st.secretKeyEnc() != null && st.webhookSecretEnc() != null;
-        return new SettingsDtos.PublicPayments(bankTransfer().enabled(), stripe, stripe ? st.publishableKey() : null);
+        SettingsDtos.PaypalSettings pp = paypalStored();
+        boolean paypal = pp.enabled() && pp.clientId() != null && pp.clientSecretEnc() != null;
+        return new SettingsDtos.PublicPayments(bankTransfer().enabled(), stripe, stripe ? st.publishableKey() : null,
+                paypal);
     }
 
     // ------------------------------------------------------------------ platform email notifications

@@ -173,6 +173,40 @@ public class SubscriptionController {
         return ApiMessageDto.ok(orderService.stripeCheckout(id));
     }
 
+    @Operation(summary = "Pay a pending order with PayPal",
+            description = "For an order created with paymentMethod PAYPAL. Creates a PayPal order (intent CAPTURE) in "
+                    + "the platform default currency and returns approveUrl to send the browser to. PayPal sends the "
+                    + "payer back to {app}/billing/orders/{id}?paypal=return (or =cancel); the FE then calls "
+                    + "/orders/{id}/paypal/capture.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not a pending PAYPAL order with an amount (SAAS_039), "
+                    + "PayPal off (SAAS_042), default currency not supported by PayPal (SAAS_043), credentials "
+                    + "refused (SAAS_044), PayPal refused (SAAS_047)"),
+            @ApiResponse(responseCode = "404", description = "No such order in your company (SAAS_008)"),
+            @ApiResponse(responseCode = "503", description = "PayPal unreachable or failing (SAAS_045)")})
+    @PreAuthorize("@PermissionChecker.hasInCompany('SAAS_ORDER_CREATE')")
+    @PostMapping("/orders/{id}/paypal")
+    public ApiMessageDto<SaasDtos.PaypalCheckoutDto> paypalCheckout(@PathVariable Long id) {
+        return ApiMessageDto.ok(orderService.paypalCheckout(id));
+    }
+
+    @Operation(summary = "Capture an approved PayPal payment",
+            description = "Called when the payer returns from PayPal. Captures the PayPal order and approves the plan "
+                    + "order only when PayPal reports COMPLETED with the order's amount, currency and reference. "
+                    + "Idempotent: an order already approved returns as it is.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Not a pending PAYPAL order with a PayPal order "
+                    + "(SAAS_039), PayPal off (SAAS_042), currency (SAAS_043), credentials refused (SAAS_044), "
+                    + "payer has not approved / capture pending (SAAS_046), PayPal refused (SAAS_047), payment "
+                    + "does not match the order (SAAS_048)"),
+            @ApiResponse(responseCode = "404", description = "No such order in your company (SAAS_008)"),
+            @ApiResponse(responseCode = "503", description = "PayPal unreachable or failing (SAAS_045)")})
+    @PreAuthorize("@PermissionChecker.hasInCompany('SAAS_ORDER_CREATE')")
+    @PostMapping("/orders/{id}/paypal/capture")
+    public ApiMessageDto<OrderDto> paypalCapture(@PathVariable Long id) {
+        return ApiMessageDto.ok(orderService.paypalCapture(id));
+    }
+
     @Operation(summary = "Cancel a pending order")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Not pending (SAAS_009)"),

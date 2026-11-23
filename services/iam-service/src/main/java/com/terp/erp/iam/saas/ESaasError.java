@@ -48,7 +48,14 @@ public enum ESaasError implements ErrorCode {
     SAAS_038("Stripe could not start the payment: {0}."),
     SAAS_039("This order cannot be paid this way."),
     SAAS_040("The Stripe notification is not valid."),
-    SAAS_041("A free plan must have a price of 0.");
+    SAAS_041("A free plan must have a price of 0."),
+    SAAS_042("PayPal payment is not available."),
+    SAAS_043("PayPal cannot charge in {0}."),
+    SAAS_044("PayPal refused the platform credentials."),
+    SAAS_045("PayPal is unavailable, please try again later."),
+    SAAS_046("The PayPal payment is not approved yet."),
+    SAAS_047("PayPal refused the request: {0}."),
+    SAAS_048("The PayPal payment does not match the order; the order was not activated.");
 
     private final String message;
 }
