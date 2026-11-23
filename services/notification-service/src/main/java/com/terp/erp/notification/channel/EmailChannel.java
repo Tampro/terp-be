@@ -7,13 +7,16 @@ import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.Properties;
 import java.util.function.Function;
 
 /**
- * Plain-text email through the SMTP IAM resolved for the company (its own when on, else the platform's). The
+ * Email (plain text, or a company's HTML template) through the SMTP IAM resolved for the company (its own when on, else the platform's). The
  * sender is built per send from that configuration with explicit timeouts (same settings as IAM's buildMailer).
  * Never logs the address, the subject or the body.
  */
@@ -31,18 +34,38 @@ public class EmailChannel {
     }
 
     public SendResult send(Smtp smtp, String to, String subject, String body) {
+        return send(smtp, to, subject, body, false);
+    }
+
+    /** html: the body is a company's sanitised HTML template (sent as text/html); else plain text. */
+    public SendResult send(Smtp smtp, String to, String subject, String body, boolean html) {
         if (smtp == null || smtp.host() == null || smtp.host().isBlank() || smtp.fromAddress() == null) {
             return SendResult.fail("NO_SMTP");
         }
-        SimpleMailMessage m = new SimpleMailMessage();
-        m.setFrom(smtp.fromName() == null || smtp.fromName().isBlank() ? smtp.fromAddress()
-                : smtp.fromName() + " <" + smtp.fromAddress() + ">");
-        m.setTo(to);
-        m.setSubject(subject);
-        m.setText(body);
+        String from = smtp.fromName() == null || smtp.fromName().isBlank() ? smtp.fromAddress()
+                : smtp.fromName() + " <" + smtp.fromAddress() + ">";
         try {
-            senders.apply(smtp).send(m);
+            JavaMailSender sender = senders.apply(smtp);
+            if (html) {
+                MimeMessage mime = sender.createMimeMessage();
+                MimeMessageHelper h = new MimeMessageHelper(mime, "UTF-8");
+                h.setFrom(from);
+                h.setTo(to);
+                h.setSubject(subject);
+                h.setText(body, true);
+                sender.send(mime);
+                return SendResult.ok();
+            }
+            SimpleMailMessage m = new SimpleMailMessage();
+            m.setFrom(from);
+            m.setTo(to);
+            m.setSubject(subject);
+            m.setText(body);
+            sender.send(m);
             return SendResult.ok();
+        } catch (MessagingException e) {
+            // A malformed address in the template's input: retrying the same message cannot fix it.
+            return SendResult.fail("MESSAGE_INVALID");
         } catch (MailAuthenticationException e) {
             // Wrong credentials stay wrong until an admin fixes them.
             return SendResult.fail("SMTP_AUTH");

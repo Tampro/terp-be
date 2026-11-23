@@ -42,7 +42,7 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class DeliveryDispatcher {
-    private record Context(EventEnvelope envelope, EEventRoute route, NotificationConfig config) {
+    record Context(EventEnvelope envelope, EEventRoute route, NotificationConfig config) {
     }
 
     private final DeliveryRepository deliveries;
@@ -116,16 +116,21 @@ public class DeliveryDispatcher {
                     yield skipped("NO_RECIPIENT");
                 }
                 d.setTarget(Targets.maskEmail(to));
+                IamInternalClient.EmailOverride own = cfg.templatesOrNone().email();
+                if (own != null && own.body() != null && !own.body().isBlank()) {
+                    MessageTemplates.Message m = MessageTemplates.customEmail(own.subject(), own.body(), data);
+                    yield email.send(cfg.smtp(), to, m.subject(), m.body(), true);
+                }
                 MessageTemplates.Message m = MessageTemplates.email(c.route().emailCode, lang, data);
                 yield email.send(cfg.smtp(), to, m.subject(), m.body());
             }
             case SLACK -> cfg.slack() == null ? skipped("INTEGRATION_DISABLED")
                     : !cfg.slackOn() ? skipped(EventIntake.CHANNEL_EVENT_DISABLED)
-                    : chat.slack(cfg.slack().webhookUrl(), MessageTemplates.chat(c.route(), lang, data));
+                    : chat.slack(cfg.slack().webhookUrl(), chatText(cfg.templatesOrNone().slack(), c, lang, data));
             case TELEGRAM -> cfg.telegram() == null ? skipped("INTEGRATION_DISABLED")
                     : !cfg.telegramOn() ? skipped(EventIntake.CHANNEL_EVENT_DISABLED)
                     : chat.telegram(cfg.telegram().botToken(), cfg.telegram().chatId(),
-                    MessageTemplates.chat(c.route(), lang, data));
+                    chatText(cfg.templatesOrNone().telegram(), c, lang, data));
             case SMS -> {
                 if (cfg.twilio() == null) {
                     yield skipped("INTEGRATION_DISABLED");
@@ -137,13 +142,19 @@ public class DeliveryDispatcher {
                 if (phone == null) {
                     yield skipped("NO_RECIPIENT");
                 }
-                yield sms.send(cfg.twilio(), phone, MessageTemplates.chat(c.route(), lang, data));
+                yield sms.send(cfg.twilio(), phone, chatText(cfg.templatesOrNone().sms(), c, lang, data));
             }
             case WEBHOOK -> cfg.webhooks().stream().filter(w -> String.valueOf(d.getWebhookId()).equals(w.id()))
                     .findFirst()
                     .map(w -> webhook.send(w.url(), w.secret(), c.route(), c.envelope()))
                     .orElse(skipped("WEBHOOK_INACTIVE"));
         };
+    }
+
+    /** The company's own line for the channel when it wrote one, else the built-in line. */
+    static String chatText(String own, Context c, String lang, JsonNode data) {
+        return own != null && !own.isBlank() ? MessageTemplates.customChat(own, data)
+                : MessageTemplates.chat(c.route(), lang, data);
     }
 
     /** The recipient's address now: the event's own, or the IAM user's (an inactive or unknown user gets none). */

@@ -176,4 +176,38 @@ class DeliveryDispatcherTest {
         assertThat(d.getLastErrorCode()).isEqualTo("CHANNEL_EVENT_DISABLED");
         verify(http, never()).postJson(any(), anyString(), anyMap());
     }
+    @Test
+    void aCompanyEmailTemplateIsSentAsHtmlWithEscapedValues() throws Exception {
+        ProcessedEvent pe = new ProcessedEvent();
+        pe.setEventId("e-1");
+        pe.setEnvelope(mapper.writeValueAsString(new EventEnvelope("e-1", "support.ticket.created", 7L, "TICKET",
+                "1", NOW, null, mapper.createObjectNode().put("ticketNumber", "T-0001")
+                .put("subject", "<b>x</b>").put("recipientEmail", "customer@example.invalid"))));
+        when(processed.findById("e-1")).thenReturn(Optional.of(pe));
+        Delivery d = delivery(1, EChannel.EMAIL);
+        d.setRecipientRef("payload");
+        when(iam.config(7L, "support.ticket.created", "SUPPORT_TICKET_CREATED", null))
+                .thenReturn(new NotificationConfig("7", "en", true, smtp, null, null, null, List.of(),
+                        null, null, null, new IamInternalClient.Templates(
+                        new IamInternalClient.EmailOverride("Our ticket {ticketNumber} {unknown}",
+                                "<p>{subject} / {ticketNumber}{nothing}</p>"), null, null, null)));
+        when(email.send(any(), anyString(), anyString(), anyString(), eq(true))).thenReturn(SendResult.ok());
+
+        dispatcher.dispatch(List.of(1L));
+
+        verify(email).send(eq(smtp), eq("customer@example.invalid"), eq("Our ticket T-0001"),
+                eq("<p>&lt;b&gt;x&lt;/b&gt; / T-0001</p>"), eq(true));
+        verify(email, never()).send(any(), anyString(), anyString(), anyString());
+        assertThat(d.getStatus()).isEqualTo(EStatus.SENT);
+    }
+
+    @Test
+    void noCompanyTemplateKeepsTheBuiltInChatLine() {
+        var data = mapper.createObjectNode().put("ticketNumber", "T-1").put("subject", "Help");
+        var ctx = new DeliveryDispatcher.Context(null,
+                com.terp.erp.notification.event.EEventRoute.SUPPORT_TICKET_CREATED, null);
+        assertThat(DeliveryDispatcher.chatText(null, ctx, "en", data)).isEqualTo("[ERP] Ticket T-1: Help");
+        assertThat(DeliveryDispatcher.chatText("Ticket {ticketNumber}\nby {name}", ctx, "en", data))
+                .isEqualTo("Ticket T-1\nby");
+    }
 }

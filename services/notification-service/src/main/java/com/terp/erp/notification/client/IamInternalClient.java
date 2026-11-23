@@ -47,15 +47,37 @@ public class IamInternalClient {
     public record Webhook(String id, String url, String secret) {
     }
 
+    /** The company's own email text (subject + sanitised HTML body); null = built-in default. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EmailOverride(String subject, String body) {
+    }
+
+    /** The company's own texts for the event in defaultLanguage; each part null = built-in default. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Templates(EmailOverride email, String slack, String telegram, String sms) {
+    }
+
     /**
      * …EnabledForEvent: the company's per-event switch of that chat channel; null (an IAM without the switch) = on.
-     * twilio: null when SMS is off.
+     * twilio: null when SMS is off. templates: null (an IAM without company templates) = every default.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
                                      Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
                                      Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
-                                     Boolean smsEnabledForEvent) {
+                                     Boolean smsEnabledForEvent, Templates templates) {
+        public NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
+                                  Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
+                                  Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
+                                  Boolean smsEnabledForEvent) {
+            this(companyId, defaultLanguage, emailEnabled, smtp, slack, telegram, twilio, webhooks,
+                    slackEnabledForEvent, telegramEnabledForEvent, smsEnabledForEvent, null);
+        }
+
+        public Templates templatesOrNone() {
+            return templates == null ? new Templates(null, null, null, null) : templates;
+        }
+
         public List<Webhook> webhooks() {
             return webhooks == null ? List.of() : webhooks;
         }
