@@ -42,10 +42,11 @@ class ContractServiceTest {
     private final AccountingClient accounting = mock(AccountingClient.class);
     private final MediaClient media = mock(MediaClient.class);
     private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final ContractSignatureRepository signatureRepo = mock(ContractSignatureRepository.class);
     private final ContractTypeService typeService = new ContractTypeService(types, contracts);
     private final ContractSettingService settingService = new ContractSettingService(settingRepo, contracts);
     private final ContractService service = new ContractService(contracts, typeService, settingService, renewals,
-            comments, notes, attachments, accounting, media, outbox,
+            comments, notes, attachments, accounting, media, outbox, signatureRepo,
             Clock.fixed(Instant.parse("2026-11-21T03:00:00Z"), ZoneOffset.UTC));
     private final ContractSetting setting = new ContractSetting();
 

@@ -47,15 +47,20 @@ public class ContractPortalService {
 
     @Transactional(readOnly = true)
     public PortalContractDetail get(Long id) {
-        Long customer = accounting.myCustomerId();
-        Contract c = contracts.findByIdAndDeletedFalse(id)
-                .filter(x -> Objects.equals(x.getCompanyId(), CurrentUser.get().companyId())
-                        && Objects.equals(x.getCustomerId(), customer))
-                .orElseThrow(() -> ApiException.notFound(EContractError.CTR_002));
+        Contract c = requireMine(id);
         return new PortalContractDetail(row(c), c.getDescription(),
                 renewals.findByContractIdAndDeletedFalseOrderByIdAsc(c.getId()).stream()
                         .map(r -> new PortalRenewal(r.getStartDate(), r.getEndDate(), r.getValue(), r.getStatus()))
                         .toList());
+    }
+
+    /** A contract of the customer linked to me, else 404 (CTR_002); used by signing and the PDF too. */
+    Contract requireMine(Long id) {
+        Long customer = accounting.myCustomerId();
+        return contracts.findByIdAndDeletedFalse(id)
+                .filter(x -> Objects.equals(x.getCompanyId(), CurrentUser.get().companyId())
+                        && Objects.equals(x.getCustomerId(), customer))
+                .orElseThrow(() -> ApiException.notFound(EContractError.CTR_002));
     }
 
     private PortalContract row(Contract c) {
