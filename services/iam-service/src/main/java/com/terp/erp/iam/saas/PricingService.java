@@ -48,10 +48,14 @@ public class PricingService {
         if (c.getMaximumSpend() != null && original.compareTo(c.getMaximumSpend()) > 0) {
             throw ApiException.badRequest(ESaasError.SAAS_019);
         }
-        BigDecimal discount = c.getType() == ECouponType.PERCENTAGE
-                ? original.multiply(c.getDiscountValue()).divide(HUNDRED, 2, RoundingMode.HALF_UP)
-                : c.getDiscountValue().setScale(2, RoundingMode.HALF_UP);
-        discount = discount.min(original); // never below zero
+        BigDecimal value = c.getDiscountValue().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal discount = switch (c.getType()) {
+            case PERCENTAGE -> original.multiply(c.getDiscountValue()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+            case FLAT -> value;
+            // FIXED: pay exactly the coupon's price; a price at or above the plan's gives nothing off.
+            case FIXED -> original.subtract(value).max(BigDecimal.ZERO);
+        };
+        discount = discount.min(original).max(BigDecimal.ZERO); // the total never goes below zero
         return new Quote(original, discount, original.subtract(discount), c);
     }
 

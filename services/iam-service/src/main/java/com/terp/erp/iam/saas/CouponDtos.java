@@ -36,9 +36,9 @@ public final class CouponDtos {
     public record CouponForm(
             @Schema(description = "Display name", example = "Summer Sale 2026", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotBlank @Size(max = 100) String name,
-            @Schema(description = "PERCENTAGE or FLAT", example = "PERCENTAGE", requiredMode = Schema.RequiredMode.REQUIRED)
+            @Schema(description = "PERCENTAGE (value % off), FLAT (value off) or FIXED (the order costs exactly value)", example = "PERCENTAGE", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotNull ECouponType type,
-            @Schema(description = "Percent (0–100) or amount", example = "20", requiredMode = Schema.RequiredMode.REQUIRED)
+            @Schema(description = "Percent (0–100) for PERCENTAGE; an amount off for FLAT; the price to pay for FIXED", example = "20", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotNull @DecimalMin("0") BigDecimal discountValue,
             @Schema(description = "MANUAL (default): `code` is required. AUTO: the server generates an 8-character code "
                     + "on create; on update the existing code is kept.", example = "MANUAL")

@@ -55,6 +55,32 @@ class PricingServiceTest {
     }
 
     @Test
+    void fixedCouponMakesTheOrderCostExactlyItsValue() {
+        coupon("DEAL", ECouponType.FIXED, "199000");
+        var q = pricing.quote(plan, EBillingCycle.MONTHLY, "DEAL", 10L);
+        assertThat(q.finalPrice()).isEqualByComparingTo("199000");
+        assertThat(q.discountAmount()).isEqualByComparingTo("291000");
+        // The same coupon on the yearly price still makes the order cost 199,000.
+        assertThat(pricing.quote(plan, EBillingCycle.YEARLY, "DEAL", 10L).finalPrice()).isEqualByComparingTo("199000");
+    }
+
+    @Test
+    void fixedPriceAtOrAbovePlanPriceGivesNoDiscount() {
+        coupon("HIGH", ECouponType.FIXED, "600000");
+        var q = pricing.quote(plan, EBillingCycle.MONTHLY, "HIGH", 10L);
+        assertThat(q.discountAmount()).isEqualByComparingTo("0");
+        assertThat(q.finalPrice()).isEqualByComparingTo("490000");
+        coupon("SAME", ECouponType.FIXED, "490000");
+        assertThat(pricing.quote(plan, EBillingCycle.MONTHLY, "SAME", 10L).discountAmount()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void fixedPriceOfZeroMakesTheOrderFree() {
+        coupon("FREE", ECouponType.FIXED, "0");
+        assertThat(pricing.quote(plan, EBillingCycle.MONTHLY, "FREE", 10L).finalPrice()).isEqualByComparingTo("0");
+    }
+
+    @Test
     void flatCouponNeverMakesThePriceNegative() {
         coupon("BIG", ECouponType.FLAT, "1000000");
         assertThat(pricing.quote(plan, EBillingCycle.MONTHLY, "BIG", 10L).finalPrice()).isEqualByComparingTo("0");
