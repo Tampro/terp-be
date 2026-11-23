@@ -11,6 +11,8 @@ docs/
 scripts/vietnamese.js
 
 ### Local environment / secrets ###
+# MaxMind GeoLite2 databases (licensed, downloaded locally; deploy/geoip/README.md)
+deploy/geoip/*.mmdb
 application-local.properties
 .env
 .env.*

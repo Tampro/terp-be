@@ -138,6 +138,11 @@ services:
       SAAS_BANK_ACCOUNT_NAME: ${SAAS_BANK_ACCOUNT_NAME:-}
       # Encryption key for secrets saved in platform settings (base64, 32 bytes). Optional.
       ERP_SETTINGS_ENC_KEY: ${ERP_SETTINGS_ENC_KEY:-}
+      # Offline GeoLite2 files for login history location (deploy/geoip/README.md); missing = WARN, fields null.
+      GEOIP_CITY_DB: /geoip/GeoLite2-City.mmdb
+      GEOIP_ASN_DB: /geoip/GeoLite2-ASN.mmdb
+    volumes:
+      - ./deploy/geoip:/geoip:ro
     ports:
       - "18081:8081"
     depends_on:

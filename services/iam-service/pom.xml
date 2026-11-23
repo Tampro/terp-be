@@ -49,6 +49,12 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <!-- Offline GeoLite2 lookup for login history; IPs never leave the service (no web-service client). -->
+            <groupId>com.maxmind.geoip2</groupId>
+            <artifactId>geoip2</artifactId>
+            <version>${geoip2.version}</version>
+        </dependency>
+        <dependency>
             <!-- Custom Pages: rich text sanitized before it is published (docs/analysis/06 §3.2.8). -->
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>

@@ -73,6 +73,11 @@ erp:
     admin-full-name: ${ADMIN_FULL_NAME:System Administrator}
     company-code: ${BOOTSTRAP_COMPANY_CODE:TERP}
     company-name: ${BOOTSTRAP_COMPANY_NAME:TERP}
+  geoip:
+    # Offline MaxMind GeoLite2 .mmdb files for login history city/country/ISP (deploy/geoip/README.md). Empty or
+    # missing = fields stay null. No IP is ever sent to a third party.
+    city-db: ${GEOIP_CITY_DB:}
+    asn-db: ${GEOIP_ASN_DB:}
   saas:
     # Account companies pay plan orders to (shown with each pending order). TODO(assumption): set by the PO.
     bank:
