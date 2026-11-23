@@ -49,6 +49,7 @@ public class UserService {
     private final com.terp.erp.iam.saas.SubscriptionService subscriptions;
     private final com.terp.erp.iam.email.EmailNotifier notifier;
     private final OutboxPublisher outbox;
+    private final com.terp.erp.iam.saas.PlanSeatEnforcer seats;
 
     @Transactional(readOnly = true)
     public Page<UserDto> search(Long requestedCompanyId, String keyword, Pageable pageable) {
@@ -178,6 +179,10 @@ public class UserService {
     public UserDto changeStatus(Long id, EUserStatus status) {
         UserAccount u = require(id);
         assertNotSelf(u);
+        if (status == EUserStatus.ACTIVE && u.getStatus() != EUserStatus.ACTIVE && u.getCompanyId() != null) {
+            // Within the plan's active-account limit, so a downgrade's locks cannot simply be undone (SAAS_011).
+            companies.findByIdAndDeletedFalse(u.getCompanyId()).ifPresent(seats::assertCanActivate);
+        }
         u.setStatus(status);
         keycloak.setEnabled(u.getKeycloakId(), status == EUserStatus.ACTIVE);
         authorityCache.evictAll();

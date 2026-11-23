@@ -163,5 +163,10 @@
     "prefix": "TP",
     "standalone": false,
     "description": "editable notification templates"
+  },
+  "seat": {
+    "prefix": "SEAT",
+    "standalone": false,
+    "description": "plan downgrade locks accounts over the user limit"
   }
 }

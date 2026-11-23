@@ -45,6 +45,7 @@ public class OrderService {
     private final CatalogService catalog;
     private final PricingService pricing;
     private final SubscriptionService subscriptions;
+    private final PlanSeatEnforcer seats;
     private final BankTransferProperties bank;
     private final com.terp.erp.iam.settings.SettingsService settings;
     private final LocalAuthorityResolver authorityCache;
@@ -68,6 +69,7 @@ public class OrderService {
         Company c = company(companyId);
         Plan p = offered(planId);
         subscriptions.startTrial(c, p, trials.existsByCompanyIdAndPlanId(companyId, p.getId()));
+        seats.enforce(c);
         CompanyPlanTrial t = new CompanyPlanTrial();
         t.setCompanyId(companyId);
         t.setPlanId(p.getId());
@@ -368,6 +370,7 @@ public class OrderService {
         Company c = company(o.getCompanyId());
         Plan plan = catalog.requirePlan(o.getPlanId());
         subscriptions.activate(c, plan, o.getBillingCycle());
+        seats.enforce(c);
         referral.onOrderApproved(o, c);
         authorityCache.evictAll();
         notifier.orderDecided(true, c, o.getOrderNumber(), plan.getName(), o.getBillingCycle().name(),
@@ -431,6 +434,7 @@ public class OrderService {
         o.setProcessedBy(CurrentUser.get().keycloakId());
         o.setNotes(note);
         subscriptions.activate(c, plan, cycle);
+        seats.enforce(c);
         authorityCache.evictAll();
         return dto(orders.save(o));
     }
@@ -452,6 +456,7 @@ public class OrderService {
     public SubscriptionDto assign(Long companyId, Long planId, Instant expiresAt) {
         Company c = company(companyId);
         subscriptions.assign(c, catalog.requirePlan(planId), expiresAt);
+        seats.enforce(c);
         authorityCache.evictAll();
         var e = subscriptions.effective(c);
         return new SubscriptionDto(e.status(), SaasDtos.PlanDto.of(e.plan()), e.expiresAt(), e.fallback(),
