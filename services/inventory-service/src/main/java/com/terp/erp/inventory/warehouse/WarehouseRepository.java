@@ -16,4 +16,6 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, Long> {
     Page<Warehouse> search(Long companyId, String kw, String city, Boolean active, Pageable pageable);
 
     Optional<Warehouse> findByIdAndDeletedFalse(Long id);
+
+    java.util.List<Warehouse> findByCompanyIdAndDeletedFalse(Long companyId);
 }

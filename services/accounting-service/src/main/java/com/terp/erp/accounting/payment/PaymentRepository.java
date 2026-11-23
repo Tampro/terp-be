@@ -36,4 +36,21 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> clearedBetween(@Param("companyId") Long companyId, @Param("kind") EPaymentKind kind,
                                  @Param("partyId") Long partyId, @Param("from") LocalDate from,
                                  @Param("to") LocalDate to);
+
+    /** [month, sum of amount] of CLEARED payments dated in [from, to]; partyId null = every party. */
+    @Query("select extract(month from p.paymentDate), coalesce(sum(p.amount), 0) from Payment p "
+            + "where p.companyId = :companyId and p.kind = :kind and p.deleted = false "
+            + "and p.status = com.terp.erp.accounting.payment.EPaymentStatus.CLEARED "
+            + "and (:partyId is null or p.partyId = :partyId) and p.paymentDate between :from and :to "
+            + "group by extract(month from p.paymentDate)")
+    List<Object[]> clearedByMonth(@Param("companyId") Long companyId, @Param("kind") EPaymentKind kind,
+                                  @Param("partyId") Long partyId, @Param("from") LocalDate from,
+                                  @Param("to") LocalDate to);
+
+    /** All-time sum of CLEARED payments of a party. */
+    @Query("select coalesce(sum(p.amount), 0) from Payment p where p.companyId = :companyId and p.kind = :kind "
+            + "and p.deleted = false and p.status = com.terp.erp.accounting.payment.EPaymentStatus.CLEARED "
+            + "and p.partyId = :partyId")
+    java.math.BigDecimal sumCleared(@Param("companyId") Long companyId, @Param("kind") EPaymentKind kind,
+                                    @Param("partyId") Long partyId);
 }

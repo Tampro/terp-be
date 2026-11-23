@@ -24,4 +24,15 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     boolean existsByTaxIdAndDeletedFalse(Long taxId);
 
     boolean existsByUnitIdAndDeletedFalse(Long unitId);
+
+    /** Stocked (PRODUCT / PART) live items of the company. */
+    @org.springframework.data.jpa.repository.Query("select count(i) from Item i where i.companyId = :companyId "
+            + "and i.deleted = false and i.type <> com.terp.erp.inventory.item.Item.EItemType.SERVICE")
+    long countStocked(Long companyId);
+
+    /** Stocked live items whose stock over all warehouses is 0 or less (no stock row at all included). */
+    @org.springframework.data.jpa.repository.Query("select count(i) from Item i where i.companyId = :companyId "
+            + "and i.deleted = false and i.type <> com.terp.erp.inventory.item.Item.EItemType.SERVICE "
+            + "and coalesce((select sum(s.quantity) from WarehouseStock s where s.itemId = i.id), 0) <= 0")
+    long countOutOfStock(Long companyId);
 }

@@ -13,6 +13,7 @@ import com.terp.erp.iam.repository.PlanRepository;
 import com.terp.erp.iam.repository.PlanRequestRepository;
 import com.terp.erp.iam.repository.UserAccountRepository;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -32,6 +33,9 @@ import java.util.stream.Collectors;
  * Super Admin Dashboard (docs/analysis/06 §3.1). Months are UTC.
  * TODO(assumption): revenue = final price of APPROVED plan orders, dated by their approval (processedAt, else the
  * order date); an active company = ACTIVE status with a TRIAL or ACTIVE subscription.
+ * TODO(assumption): "Total Orders (active count)" = every APPROVED order (an approved order is the one that took
+ * effect; pending / rejected are not counted) and "Order Payments" = the sum of their final prices, so it equals
+ * totalRevenue until refunds exist. Counting only orders whose subscription still runs is the alternative.
  */
 @Service
 @RequiredArgsConstructor
@@ -57,7 +61,11 @@ public class AdminDashboardService {
     public record AdminDashboard(BigDecimal totalRevenue, long totalCompanies, long activeCompanies, long activePlans,
                                  long totalUsers, long pendingRequests, Double monthlyGrowthPercent,
                                  List<RecentCompany> recentCompanies, List<TopPlan> topPlans, int year,
-                                 List<Long> newCompaniesByMonth, List<BigDecimal> revenueByMonth) {
+                                 List<Long> newCompaniesByMonth, List<BigDecimal> revenueByMonth,
+                                 @Schema(description = "Total Orders card (manual 3.1): APPROVED plan orders")
+                                 long totalOrders,
+                                 @Schema(description = "Order Payments card: sum of the final price of APPROVED orders")
+                                 BigDecimal orderPayments) {
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +118,7 @@ public class AdminDashboardService {
         long activePlans = livePlans.values().stream().filter(Plan::isEnabled).count();
         long pending = requests.countByStatus(EPlanRequestStatus.PENDING) + orders.countByStatus(EOrderStatus.PENDING);
         return new AdminDashboard(total, all.size(), active, activePlans, users.countByDeletedFalse(), pending, growth,
-                recent, top, y, newByMonth, revenueByMonth);
+                recent, top, y, newByMonth, revenueByMonth, approved.size(), total);
     }
 
     private static Instant approvedAt(PlanOrder o) {

@@ -11,5 +11,7 @@ public record ReportProperties(@NotBlank String iamServiceUrl, @NotBlank String 
                                @NotBlank String attendanceServiceUrl, @NotBlank String recruitmentServiceUrl,
                                @NotBlank String payrollServiceUrl, @NotBlank String assetServiceUrl,
                                @NotBlank String meetingServiceUrl, @NotBlank String commerceServiceUrl,
-                               @NotBlank String crmServiceUrl, @NotBlank String projectServiceUrl) {
+                               @NotBlank String crmServiceUrl, @NotBlank String projectServiceUrl,
+                               @NotBlank String accountingServiceUrl, @NotBlank String inventoryServiceUrl,
+                               @NotBlank String supportServiceUrl) {
 }

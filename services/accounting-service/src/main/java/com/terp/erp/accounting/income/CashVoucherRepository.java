@@ -1,5 +1,6 @@
 package com.terp.erp.accounting.income;
 
+import java.util.List;
 import com.terp.erp.accounting.coa.ECategoryKind;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,4 +21,12 @@ public interface CashVoucherRepository extends JpaRepository<CashVoucher, Long> 
     Optional<CashVoucher> findByIdAndDeletedFalse(Long id);
 
     boolean existsByCategoryId(Long categoryId);
+
+    /** [month, sum of amount] of POSTED vouchers of a kind dated in [from, to] (account dashboard). */
+    @Query("select extract(month from v.date), coalesce(sum(v.amount), 0) from CashVoucher v where v.companyId = :companyId "
+            + "and v.kind = :kind and v.deleted = false and v.status = com.terp.erp.accounting.income.EVoucherStatus.POSTED "
+            + "and v.date between :from and :to group by extract(month from v.date)")
+    List<Object[]> postedByMonth(Long companyId, ECategoryKind kind, LocalDate from, LocalDate to);
+
+    List<CashVoucher> findTop5ByCompanyIdAndKindAndDeletedFalseOrderByDateDescIdDesc(Long companyId, ECategoryKind kind);
 }

@@ -46,6 +46,21 @@ public class ReportController {
     private static final String DOWN = "Commerce unavailable (ACC_060)";
 
     private final ReportService service;
+    private final AccountDashboardService dashboard;
+
+    @Operation(summary = "Account dashboard",
+            description = "Money of the calendar year (default this year): POSTED revenue / expense vouchers by voucher "
+                    + "date, CLEARED customer / vendor payments by payment date; netCashFlow = (totalRevenue + "
+                    + "customerPayments) - (totalExpense + vendorPayments); monthly in / out; clients and vendors = "
+                    + "current non-deleted counts; the 5 latest revenues and expenses of any status.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = NO_COMPANY))
+    @PreAuthorize(VIEW)
+    @GetMapping("/dashboard")
+    public ApiMessageDto<AccountDashboardService.AccountDashboard> dashboard(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @Parameter(description = "Default this year") @RequestParam(required = false) Integer year) {
+        return ApiMessageDto.ok(dashboard.dashboard(companyId, year));
+    }
 
     @Operation(summary = "Invoice aging (customers)", description = AGING)
     @ApiResponses({@ApiResponse(responseCode = "400", description = NO_COMPANY),

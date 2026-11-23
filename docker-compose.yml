@@ -367,6 +367,9 @@ services:
       COMMERCE_SERVICE_URL: http://commerce-service:8092
       CRM_SERVICE_URL: http://crm-service:8094
       PROJECT_SERVICE_URL: http://project-service:8095
+      ACCOUNTING_SERVICE_URL: http://accounting-service:8093
+      INVENTORY_SERVICE_URL: http://inventory-service:8091
+      SUPPORT_SERVICE_URL: http://support-service:8096
     ports:
       - "18090:8090"
     depends_on:

@@ -70,4 +70,12 @@ public interface LeadRepository extends JpaRepository<Lead, Long> {
             + "group by extract(month from l.createdDate)")
     List<Object[]> countByMonth(@Param("companyId") Long companyId, @Param("pipelineId") Long pipelineId,
                                 @Param("from") Instant from, @Param("to") Instant to);
+
+    /** Dashboard: every live lead of the company. */
+    List<Lead> findByCompanyIdAndDeletedFalse(Long companyId);
+
+    /** Dashboard, own scope: leads I own or created (same rule as {@link #searchOwn}). */
+    @Query("select l from Lead l where l.companyId = :companyId and l.deleted = false "
+            + "and (l.ownerUserId = :me or l.createdBy = :sub)")
+    List<Lead> listOwn(@Param("companyId") Long companyId, @Param("me") Long me, @Param("sub") String sub);
 }

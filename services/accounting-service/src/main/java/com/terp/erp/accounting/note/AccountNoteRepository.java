@@ -48,4 +48,11 @@ public interface AccountNoteRepository extends JpaRepository<AccountNote, Long> 
             + "and n.deleted = false and n.status in (com.terp.erp.accounting.note.ENoteStatus.APPROVED, "
             + "com.terp.erp.accounting.note.ENoteStatus.PARTIAL) group by n.partyId")
     List<Object[]> availableByParty(@Param("companyId") Long companyId, @Param("kind") ENoteKind kind);
+
+    /** [[sum of total, count]] of the notes a party sees in its portal (not drafts). */
+    @Query("select coalesce(sum(n.total), 0), count(n) from AccountNote n where n.companyId = :companyId "
+            + "and n.kind = :kind and n.deleted = false and n.partyId = :partyId "
+            + "and n.status <> com.terp.erp.accounting.note.ENoteStatus.DRAFT")
+    java.util.List<Object[]> issuedSummary(@Param("companyId") Long companyId, @Param("kind") ENoteKind kind,
+                                           @Param("partyId") Long partyId);
 }

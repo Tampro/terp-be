@@ -46,6 +46,7 @@ import java.util.List;
 public class TicketController {
     private final TicketService service;
     private final TicketCategoryService categoryService;
+    private final TicketStatsService statsService;
 
     @GetMapping("/tickets")
     @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
@@ -69,6 +70,23 @@ public class TicketController {
             @ApiResponse(responseCode = "400", description = "SUP_001")})
     public ApiMessageDto<StatusCounts> statusCounts(@RequestParam(required = false) Long companyId) {
         return ApiMessageDto.ok(service.statusCounts(companyId));
+    }
+
+    @GetMapping("/tickets/stats")
+    @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
+    @Operation(summary = "Support dashboard figures",
+            description = "Totals (all time): total / open (not CLOSED) / closed / created today, average first staff "
+                    + "response in minutes, status and category split, KB article and FAQ counts of the company; "
+                    + "monthly created / closed of the year. SUPPORT_TICKET_VIEW_OWN (or own=true) counts only my "
+                    + "tickets. tz = IANA time zone of today and the months, default Asia/Ho_Chi_Minh.")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
+            @ApiResponse(responseCode = "400", description = "SUP_001, unknown time zone (COMMON_001)")})
+    public ApiMessageDto<TicketStatsService.TicketStats> stats(
+            @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) String tz,
+            @RequestParam(defaultValue = "false") boolean own) {
+        return ApiMessageDto.ok(statsService.stats(companyId, year, tz, own));
     }
 
     @GetMapping("/tickets/{id}")

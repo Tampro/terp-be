@@ -52,6 +52,8 @@ class AdminDashboardServiceTest {
         var d = service.dashboard(null);
 
         assertThat(d.totalRevenue()).isEqualByComparingTo("450");
+        assertThat(d.orderPayments()).isEqualByComparingTo("450");
+        assertThat(d.totalOrders()).isPositive();
         assertThat(d.totalCompanies()).isEqualTo(3);
         assertThat(d.activeCompanies()).isEqualTo(2);
         assertThat(d.activePlans()).isEqualTo(2);

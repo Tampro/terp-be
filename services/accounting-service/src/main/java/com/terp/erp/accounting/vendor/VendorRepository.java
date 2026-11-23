@@ -21,4 +21,6 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
     Optional<Vendor> findFirstByCompanyIdAndUserIdAndDeletedFalse(Long companyId, Long userId);
 
     boolean existsByCompanyIdAndUserIdAndDeletedFalseAndIdNot(Long companyId, Long userId, Long id);
+
+    long countByCompanyIdAndDeletedFalse(Long companyId);
 }

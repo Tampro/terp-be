@@ -35,6 +35,18 @@ public class StockController {
             + "not of the company or inactive (INV_015), not enough stock — names SKU and available (INV_017)";
 
     private final StockService service;
+    private final StockSummaryService summaries;
+
+    @Operation(summary = "Stock summary (POS dashboard)", description = "products = live PRODUCT / PART items; "
+            + "outOfStock = those with total stock over all warehouses <= 0 (never stocked included); byWarehouse = "
+            + "per live warehouse, stock rows <= 0 of live items, highest first.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
+    @PreAuthorize("@PermissionChecker.hasAny('INVENTORY_VIEW','POS_REPORT','POS_SELL')")
+    @GetMapping("/summary")
+    public ApiMessageDto<StockSummaryService.StockSummary> summary(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
+        return ApiMessageDto.ok(summaries.summary(companyId));
+    }
 
     @Operation(summary = "Stock per item and warehouse", description = "Both filters optional.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (INV_001)"))
