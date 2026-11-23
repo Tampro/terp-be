@@ -85,7 +85,7 @@ public class OfferService {
 
     /** expired = past the expiration date while still Draft / Sent / Negotiating. */
     public record OfferDto(String id, CandidateRef candidate, JobRef job, Ref department, Ref jobType,
-                           BigDecimal salary, LocalDate startDate, LocalDate expirationDate, boolean expired,
+                           BigDecimal salary, BigDecimal bonus, String equity, LocalDate startDate, LocalDate expirationDate, boolean expired,
                            Ref approvedBy, String benefits, Offer.EStatus status,
                            Offer.EApprovalStatus approvalStatus, String approvalDecidedBy, Instant approvalDecidedAt,
                            LocalDate offerDate, Instant createdDate, Instant updatedDate) {
@@ -105,6 +105,10 @@ public class OfferService {
             Long departmentId,
             @Schema(example = "25000000", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull @DecimalMin("0")
             @Digits(integer = 13, fraction = 2) BigDecimal salary,
+            @Schema(description = "Bonus amount; omitted = none", example = "5000000") @DecimalMin("0")
+            @Digits(integer = 15, fraction = 4) BigDecimal bonus,
+            @Schema(description = "Equity offered, free text", example = "0.1% vesting 4y") @Size(max = 255)
+            String equity,
             @Schema(example = "2027-01-04") LocalDate startDate,
             @Schema(example = "2026-12-15") LocalDate expirationDate,
             @Schema(description = "Employee id of the approver", example = "5") Long approvedByEmployeeId,
@@ -261,6 +265,8 @@ public class OfferService {
         o.setJobPostingId(p.getId());
         o.setDepartmentId(departmentId);
         o.setSalary(f.salary());
+        o.setBonus(f.bonus());
+        o.setEquity(Texts.blankToNull(f.equity()));
         o.setStartDate(f.startDate());
         o.setExpirationDate(f.expirationDate());
         o.setBenefits(Texts.blankToNull(f.benefits()));
@@ -303,7 +309,7 @@ public class OfferService {
                 o.getDepartmentId() == null ? null
                         : new Ref(o.getDepartmentId().toString(), l.departments().get(o.getDepartmentId())),
                 p == null ? null : new Ref(p.getJobTypeId().toString(), l.types().get(p.getJobTypeId())),
-                o.getSalary(), o.getStartDate(), o.getExpirationDate(), expired(o, l.today()),
+                o.getSalary(), o.getBonus(), o.getEquity(), o.getStartDate(), o.getExpirationDate(), expired(o, l.today()),
                 o.getApprovedByEmployeeId() == null ? null
                         : new Ref(o.getApprovedByEmployeeId().toString(), o.getApprovedByName()),
                 o.getBenefits(), o.getStatus(), o.getApprovalStatus(), o.getApprovalDecidedBy(),

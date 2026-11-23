@@ -35,7 +35,8 @@ class InternalFileTest {
                 java.util.List.of("erp-employee-service"));
         LinkSigner signer = new LinkSigner(props, Clock.fixed(Instant.parse("2026-11-19T00:00:00Z"), ZoneOffset.UTC));
         return new MediaService(files, mock(MediaFolderRepository.class), mock(FileStorage.class), signer, props,
-                mock(StoragePolicyClient.class));
+                mock(StoragePolicyClient.class),
+                mock(com.terp.erp.media.storage.StorageQuotaClient.class));
     }
 
     @Test

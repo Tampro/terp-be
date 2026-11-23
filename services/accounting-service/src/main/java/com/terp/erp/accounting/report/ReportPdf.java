@@ -13,8 +13,10 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import com.terp.erp.accounting.report.ReportService.AgingReport;
 import com.terp.erp.accounting.report.ReportService.AgingRow;
+import com.terp.erp.accounting.report.ReportService.BalanceRow;
 import com.terp.erp.accounting.report.ReportService.DocLine;
 import com.terp.erp.accounting.report.ReportService.PartyReport;
+import com.terp.erp.accounting.report.ReportService.TaxSummary;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,7 +27,7 @@ import java.text.DecimalFormatSymbols;
 import java.util.List;
 import java.util.Locale;
 
-/** Aging and customer / vendor report PDFs. Labels are English; names keep Vietnamese characters (embedded TTF). */
+/** Aging, tax summary, balances and customer / vendor report PDFs. Labels are English; names keep Vietnamese characters (embedded TTF). */
 final class ReportPdf {
     private static final String FONT = "/liberation/LiberationSans-Regular.ttf";
     private static final String FONT_BOLD = "/liberation/LiberationSans-Bold.ttf";
@@ -68,6 +70,55 @@ final class ReportPdf {
             section(doc, customer ? "Credit notes" : "Debit notes", r.noteDocs(), regular, bold);
             section(doc, "Payments", r.paymentDocs(), regular, bold);
         });
+    }
+
+    static byte[] taxSummary(TaxSummary r) {
+        return write(PageSize.A4, "Tax summary", (doc, regular, bold) -> {
+            doc.add(new Paragraph("Period " + r.from() + " to " + r.to(), regular));
+            PdfPTable t = table(new float[]{3, 2});
+            summary(t, "Output tax (" + r.salesInvoices() + " sales invoices)", r.outputTax(), regular);
+            summary(t, "Credit note tax", r.creditNoteTax(), regular);
+            summary(t, "Net output tax", r.netOutputTax(), bold);
+            summary(t, "Input tax (" + r.purchaseInvoices() + " purchase invoices)", r.inputTax(), regular);
+            summary(t, "Debit note tax", r.debitNoteTax(), regular);
+            summary(t, "Net input tax", r.netInputTax(), bold);
+            summary(t, "Net tax liability", r.netTaxLiability(), bold);
+            doc.add(t);
+        });
+    }
+
+    static byte[] balances(ReportService.EParty party, List<BalanceRow> rows) {
+        boolean customer = party == ReportService.EParty.CUSTOMER;
+        return write(PageSize.A4, customer ? "Customer balances" : "Vendor balances", (doc, regular, bold) -> {
+            PdfPTable t = table(new float[]{2, 4, 2, 2, 2});
+            for (String h : new String[]{"Code", customer ? "Customer" : "Vendor",
+                    customer ? "Open invoices" : "Open bills", customer ? "Credit notes" : "Debit notes", "Balance"}) {
+                t.addCell(cell(h, bold, Element.ALIGN_LEFT));
+            }
+            BigDecimal open = BigDecimal.ZERO;
+            BigDecimal notes = BigDecimal.ZERO;
+            BigDecimal balance = BigDecimal.ZERO;
+            for (BalanceRow b : rows) {
+                t.addCell(cell(b.code(), regular, Element.ALIGN_LEFT));
+                t.addCell(cell(b.name(), regular, Element.ALIGN_LEFT));
+                t.addCell(cell(money(b.openInvoices()), regular, Element.ALIGN_RIGHT));
+                t.addCell(cell(money(b.unappliedNotes()), regular, Element.ALIGN_RIGHT));
+                t.addCell(cell(money(b.balance()), regular, Element.ALIGN_RIGHT));
+                open = open.add(nz(b.openInvoices()));
+                notes = notes.add(nz(b.unappliedNotes()));
+                balance = balance.add(nz(b.balance()));
+            }
+            t.addCell(cell("", bold, Element.ALIGN_LEFT));
+            t.addCell(cell("Total", bold, Element.ALIGN_LEFT));
+            t.addCell(cell(money(open), bold, Element.ALIGN_RIGHT));
+            t.addCell(cell(money(notes), bold, Element.ALIGN_RIGHT));
+            t.addCell(cell(money(balance), bold, Element.ALIGN_RIGHT));
+            doc.add(t);
+        });
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
     private interface Body {

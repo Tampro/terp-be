@@ -64,9 +64,9 @@ public class MeController {
         return ApiMessageDto.ok(null);
     }
 
-    /** Limits: null = none. */
+    /** Limits: null = none; storageLimitGb -1 = unlimited too (media-service checks uploads against it). */
     public record CompanyContextDto(String companyId, String name, Integer maxUsers, Integer maxEmployees,
-                                    boolean blocked) {
+                                    boolean blocked, java.math.BigDecimal storageLimitGb) {
     }
 
     public record MeDto(String userId, String username, String companyId, boolean superAdmin,
@@ -99,7 +99,8 @@ public class MeController {
     }
 
     @Operation(summary = "My company: name and the limits of its effective plan, for other ERP services",
-            description = "employee-service checks maxEmployees before creating an employee and prints the name on letters. "
+            description = "employee-service checks maxEmployees before creating an employee and prints the name on letters; "
+                    + "media-service checks storageLimitGb on uploads. "
                     + "Super admin: companyId names the company.")
     @GetMapping("/company")
     public ApiMessageDto<CompanyContextDto> company(
@@ -110,9 +111,10 @@ public class MeController {
                 .orElseThrow(() -> ApiException.notFound(EIamError.IAM_001));
         var e = subscriptions.effective(company);
         String cid = company.getId().toString();
-        return ApiMessageDto.ok(e.plan() == null ? new CompanyContextDto(cid, company.getName(), null, null, e.blocked())
+        return ApiMessageDto.ok(e.plan() == null ? new CompanyContextDto(cid, company.getName(), null, null, e.blocked(),
+                null)
                 : new CompanyContextDto(cid, company.getName(), e.plan().getMaxUsers(), e.plan().getMaxEmployees(),
-                e.blocked()));
+                e.blocked(), e.plan().getStorageLimitGb()));
     }
 
     private static ErpPrincipal requireProfile() {

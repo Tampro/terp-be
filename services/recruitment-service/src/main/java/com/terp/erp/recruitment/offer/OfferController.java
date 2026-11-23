@@ -151,7 +151,7 @@ public class OfferController {
 
     @Operation(summary = "Download the offer letter (PDF)",
             description = "The template (an offer template of the offer's company) filled from the offer. Variables: "
-                    + "candidate_name, candidate_email, position, job_title, job_code, department, salary, start_date, "
+                    + "candidate_name, candidate_email, position, job_title, job_code, department, salary, bonus, equity, start_date, "
                     + "offer_expiration_date, expiration_date, offer_date, benefits, company_name; any other "
                     + "declared variable prints empty.")
     @ApiResponses({

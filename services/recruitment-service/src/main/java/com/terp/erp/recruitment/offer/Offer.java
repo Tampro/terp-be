@@ -41,6 +41,14 @@ public class Offer extends BaseAuditableEntity {
     @Column(name = "salary", nullable = false, precision = 15, scale = 2)
     private BigDecimal salary;
 
+    /** One-off or yearly bonus amount; null = none (user manual §17 "bonus"). */
+    @Column(name = "bonus", precision = 19, scale = 4)
+    private BigDecimal bonus;
+
+    // TODO(assumption): equity is free text ("0.1% vesting 4y") until BA defines a structured grant (type, amount, vesting)
+    @Column(name = "equity", length = 255)
+    private String equity;
+
     @Column(name = "start_date")
     private LocalDate startDate;
 

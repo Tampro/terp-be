@@ -130,6 +130,19 @@ public class ReportController {
         return ApiMessageDto.ok(service.taxSummary(companyId, from, to));
     }
 
+    @Operation(summary = "Tax summary PDF", description = "Same figures and filters as GET /tax-summary. " + PERIOD)
+    @ApiResponses({@ApiResponse(responseCode = "400", description = "Bad period (ACC_065), " + NO_COMPANY),
+            @ApiResponse(responseCode = "503", description = DOWN)})
+    @PreAuthorize(VIEW)
+    @GetMapping("/tax-summary/pdf")
+    public ResponseEntity<byte[]> taxSummaryPdf(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        TaxSummary r = service.taxSummary(companyId, from, to);
+        return pdf(ReportPdf.taxSummary(r), "tax-summary-" + r.from() + "-" + r.to() + ".pdf");
+    }
+
     @Operation(summary = "Customer balances", description = "Per customer: open invoice balances - unapplied credit "
             + "notes. showZero=false (default) leaves out customers with nothing open." + COMMERCE)
     @ApiResponses({@ApiResponse(responseCode = "400", description = NO_COMPANY),
@@ -142,6 +155,19 @@ public class ReportController {
         return ApiMessageDto.ok(service.balances(EParty.CUSTOMER, companyId, showZero));
     }
 
+    @Operation(summary = "Customer balances PDF", description = "Same rows and filters as GET /customer-balances, "
+            + "with a total line." + COMMERCE)
+    @ApiResponses({@ApiResponse(responseCode = "400", description = NO_COMPANY),
+            @ApiResponse(responseCode = "503", description = DOWN)})
+    @PreAuthorize(VIEW)
+    @GetMapping("/customer-balances/pdf")
+    public ResponseEntity<byte[]> customerBalancesPdf(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam(defaultValue = "false") boolean showZero) {
+        return pdf(ReportPdf.balances(EParty.CUSTOMER, service.balances(EParty.CUSTOMER, companyId, showZero)),
+                "customer-balances.pdf");
+    }
+
     @Operation(summary = "Vendor balances", description = "Per vendor: open bill balances - unapplied debit notes. "
             + "showZero=false (default) leaves out vendors with nothing open." + COMMERCE)
     @ApiResponses({@ApiResponse(responseCode = "400", description = NO_COMPANY),
@@ -152,6 +178,19 @@ public class ReportController {
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
             @RequestParam(defaultValue = "false") boolean showZero) {
         return ApiMessageDto.ok(service.balances(EParty.VENDOR, companyId, showZero));
+    }
+
+    @Operation(summary = "Vendor balances PDF", description = "Same rows and filters as GET /vendor-balances, with a "
+            + "total line." + COMMERCE)
+    @ApiResponses({@ApiResponse(responseCode = "400", description = NO_COMPANY),
+            @ApiResponse(responseCode = "503", description = DOWN)})
+    @PreAuthorize(VIEW)
+    @GetMapping("/vendor-balances/pdf")
+    public ResponseEntity<byte[]> vendorBalancesPdf(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam(defaultValue = "false") boolean showZero) {
+        return pdf(ReportPdf.balances(EParty.VENDOR, service.balances(EParty.VENDOR, companyId, showZero)),
+                "vendor-balances.pdf");
     }
 
     @Operation(summary = "Customer report", description = "Invoiced, returns, credit notes and payments in the period, "

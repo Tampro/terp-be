@@ -22,6 +22,9 @@ public class LoginHistory {
     /** User Type column. */
     public enum EUserType { SUPER_ADMIN, COMPANY_USER }
 
+    /** Parsed from the User-Agent (user manual §3.2 "device type"). */
+    public enum EDeviceType { DESKTOP, MOBILE, TABLET, BOT, UNKNOWN }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -51,6 +54,32 @@ public class LoginHistory {
 
     @Column(name = "os", length = 50)
     private String os;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "device_type", length = 10)
+    private EDeviceType deviceType;
+
+    /** Primary tag of Accept-Language (e.g. vi-VN). */
+    @Column(name = "language", length = 35)
+    private String language;
+
+    /** IANA zone sent by the FE in X-Client-Timezone; null when absent or not a valid ZoneId. */
+    @Column(name = "timezone", length = 64)
+    private String timezone;
+
+    /** Comma-joined role codes the user held at login time (roles can change later). */
+    @Column(name = "role_at_login", length = 255)
+    private String roleAtLogin;
+
+    // TODO(assumption): fill city/country/isp once a GeoIP source is chosen (MaxMind GeoLite2 DB or a gateway header)
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Column(name = "country", length = 100)
+    private String country;
+
+    @Column(name = "isp", length = 150)
+    private String isp;
 
     @Column(name = "login_at", nullable = false)
     private Instant loginAt;

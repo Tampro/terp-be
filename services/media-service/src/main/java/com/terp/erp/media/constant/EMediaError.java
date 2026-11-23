@@ -16,7 +16,9 @@ public enum EMediaError implements ErrorCode {
     MEDIA_006("The file content does not match its type."),
     MEDIA_007("The link is invalid or has expired."),
     MEDIA_008("No file was sent."),
-    MEDIA_009("The file could not be stored. Please try again.");
+    MEDIA_009("The file could not be stored. Please try again."),
+    MEDIA_010("Storage limit of {0} GB reached."),
+    MEDIA_011("The storage limit could not be checked. Please try again later.");
 
     private final String message;
 }
