@@ -38,8 +38,9 @@ class EventIntakeTest {
     private final ProcessedEventRepository processed = mock(ProcessedEventRepository.class);
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
     private final IamInternalClient iam = mock(IamInternalClient.class);
+    private final com.terp.erp.notification.feed.FeedWriter feed = mock(com.terp.erp.notification.feed.FeedWriter.class);
     private final EventIntake intake = new EventIntake(processed, deliveries, iam, mapper,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), feed);
     private final Smtp smtp = new Smtp("smtp.example.com", 587, null, null, "TLS", "noreply@example.com", "Test Co");
 
     private EventEnvelope ticketCreated(String eventId) {
@@ -239,5 +240,17 @@ class EventIntakeTest {
         intake.accept(new EventEnvelope("g-4", "employee.holiday.updated", 7L, "HOLIDAY", "12", NOW, null, data));
 
         assertThat(savedRows()).extracting(Delivery::getChannel).containsExactly(EChannel.GOOGLE_CALENDAR);
+    }
+
+    @Test
+    void feedRowsAreWrittenOnceAndUnroutedEventsStillReachTheFeed() {
+        EventEnvelope chat = new EventEnvelope("chat-1", "support.chat.message_sent", 7L, "CHAT_MESSAGE", "1", NOW,
+                null, mapper.createObjectNode().put("toUserId", "6"));
+        intake.accept(chat);
+        verify(feed).write(chat, null);
+
+        when(processed.existsById("chat-1")).thenReturn(true);
+        intake.accept(chat);
+        verify(feed, times(1)).write(any(), any());
     }
 }

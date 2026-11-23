@@ -11,6 +11,7 @@ import com.terp.erp.notification.delivery.Delivery.EChannel;
 import com.terp.erp.notification.delivery.Delivery.EStatus;
 import com.terp.erp.notification.delivery.DeliveryRepository;
 import com.terp.erp.notification.delivery.Targets;
+import com.terp.erp.notification.feed.FeedWriter;
 import com.terp.erp.outbox.EventEnvelope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
@@ -46,6 +47,7 @@ public class EventIntake {
     private final IamInternalClient iam;
     private final ObjectMapper mapper;
     private final Clock clock;
+    private final FeedWriter feed;
 
     /** @return ids of the PENDING deliveries to send now (empty for a duplicate or an unrouted event). */
     @Transactional
@@ -78,12 +80,15 @@ public class EventIntake {
         }
         Optional<EEventRoute> route = EEventRoute.of(e.eventType());
         if (route.isEmpty()) {
+            // Unrouted (the messenger's chat event…): still an in-app notification for its recipients.
             processed.saveAndFlush(pe);
+            feed.write(e, null);
             return List.of();
         }
         NotificationConfig cfg = iam.config(e.companyId(), e.eventType(), route.get().emailCode, route.get().webhookCode);
         List<Delivery> rows = plan(e, route.get(), cfg, now);
         processed.saveAndFlush(pe);
+        feed.write(e, cfg.defaultLanguage());
         deliveries.saveAll(rows);
         return rows.stream().filter(d -> d.getStatus() == EStatus.PENDING).map(Delivery::getId).toList();
     }

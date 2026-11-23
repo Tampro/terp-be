@@ -59,7 +59,8 @@ class PlatformEventRoutingTest {
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
     private final IamInternalClient iam = mock(IamInternalClient.class);
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-    private final EventIntake intake = new EventIntake(processed, deliveries, iam, mapper, clock);
+    private final EventIntake intake = new EventIntake(processed, deliveries, iam, mapper, clock,
+            mock(com.terp.erp.notification.feed.FeedWriter.class));
     private final Smtp smtp = new Smtp("smtp.example.com", 587, null, null, "TLS", "noreply@example.com", null);
 
     @AfterEach

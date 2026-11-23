@@ -12,7 +12,9 @@ public enum ENotificationError implements ErrorCode {
     NTF_002("The delivery does not exist."),
     NTF_003("Only a failed delivery can be retried."),
     NTF_004("The IAM service is unavailable. Please try again later."),
-    NTF_005("Only a super admin can see the platform deliveries.");
+    NTF_005("Only a super admin can see the platform deliveries."),
+    NTF_006("The notification does not exist."),
+    NTF_007("Only a user of a company has a notification feed.");
 
     private final String message;
 }
