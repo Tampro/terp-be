@@ -53,6 +53,7 @@ public class OrderService {
     private final com.terp.erp.iam.me.AvatarMediaClient media;
     private final CompanyPlanTrialRepository trials;
     private final com.terp.erp.iam.payment.StripeClient stripeClient;
+    private final com.terp.erp.iam.payment.PaypalClient paypalClient;
     private final com.terp.erp.outbox.OutboxPublisher outbox;
     @org.springframework.beans.factory.annotation.Value("${erp.app-url:http://localhost:5173}")
     private String appUrl;
@@ -117,6 +118,9 @@ public class OrderService {
         }
         if (method == EPaymentMethod.STRIPE && settings.activeStripe() == null) {
             throw ApiException.badRequest(ESaasError.SAAS_037);
+        }
+        if (method == EPaymentMethod.PAYPAL && settings.activePaypal() == null) {
+            throw ApiException.badRequest(ESaasError.SAAS_042);
         }
         o.setPaymentMethod(method);
         o.setPaymentReference(form.paymentReference());
@@ -207,6 +211,111 @@ public class OrderService {
         decide(o, EOrderStatus.APPROVED, "Paid with Stripe", "stripe");
         activate(o, "Paid with Stripe");
         log.info("Order {} paid with Stripe and approved", o.getOrderNumber());
+    }
+
+    // ------------------------------------------------------------------ PayPal (capture on return, no webhook)
+
+    /*
+     * TODO(PO): PayPal webhooks (PAYMENT.CAPTURE.COMPLETED / CHECKOUT.ORDER.APPROVED) would recover orders whose
+     * payer approved but never came back to the app (closed tab). They need a public permitAll endpoint with PayPal
+     * signature verification = an Ask-tier security config change, not approved yet. Until then such an order stays
+     * PENDING; calling capture again (FE "I have paid" button, or the payer reopening the order) completes it, and
+     * the super admin can still approve it by hand after checking the PayPal dashboard.
+     */
+
+    /**
+     * Pay a pending PAYPAL order of the caller's company: creates a PayPal order (intent CAPTURE) in the platform
+     * default currency and returns the approval URL. Every check that needs no HTTP runs first.
+     */
+    @Transactional
+    public SaasDtos.PaypalCheckoutDto paypalCheckout(Long id) {
+        PlanOrder o = require(id);
+        if (o.getStatus() != EOrderStatus.PENDING || o.getPaymentMethod() != EPaymentMethod.PAYPAL
+                || o.getFinalPrice() == null || o.getFinalPrice().signum() <= 0) {
+            throw ApiException.badRequest(ESaasError.SAAS_039);
+        }
+        var paypal = settings.activePaypal();
+        if (paypal == null) {
+            throw ApiException.badRequest(ESaasError.SAAS_042);
+        }
+        String currency = paypalCurrency();
+        Plan plan = catalog.requirePlan(o.getPlanId());
+        String value = com.terp.erp.iam.payment.PaypalClient.value(o.getFinalPrice(), currency);
+        String back = appUrl + "/billing/orders/" + o.getId() + "?paypal=";
+        var created = paypalClient.createOrder(paypal, o.getId().toString(), customId(o),
+                plan.getName() + " (" + o.getBillingCycle().name().toLowerCase(java.util.Locale.ROOT) + ") "
+                        + o.getOrderNumber(),
+                currency, value, back + "return", back + "cancel", "erp-order-" + o.getId() + "-create-" + value);
+        o.setPaypalOrderId(created.paypalOrderId());
+        return new SaasDtos.PaypalCheckoutDto(o.getId().toString(), created.paypalOrderId(), created.approveUrl());
+    }
+
+    /**
+     * The payer came back from PayPal: capture and, only when PayPal's own answer says COMPLETED for exactly this
+     * order (reference_id, custom_id) and amount/currency, approve and activate it through the same path as Stripe.
+     * Idempotent: an order already approved by PayPal is returned as it is; a PayPal order captured before (lost
+     * answer, second tab) is read back and verified. The row is locked so two calls activate once.
+     */
+    @Transactional
+    public OrderDto paypalCapture(Long id) {
+        PlanOrder o = orders.findLockedById(id).orElseThrow(() -> ApiException.notFound(ESaasError.SAAS_008));
+        TenantGuard.assertSameCompany(o.getCompanyId(), ESaasError.SAAS_008);
+        if (o.getPaymentMethod() == EPaymentMethod.PAYPAL && o.getStatus() == EOrderStatus.APPROVED) {
+            return dto(o);
+        }
+        if (o.getStatus() != EOrderStatus.PENDING || o.getPaymentMethod() != EPaymentMethod.PAYPAL
+                || o.getPaypalOrderId() == null) {
+            throw ApiException.badRequest(ESaasError.SAAS_039);
+        }
+        var paypal = settings.activePaypal();
+        if (paypal == null) {
+            throw ApiException.badRequest(ESaasError.SAAS_042);
+        }
+        String currency = paypalCurrency();
+        com.terp.erp.iam.payment.PaypalClient.Captured c;
+        try {
+            c = paypalClient.capture(paypal, o.getPaypalOrderId(), "erp-order-" + o.getId() + "-capture");
+        } catch (com.terp.erp.iam.payment.PaypalClient.AlreadyCapturedException e) {
+            c = paypalClient.getOrder(paypal, o.getPaypalOrderId());
+        }
+        if (!"COMPLETED".equals(c.orderStatus()) || !"COMPLETED".equals(c.captureStatus())) {
+            // PENDING capture (e.g. eCheck, review) or not approved: nothing is activated on a payment not received.
+            log.info("PayPal order of {} is {} / capture {}: left PENDING", o.getOrderNumber(), c.orderStatus(),
+                    c.captureStatus());
+            throw ApiException.badRequest(ESaasError.SAAS_046);
+        }
+        String expected = com.terp.erp.iam.payment.PaypalClient.value(o.getFinalPrice(), currency);
+        boolean amountOk = c.value() != null && c.currency() != null && currency.equalsIgnoreCase(c.currency())
+                && new java.math.BigDecimal(c.value()).compareTo(new java.math.BigDecimal(expected)) == 0;
+        if (!amountOk || !o.getId().toString().equals(c.referenceId()) || !customId(o).equals(c.customId())) {
+            // Money may have been taken: left PENDING for the super admin to check in PayPal (capture id logged).
+            log.warn("PayPal capture {} does not match order {} (amount/currency ok: {}, reference ok: {}): left "
+                    + "PENDING", c.captureId(), o.getOrderNumber(), amountOk,
+                    o.getId().toString().equals(c.referenceId()) && customId(o).equals(c.customId()));
+            throw ApiException.badRequest(ESaasError.SAAS_048);
+        }
+        o.setPaymentReference(c.captureId());
+        decide(o, EOrderStatus.APPROVED, "Paid with PayPal", "paypal");
+        OrderDto dto = activate(o, "Paid with PayPal");
+        log.info("Order {} paid with PayPal and approved", o.getOrderNumber());
+        return dto;
+    }
+
+    /**
+     * PayPal charges in the platform default currency. TODO(assumption): no conversion — IAM currencies have no
+     * exchange rate, so a default currency PayPal does not support (VND) refuses PayPal instead of guessing a rate.
+     */
+    private String paypalCurrency() {
+        String currency = settings.currency().defaultCurrencyCode();
+        if (currency == null || !com.terp.erp.iam.payment.PaypalClient.SUPPORTED.contains(
+                currency.toUpperCase(java.util.Locale.ROOT))) {
+            throw ApiException.badRequest(ESaasError.SAAS_043, currency == null ? "-" : currency);
+        }
+        return currency.toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static String customId(PlanOrder o) {
+        return o.getCompanyId() + ":" + o.getId();
     }
 
     // ------------------------------------------------------------------ super admin side

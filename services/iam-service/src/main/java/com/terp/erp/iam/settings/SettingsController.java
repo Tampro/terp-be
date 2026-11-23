@@ -203,6 +203,27 @@ public class SettingsController {
         return ApiMessageDto.ok(settings.saveStripe(form));
     }
 
+    @Operation(summary = "PayPal payment settings", description = "The client secret is never returned (hasSecret).")
+    @PreAuthorize("@PermissionChecker.isSuperAdmin()")
+    @GetMapping("/admin/payment/paypal")
+    public ApiMessageDto<SettingsDtos.PaypalSettingsView> paypal() {
+        return ApiMessageDto.ok(settings.paypal());
+    }
+
+    @Operation(summary = "Save PayPal payment settings",
+            description = "Full replacement; clientSecret is write-only (omitted = keep, empty = remove), encrypted "
+                    + "with ERP_SETTINGS_ENC_KEY. The mode picks the PayPal host (SANDBOX api-m.sandbox.paypal.com, "
+                    + "LIVE api-m.paypal.com). Orders are charged in the platform default currency, which PayPal "
+                    + "must support (VND is not). No webhook: the order is captured when the payer returns.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Enabled without client ID and secret "
+            + "(SETTINGS_027), encryption key not configured (SETTINGS_002), validation"))
+    @PreAuthorize("@PermissionChecker.isSuperAdmin()")
+    @PutMapping("/admin/payment/paypal")
+    public ApiMessageDto<SettingsDtos.PaypalSettingsView> savePaypal(
+            @Valid @RequestBody SettingsDtos.PaypalSettingsForm form) {
+        return ApiMessageDto.ok(settings.savePaypal(form));
+    }
+
     @PreAuthorize("@PermissionChecker.isSuperAdmin()")
     @GetMapping("/admin/recaptcha")
     public ApiMessageDto<RecaptchaSettingsView> recaptcha() {

@@ -55,6 +55,27 @@ class SettingsServiceTest {
     }
 
     @Test
+    void paypalSecretIsWriteOnlyAndEncrypted() throws Exception {
+        assertError(() -> service.savePaypal(new SettingsDtos.PaypalSettingsForm(true, SettingsDtos.EPaypalMode.SANDBOX,
+                "fake-client", null)), ESettingsError.SETTINGS_027);
+        var view = service.savePaypal(new SettingsDtos.PaypalSettingsForm(true, SettingsDtos.EPaypalMode.SANDBOX,
+                "fake-client", "fake-secret"));
+        assertThat(view.hasSecret()).isTrue();
+        assertThat(new ObjectMapper().writeValueAsString(view)).doesNotContain("fake-secret");
+        assertThat(rows.get("PAYPAL").getValueJson()).doesNotContain("fake-secret");
+        assertThat(service.activePaypal().clientSecret()).isEqualTo("fake-secret");
+        assertThat(service.activePaypal().toString()).doesNotContain("fake-secret");
+        // omitted = keep
+        service.savePaypal(new SettingsDtos.PaypalSettingsForm(true, SettingsDtos.EPaypalMode.LIVE, "fake-client", null));
+        assertThat(service.activePaypal().mode()).isEqualTo(SettingsDtos.EPaypalMode.LIVE);
+        assertThat(service.publicSettings().payments().paypal()).isTrue();
+        // disabled = no credentials handed out
+        service.savePaypal(new SettingsDtos.PaypalSettingsForm(false, SettingsDtos.EPaypalMode.LIVE, "fake-client", ""));
+        assertThat(service.activePaypal()).isNull();
+        assertThat(service.paypal().hasSecret()).isFalse();
+    }
+
+    @Test
     void unsavedSectionReadsAsDefaults() {
         assertThat(service.system().defaultTimezone()).isEqualTo("Asia/Ho_Chi_Minh");
         assertThat(service.storage().allowedFileTypes()).contains("pdf");

@@ -34,6 +34,10 @@ public class PlanOrder extends BaseAuditableEntity {
     @Column(name = "stripe_session_id")
     private String stripeSessionId;
 
+    /** PayPal order of a PAYPAL order, created at checkout and captured when the payer returns. */
+    @Column(name = "paypal_order_id", length = 64)
+    private String paypalOrderId;
+
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
