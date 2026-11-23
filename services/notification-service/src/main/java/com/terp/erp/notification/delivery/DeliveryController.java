@@ -39,11 +39,14 @@ public class DeliveryController {
             + "company user always sees their own company). from (inclusive) / to (exclusive) filter the creation time.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "Super admin without companyId (NTF_001)"),
-            @ApiResponse(responseCode = "403", description = "Missing NOTIFICATION_LOG_VIEW (COMMON_004)")})
+            @ApiResponse(responseCode = "403", description = "Missing NOTIFICATION_LOG_VIEW (COMMON_004); "
+                    + "platform=true by a company user (NTF_005)")})
     @PreAuthorize("@PermissionChecker.has('NOTIFICATION_LOG_VIEW')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<DeliveryDto>> list(
             @RequestParam(required = false) Long companyId,
+            @Parameter(description = "Super admin only: true lists the platform events' deliveries (companyId "
+                    + "null) and ignores companyId") @RequestParam(defaultValue = "false") boolean platform,
             @RequestParam(required = false) EStatus status,
             @RequestParam(required = false) EChannel channel,
             @Parameter(example = "support.ticket.created") @RequestParam(required = false) String eventType,
@@ -52,8 +55,8 @@ public class DeliveryController {
             @Parameter(example = "2026-11-23T00:00:00Z") @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @ParameterObject @PageableDefault(sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiMessageDto.ok(ResponseListDto.of(service.list(companyId, status, channel, eventType, from, to,
-                pageable)));
+        return ApiMessageDto.ok(ResponseListDto.of(service.list(platform, companyId, status, channel, eventType, from,
+                to, pageable)));
     }
 
     @Operation(summary = "One delivery")

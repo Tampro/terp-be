@@ -35,15 +35,20 @@ public class WebhookChannel {
     private final Clock clock;
 
     public SendResult send(String url, String secret, EEventRoute route, EventEnvelope e) {
+        return send(url, secret, route.webhookCode, route.webhookName, route.webhookModule, e);
+    }
+
+    /** A delivery of any routed event (company: EEventRoute, platform: EPlatformRoute). */
+    public SendResult send(String url, String secret, String code, String name, String module, EventEnvelope e) {
         URI uri;
         try {
             uri = guard.check(url, null);
         } catch (UrlGuard.RefusedException ex) {
             return SendResult.fail("URL_REFUSED");
         }
-        String json = body(route, e);
+        String json = body(code, name, module, e);
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("X-ERP-Event", route.webhookCode);
+        headers.put("X-ERP-Event", code);
         if (secret != null && !secret.isBlank()) {
             String ts = String.valueOf(Instant.now(clock).getEpochSecond());
             headers.put("X-ERP-Timestamp", ts);
@@ -53,10 +58,14 @@ public class WebhookChannel {
     }
 
     String body(EEventRoute route, EventEnvelope e) {
+        return body(route.webhookCode, route.webhookName, route.webhookModule, e);
+    }
+
+    String body(String code, String name, String module, EventEnvelope e) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("event", route.webhookCode);
-        body.put("eventName", route.webhookName);
-        body.put("module", route.webhookModule);
+        body.put("event", code);
+        body.put("eventName", name);
+        body.put("module", module);
         body.put("eventId", e.eventId());
         body.put("companyId", e.companyId() == null ? null : String.valueOf(e.companyId()));
         body.put("occurredAt", e.occurredAt() == null ? null : e.occurredAt().toString());

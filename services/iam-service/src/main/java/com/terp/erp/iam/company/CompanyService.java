@@ -65,6 +65,7 @@ public class CompanyService {
     private final LocalAuthorityResolver authorityCache;
     private final com.terp.erp.iam.referral.ReferralService referral;
     private final com.terp.erp.iam.auth.EmailVerificationService verification;
+    private final com.terp.erp.outbox.OutboxPublisher outbox;
 
     /**
      * @param from first created day included (UTC); null = no lower bound
@@ -127,6 +128,7 @@ public class CompanyService {
         if (verification.enabled()) {
             verification.issue(c);
         }
+        publishCreated(c, false);
         return new CompanyCreatedDto(CompanyDto.of(c, subscriptions.effective(c)), adminUser);
     }
 
@@ -154,8 +156,18 @@ public class CompanyService {
         if (verify) {
             verification.issue(c);
         }
+        publishCreated(c, true);
         log.info("Company {} self-registered", c.getCode());
         return c;
+    }
+
+    /** NEW_COMPANY platform webhook. No email address of the company in the payload. */
+    private void publishCreated(Company c, boolean selfRegistered) {
+        com.terp.erp.iam.platform.PlatformEvents.publish(outbox,
+                com.terp.erp.iam.platform.PlatformEvents.COMPANY_CREATED, "COMPANY", c.getId(),
+                com.terp.erp.outbox.Payload.of("companyId", c.getId(), "title", c.getName(), "name", c.getName(),
+                        "code", c.getCode(), "selfRegistered", selfRegistered,
+                        "status", c.getStatus() == null ? null : c.getStatus().name()));
     }
 
     /** Letters and digits of the name (accents dropped), at most 12, plus 4 random characters until unused. */

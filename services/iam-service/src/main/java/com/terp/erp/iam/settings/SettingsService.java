@@ -362,6 +362,43 @@ public class SettingsService {
         return new SettingsDtos.PublicPayments(bankTransfer().enabled(), stripe, stripe ? st.publishableKey() : null);
     }
 
+    // ------------------------------------------------------------------ platform email notifications
+
+    @Transactional(readOnly = true)
+    public SettingsDtos.PlatformEmailNotificationSettings platformEmailNotifications() {
+        SettingsDtos.PlatformEmailNotificationSettings s = read(ESection.PLATFORM_EMAIL_NOTIFICATIONS,
+                SettingsDtos.PlatformEmailNotificationSettings.class,
+                SettingsDtos.PlatformEmailNotificationSettings::defaults);
+        // A row written before a switch existed reads that switch as null: on, like a section never saved.
+        return new SettingsDtos.PlatformEmailNotificationSettings(!Boolean.FALSE.equals(s.newUser()),
+                !Boolean.FALSE.equals(s.helpdeskTicketCreated()), !Boolean.FALSE.equals(s.helpdeskTicketReply()),
+                s.helpdeskNotifyEmails() == null ? List.of() : s.helpdeskNotifyEmails());
+    }
+
+    /** Full replacement; addresses are trimmed, lower-cased and de-duplicated (order kept). */
+    @Transactional
+    public SettingsDtos.PlatformEmailNotificationSettings savePlatformEmailNotifications(
+            SettingsDtos.PlatformEmailNotificationSettings f) {
+        List<String> emails = f.helpdeskNotifyEmails().stream().map(e -> e.trim().toLowerCase(Locale.ROOT))
+                .distinct().toList();
+        return write(ESection.PLATFORM_EMAIL_NOTIFICATIONS, new SettingsDtos.PlatformEmailNotificationSettings(
+                f.newUser(), f.helpdeskTicketCreated(), f.helpdeskTicketReply(), emails));
+    }
+
+    /**
+     * True only when the super admin switched the platform email off. Negative on purpose: an unknown state (no
+     * row) is "on", the platform default.
+     */
+    @Transactional(readOnly = true)
+    public boolean platformEmailDisabled(com.terp.erp.iam.email.EPlatformEmail email) {
+        var s = platformEmailNotifications();
+        return switch (email) {
+            case NEW_USER -> !s.newUser();
+            case HELPDESK_TICKET_CREATED -> !s.helpdeskTicketCreated();
+            case HELPDESK_TICKET_REPLY -> !s.helpdeskTicketReply();
+        };
+    }
+
     // ------------------------------------------------------------------ storage of a section
 
     private <T> T read(ESection section, Class<T> type, Supplier<T> defaults) {

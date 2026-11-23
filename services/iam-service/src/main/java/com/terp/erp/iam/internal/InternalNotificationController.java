@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerAuth")
 public class InternalNotificationController {
     private final InternalNotificationService service;
+    private final InternalPlatformNotificationService platform;
 
     @Operation(summary = "Channel settings of a company for one event (notification-service)",
             description = "eventCode: an email notification code (ENotificationEvent), optional; webhookEvent: a "
@@ -55,5 +56,20 @@ public class InternalNotificationController {
     @GetMapping("/users/{id}/contact")
     public ApiMessageDto<Contact> contact(@PathVariable Long id) {
         return ApiMessageDto.ok(service.contact(id));
+    }
+
+    @Operation(summary = "Platform channel settings for one platform event (notification-service)",
+            description = "For platform.* events (companyId null). emailCode: EPlatformEmail (NEW_USER, "
+                    + "HELPDESK_TICKET_CREATED, HELPDESK_TICKET_REPLY), optional; webhookEvent: EPlatformWebhookEvent, "
+                    + "optional. smtp = the platform SMTP, null when the switch is off or SMTP is not configured; "
+                    + "recipients = helpdeskNotifyEmails when the switch is on. Never a company's settings.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Unknown emailCode (EMAIL_001) or webhookEvent (SETTINGS_014)"),
+            @ApiResponse(responseCode = "401", description = "No or invalid token (COMMON_003)"),
+            @ApiResponse(responseCode = "403", description = "Token not of an allowed service account (COMMON_004)")})
+    @GetMapping("/platform-notification-config")
+    public ApiMessageDto<InternalPlatformNotificationService.PlatformNotificationConfig> platformNotificationConfig(
+            @RequestParam(required = false) String emailCode, @RequestParam(required = false) String webhookEvent) {
+        return ApiMessageDto.ok(platform.config(emailCode, webhookEvent));
     }
 }

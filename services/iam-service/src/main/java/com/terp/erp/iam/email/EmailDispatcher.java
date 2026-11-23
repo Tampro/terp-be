@@ -52,6 +52,10 @@ public class EmailDispatcher {
         if (to.isEmpty()) {
             return;
         }
+        if (e.template() == EEmailTemplate.USER_CREATE && settings.platformEmailDisabled(EPlatformEmail.NEW_USER)) {
+            log.info("Email {} switched off by the platform", e.template());
+            return;
+        }
         if (e.template().isToggleable() && e.companyId() != null && toggles
                 .findByCompanyIdAndTemplateCode(e.companyId(), e.template().name())
                 .map(t -> !t.isEnabled()).orElse(false)) {

@@ -11,7 +11,8 @@ public enum ENotificationError implements ErrorCode {
     NTF_001("Choose the company to act on."),
     NTF_002("The delivery does not exist."),
     NTF_003("Only a failed delivery can be retried."),
-    NTF_004("The IAM service is unavailable. Please try again later.");
+    NTF_004("The IAM service is unavailable. Please try again later."),
+    NTF_005("Only a super admin can see the platform deliveries.");
 
     private final String message;
 }

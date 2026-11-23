@@ -46,6 +46,16 @@ public class ImpersonationService {
     private final Cache<String, Optional<ErpPrincipal>> resolved = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofSeconds(15)).maximumSize(1_000).build();
 
+    /** Entries held now (Caffeine's estimate), for the super admin Cache page. */
+    public long estimatedCacheSize() {
+        return resolved.estimatedSize();
+    }
+
+    /** Clear Cache: sessions are resolved from the database again on the next request (none is ended). */
+    public void clearCache() {
+        resolved.invalidateAll();
+    }
+
     public ImpersonationService(ImpersonationSessionRepository sessions, CompanyRepository companies,
                                 RoleRepository roles, Clock clock,
                                 com.terp.erp.iam.saas.PlanModuleFilter planModules) {

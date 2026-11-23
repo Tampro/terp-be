@@ -4,6 +4,7 @@ import com.terp.erp.exception.ApiException;
 import com.terp.erp.notification.common.ENotificationError;
 import com.terp.erp.notification.delivery.Delivery.EChannel;
 import com.terp.erp.notification.delivery.Delivery.EStatus;
+import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.TenantGuard;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,8 @@ public class DeliveryService {
                                       + "URL_REFUSED, EMAIL_DISABLED, NO_RECIPIENT") String lastErrorCode,
                               Instant nextAttemptAt, Instant sentAt, Instant createdDate, Instant updatedDate) {
         static DeliveryDto of(Delivery d) {
-            return new DeliveryDto(String.valueOf(d.getId()), String.valueOf(d.getCompanyId()), d.getEventId(),
+            return new DeliveryDto(String.valueOf(d.getId()),
+                    d.getCompanyId() == null ? null : String.valueOf(d.getCompanyId()), d.getEventId(),
                     d.getEventType(), d.getChannel(), d.getTarget(), d.getStatus(), d.getAttempts(),
                     d.getLastErrorCode(), d.getNextAttemptAt(), d.getSentAt(), d.getCreatedDate(),
                     d.getUpdatedDate());
@@ -41,6 +43,20 @@ public class DeliveryService {
     @Transactional(readOnly = true)
     public Page<DeliveryDto> list(Long requestedCompanyId, EStatus status, EChannel channel, String eventType,
                                   Instant from, Instant to, Pageable pageable) {
+        return list(false, requestedCompanyId, status, channel, eventType, from, to, pageable);
+    }
+
+    /** platform = true: deliveries of platform events (companyId null), super admin only (NTF_005 otherwise). */
+    @Transactional(readOnly = true)
+    public Page<DeliveryDto> list(boolean platform, Long requestedCompanyId, EStatus status, EChannel channel,
+                                  String eventType, Instant from, Instant to, Pageable pageable) {
+        if (platform) {
+            if (!CurrentUser.get().superAdmin()) {
+                throw ApiException.forbidden(ENotificationError.NTF_005);
+            }
+            String type = eventType == null || eventType.isBlank() ? null : eventType.trim();
+            return deliveries.searchPlatform(status, channel, type, from, to, pageable).map(DeliveryDto::of);
+        }
         Long cid = TenantGuard.resolveCompany(requestedCompanyId, ENotificationError.NTF_001);
         String type = eventType == null || eventType.isBlank() ? null : eventType.trim();
         return deliveries.search(cid, status, channel, type, from, to, pageable).map(DeliveryDto::of);
@@ -71,6 +87,7 @@ public class DeliveryService {
 
     private Delivery require(Long id) {
         Delivery d = deliveries.findById(id).orElseThrow(() -> ApiException.notFound(ENotificationError.NTF_002));
+        // A platform row (companyId null) never matches a company user's company: 404, super admin only.
         TenantGuard.assertSameCompany(d.getCompanyId(), ENotificationError.NTF_002);
         return d;
     }

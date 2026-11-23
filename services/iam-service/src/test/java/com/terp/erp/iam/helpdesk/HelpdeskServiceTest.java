@@ -241,6 +241,41 @@ class HelpdeskServiceTest {
         assertThat((Map<String, Object>) payload.getValue()).containsEntry("recipientUserIds", List.of("7"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void aNewTicketIsAlsoAPlatformEventWithoutCompanyId() {
+        companyUser(10L);
+        Company c = new Company();
+        c.setId(10L);
+        c.setName("Test Company");
+        when(companies.findById(10L)).thenReturn(Optional.of(c));
+
+        service.create(new TicketCreateForm(null, "Cannot log in", "<p>secret details</p>", null, null));
+
+        var payload = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(org.mockito.ArgumentMatchers.isNull(), eq("platform.helpdesk.ticket_created"),
+                eq("HELPDESK_TICKET"), eq(12L), payload.capture());
+        Map<String, Object> p = (Map<String, Object>) payload.getValue();
+        assertThat(p).containsEntry("companyId", "10").containsEntry("companyName", "Test Company")
+                .doesNotContainKey("recipientUserIds");
+        assertThat(p.values()).doesNotContain("<p>secret details</p>");
+    }
+
+    @Test
+    void aCompanyReplyIsAPlatformEventAndAPlatformReplyIsNot() {
+        HelpdeskTicket t = ticket(5L, 10L, EHelpdeskStatus.OPEN);
+        when(tickets.findByIdAndDeletedFalse(5L)).thenReturn(Optional.of(t));
+        companyUser(10L);
+        service.reply(5L, new ReplyForm("<p>still broken</p>", null, false));
+        verify(outbox).publish(org.mockito.ArgumentMatchers.isNull(), eq("platform.helpdesk.ticket_replied"),
+                eq("HELPDESK_TICKET"), eq(5L), any());
+
+        org.mockito.Mockito.clearInvocations(outbox);
+        superAdmin();
+        service.reply(5L, new ReplyForm("<p>fixed</p>", null, false));
+        verify(outbox, never()).publish(org.mockito.ArgumentMatchers.isNull(), any(), any(), any(), any());
+    }
+
     private static HelpdeskTicket ticket(Long id, Long companyId, EHelpdeskStatus status) {
         HelpdeskTicket t = new HelpdeskTicket();
         t.setId(id);

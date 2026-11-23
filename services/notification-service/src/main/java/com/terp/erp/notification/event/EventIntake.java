@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.terp.erp.notification.client.IamInternalClient;
 import com.terp.erp.notification.client.IamInternalClient.NotificationConfig;
+import com.terp.erp.notification.client.IamInternalClient.PlatformConfig;
 import com.terp.erp.notification.delivery.Delivery;
 import com.terp.erp.notification.delivery.Delivery.EChannel;
 import com.terp.erp.notification.delivery.Delivery.EStatus;
@@ -37,6 +38,7 @@ public class EventIntake {
     static final Duration FIRST_SEND_GRACE = Duration.ofMinutes(1);
     public static final String PAYLOAD_RECIPIENT = "payload";
     public static final String USER_RECIPIENT = "user:";
+    public static final String PLATFORM_RECIPIENT = "platform:";
     public static final String CHANNEL_EVENT_DISABLED = "CHANNEL_EVENT_DISABLED";
 
     private final ProcessedEventRepository processed;
@@ -61,8 +63,21 @@ public class EventIntake {
         pe.setEventType(e.eventType());
         pe.setEnvelope(json(e));
         pe.setReceivedAt(now);
+        if (e.companyId() == null) {
+            // A platform event: the super admin's webhooks and platform team addresses only, never a company's.
+            Optional<EPlatformRoute> platform = EPlatformRoute.of(e.eventType());
+            if (platform.isEmpty()) {
+                processed.saveAndFlush(pe);
+                return List.of();
+            }
+            PlatformConfig pcfg = iam.platformConfig(platform.get().emailCode, platform.get().webhookCode);
+            List<Delivery> rows = planPlatform(e, platform.get(), pcfg, now);
+            processed.saveAndFlush(pe);
+            deliveries.saveAll(rows);
+            return rows.stream().filter(d -> d.getStatus() == EStatus.PENDING).map(Delivery::getId).toList();
+        }
         Optional<EEventRoute> route = EEventRoute.of(e.eventType());
-        if (route.isEmpty() || e.companyId() == null) {
+        if (route.isEmpty()) {
             processed.saveAndFlush(pe);
             return List.of();
         }
@@ -111,6 +126,49 @@ public class EventIntake {
             }
         }
         return rows;
+    }
+
+    /**
+     * One EMAIL row per platform team address (recipientRef = platform:&lt;hash&gt;, never the address itself) and one
+     * WEBHOOK row per active platform webhook. companyId stays null on every row.
+     */
+    List<Delivery> planPlatform(EventEnvelope e, EPlatformRoute route, PlatformConfig cfg, Instant now) {
+        List<Delivery> rows = new ArrayList<>();
+        if (route.emailCode != null) {
+            if (!cfg.emailEnabled()) {
+                rows.add(row(e, EChannel.EMAIL, null, EStatus.SKIPPED, "EMAIL_DISABLED", now));
+            } else if (cfg.recipients().isEmpty()) {
+                rows.add(row(e, EChannel.EMAIL, null, EStatus.SKIPPED, "NO_RECIPIENT", now));
+            } else {
+                for (String address : cfg.recipients().stream().distinct().toList()) {
+                    Delivery d = row(e, EChannel.EMAIL, Targets.maskEmail(address),
+                            cfg.smtp() == null ? EStatus.SKIPPED : EStatus.PENDING,
+                            cfg.smtp() == null ? "NO_SMTP" : null, now);
+                    d.setRecipientRef(platformRef(address));
+                    rows.add(d);
+                }
+            }
+        }
+        if (route.webhookCode != null) {
+            for (IamInternalClient.Webhook w : cfg.webhooks()) {
+                Delivery d = row(e, EChannel.WEBHOOK, host(w.url()), EStatus.PENDING, null, now);
+                d.setWebhookId(Long.valueOf(w.id()));
+                rows.add(d);
+            }
+        }
+        return rows;
+    }
+
+    /** "platform:" + 16 hex of SHA-256(lower-case address): finds the address again at send time, reveals none. */
+    public static String platformRef(String address) {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(address.trim().toLowerCase(java.util.Locale.ROOT)
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return PLATFORM_RECIPIENT + java.util.HexFormat.of().formatHex(h, 0, 8);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
     }
 
     /** Switched off for this event: a SKIPPED row, so the delivery log shows why nothing was sent. */

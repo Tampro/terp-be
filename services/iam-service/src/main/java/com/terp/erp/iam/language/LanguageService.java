@@ -47,6 +47,16 @@ public class LanguageService {
     private final Cache<String, Map<String, String>> published = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofMinutes(10)).maximumSize(100).build();
 
+    /** Entries held now (Caffeine's estimate), for the super admin Cache page. */
+    public long estimatedCacheSize() {
+        return published.estimatedSize();
+    }
+
+    /** Clear Cache: the next request reads the labels from the database again. */
+    public void clearCache() {
+        published.invalidateAll();
+    }
+
     public LanguageService(LanguageRepository languages, LanguageLabelRepository labels, SettingsService settings) {
         this.languages = languages;
         this.labels = labels;

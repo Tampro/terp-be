@@ -15,6 +15,7 @@ import com.terp.erp.notification.client.IamInternalClient.NotificationConfig;
 import com.terp.erp.notification.config.NotificationProperties;
 import com.terp.erp.notification.delivery.Delivery.EStatus;
 import com.terp.erp.notification.event.EEventRoute;
+import com.terp.erp.notification.event.EPlatformRoute;
 import com.terp.erp.notification.event.EventIntake;
 import com.terp.erp.notification.event.ProcessedEvent;
 import com.terp.erp.notification.event.ProcessedEventRepository;
@@ -45,6 +46,10 @@ public class DeliveryDispatcher {
     record Context(EventEnvelope envelope, EEventRoute route, NotificationConfig config) {
     }
 
+    /** A platform event's delivery (companyId null): platform settings only. */
+    record PlatformContext(EventEnvelope envelope, EPlatformRoute route, IamInternalClient.PlatformConfig config) {
+    }
+
     private final DeliveryRepository deliveries;
     private final ProcessedEventRepository processed;
     private final IamInternalClient iam;
@@ -58,9 +63,15 @@ public class DeliveryDispatcher {
 
     public void dispatch(List<Long> ids) {
         Map<String, Optional<Context>> contexts = new HashMap<>();
+        Map<String, Optional<PlatformContext>> platformContexts = new HashMap<>();
         for (Long id : ids) {
             Delivery d = id == null ? null : deliveries.findById(id).orElse(null);
             if (d == null || d.getStatus() != EStatus.PENDING) {
+                continue;
+            }
+            if (d.getCompanyId() == null) {
+                dispatchPlatform(d, platformContexts);
+                deliveries.save(d);
                 continue;
             }
             try {
@@ -80,6 +91,69 @@ public class DeliveryDispatcher {
             }
             deliveries.save(d);
         }
+    }
+
+    private void dispatchPlatform(Delivery d, Map<String, Optional<PlatformContext>> cache) {
+        try {
+            Optional<PlatformContext> ctx = cache.get(d.getEventId());
+            if (ctx == null || ctx.isEmpty()) {
+                ctx = platformContext(d);
+                cache.put(d.getEventId(), ctx);
+            }
+            apply(d, ctx.map(c -> sendPlatform(d, c)).orElse(SendResult.fail("EVENT_UNKNOWN")));
+        } catch (ApiException e) {
+            cache.remove(d.getEventId());
+            apply(d, SendResult.retry("IAM_UNAVAILABLE"));
+        } catch (RuntimeException e) {
+            log.warn("Delivery {} failed unexpectedly: {}", d.getId(), e.getClass().getSimpleName());
+            apply(d, SendResult.retry("INTERNAL_ERROR"));
+        }
+    }
+
+    private Optional<PlatformContext> platformContext(Delivery d) {
+        Optional<ProcessedEvent> pe = processed.findById(d.getEventId());
+        Optional<EPlatformRoute> route = EPlatformRoute.of(d.getEventType());
+        if (pe.isEmpty() || route.isEmpty()) {
+            return Optional.empty();
+        }
+        EventEnvelope env;
+        try {
+            env = mapper.readValue(pe.get().getEnvelope(), EventEnvelope.class);
+        } catch (JsonProcessingException e) {
+            return Optional.empty();
+        }
+        return Optional.of(new PlatformContext(env, route.get(),
+                iam.platformConfig(route.get().emailCode, route.get().webhookCode)));
+    }
+
+    private SendResult sendPlatform(Delivery d, PlatformContext c) {
+        var cfg = c.config();
+        return switch (d.getChannel()) {
+            case EMAIL -> {
+                if (!cfg.emailEnabled()) {
+                    yield skipped("EMAIL_DISABLED");
+                }
+                if (cfg.smtp() == null) {
+                    yield skipped("NO_SMTP");
+                }
+                // The address is looked up again: one removed from the list in the meantime gets nothing.
+                String to = cfg.recipients().stream()
+                        .filter(a -> EventIntake.platformRef(a).equals(d.getRecipientRef())).findFirst().orElse(null);
+                if (to == null) {
+                    yield skipped("NO_RECIPIENT");
+                }
+                MessageTemplates.Message m = MessageTemplates.email(c.route().templateKey, cfg.defaultLanguage(),
+                        c.envelope().data());
+                yield email.send(cfg.smtp(), to, m.subject(), m.body());
+            }
+            case WEBHOOK -> cfg.webhooks().stream().filter(w -> String.valueOf(d.getWebhookId()).equals(w.id()))
+                    .findFirst()
+                    .map(w -> webhook.send(w.url(), w.secret(), c.route().webhookCode, c.route().webhookName,
+                            EPlatformRoute.MODULE, c.envelope()))
+                    .orElse(skipped("WEBHOOK_INACTIVE"));
+            // Platform events have no chat / SMS channel (no platform Slack/Telegram/Twilio settings).
+            default -> skipped("INTEGRATION_DISABLED");
+        };
     }
 
     private Optional<Context> context(Delivery d) {

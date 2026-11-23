@@ -20,6 +20,17 @@ public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
                           @Param("channel") Delivery.EChannel channel, @Param("eventType") String eventType,
                           @Param("from") Instant from, @Param("to") Instant to, Pageable pageable);
 
+    /** Deliveries of platform events (no company): the super admin's log. */
+    @Query("select d from Delivery d where d.companyId is null"
+            + " and (:status is null or d.status = :status)"
+            + " and (:channel is null or d.channel = :channel)"
+            + " and (:eventType is null or d.eventType = :eventType)"
+            + " and (:from is null or d.createdDate >= :from)"
+            + " and (:to is null or d.createdDate < :to)")
+    Page<Delivery> searchPlatform(@Param("status") Delivery.EStatus status,
+                                  @Param("channel") Delivery.EChannel channel, @Param("eventType") String eventType,
+                                  @Param("from") Instant from, @Param("to") Instant to, Pageable pageable);
+
     List<Delivery> findByEventIdOrderByIdAsc(String eventId);
 
     /** Waiting deliveries whose retry time has come, oldest first. */

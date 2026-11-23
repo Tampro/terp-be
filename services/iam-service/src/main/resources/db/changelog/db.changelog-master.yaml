@@ -135,3 +135,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261123400000_login_history_plan_badge_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123500000_company_notification_template_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123600000_platform_webhook_changelog.mysql.sql
