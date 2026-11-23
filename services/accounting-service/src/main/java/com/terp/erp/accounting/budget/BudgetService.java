@@ -280,7 +280,9 @@ public class BudgetService {
 
     /** Allocations stay editable until the budget is CLOSED; the period must still be open (ACC_089). */
     private Budget requireAllocatable(Long id) {
-        Budget b = require(id);
+        Budget b = budgets.lockByIdAndDeletedFalse(id)
+                .orElseThrow(() -> ApiException.notFound(EAccountingError.ACC_090));
+        TenantGuard.assertSameCompany(b.getCompanyId(), EAccountingError.ACC_090);
         periods.requireOpen(b.getPeriodId());
         if (!ALLOCATABLE.contains(b.getStatus())) {
             throw ApiException.badRequest(EAccountingError.ACC_091, "DRAFT/APPROVED/ACTIVE");
