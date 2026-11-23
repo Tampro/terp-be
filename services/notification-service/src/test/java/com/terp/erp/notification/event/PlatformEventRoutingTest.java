@@ -144,6 +144,7 @@ class PlatformEventRoutingTest {
                 new ChatChannel(guard, http, mapper), new WebhookChannel(guard, http, mapper, clock),
                 new com.terp.erp.notification.channel.SmsChannel(guard,
                         mock(com.terp.erp.notification.channel.FormHttp.class)),
+                mock(com.terp.erp.notification.channel.GoogleCalendarChannel.class),
                 new NotificationProperties("http://iam", "erp.events", "q", "dlq", 3, Duration.ofMinutes(1),
                         Duration.ofMinutes(10), 50), mapper, clock);
         ProcessedEvent pe = new ProcessedEvent();

@@ -28,7 +28,13 @@ public final class HolidayDtos {
     public record HolidayDto(String id, String companyId, String name, CategoryDto category, LocalDate startDate,
                              LocalDate endDate, long days, String description, boolean isPaid,
                              boolean allBranches,
-                             List<Ref> branches, Instant createdDate, Instant updatedDate) {
+                             List<Ref> branches, Instant createdDate, Instant updatedDate, boolean calendarSync) {
+        public HolidayDto(String id, String companyId, String name, CategoryDto category, LocalDate startDate,
+                          LocalDate endDate, long days, String description, boolean isPaid, boolean allBranches,
+                          List<Ref> branches, Instant createdDate, Instant updatedDate) {
+            this(id, companyId, name, category, startDate, endDate, days, description, isPaid, allBranches, branches,
+                    createdDate, updatedDate, false);
+        }
     }
 
     public record HolidayForm(
@@ -42,7 +48,13 @@ public final class HolidayDtos {
             @Schema(example = "Christmas") @Size(max = 500) String description,
             @Schema(description = "Applicable branch ids; empty or omitted = all branches")
             @Size(max = 200) List<@NotNull Long> branchIds,
-            @Schema(description = "Is Paid; omitted = true", example = "true") Boolean isPaid) {
+            @Schema(description = "Is Paid; omitted = true", example = "true") Boolean isPaid,
+            @Schema(description = "Add the holiday to the company's Google Calendar (integration must be on); "
+                    + "omitted = false", example = "false") Boolean calendarSync) {
+        public HolidayForm(String name, Long categoryId, LocalDate startDate, LocalDate endDate, String description,
+                           List<Long> branchIds, Boolean isPaid) {
+            this(name, categoryId, startDate, endDate, description, branchIds, isPaid, null);
+        }
     }
 
     public record CategoryForm(

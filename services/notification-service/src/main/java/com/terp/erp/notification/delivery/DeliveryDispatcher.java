@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.notification.channel.ChatChannel;
 import com.terp.erp.notification.channel.EmailChannel;
+import com.terp.erp.notification.channel.GoogleCalendarChannel;
 import com.terp.erp.notification.channel.MessageTemplates;
 import com.terp.erp.notification.channel.SendResult;
 import com.terp.erp.notification.channel.SmsChannel;
@@ -57,6 +58,7 @@ public class DeliveryDispatcher {
     private final ChatChannel chat;
     private final WebhookChannel webhook;
     private final SmsChannel sms;
+    private final GoogleCalendarChannel calendar;
     private final NotificationProperties props;
     private final ObjectMapper mapper;
     private final Clock clock;
@@ -222,6 +224,10 @@ public class DeliveryDispatcher {
                     .findFirst()
                     .map(w -> webhook.send(w.url(), w.secret(), c.route(), c.envelope()))
                     .orElse(skipped("WEBHOOK_INACTIVE"));
+            case GOOGLE_CALENDAR -> cfg.googleCalendar() == null || c.route().calendar == null
+                    ? skipped("INTEGRATION_DISABLED")
+                    : calendar.send(d.getCompanyId(), cfg.googleCalendar(), c.route().calendar,
+                    c.envelope().aggregateId(), data);
         };
     }
 

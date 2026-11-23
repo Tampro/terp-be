@@ -49,10 +49,13 @@ class DeliveryDispatcherTest {
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final NotificationProperties props = new NotificationProperties("http://iam", "erp.events", "q", "dlq",
             3, Duration.ofMinutes(1), Duration.ofMinutes(10), 50);
+    private final com.terp.erp.notification.channel.GoogleCalendarChannel gcal =
+            mock(com.terp.erp.notification.channel.GoogleCalendarChannel.class);
     private final DeliveryDispatcher dispatcher = new DeliveryDispatcher(deliveries, processed, iam, email,
             new ChatChannel(guard, http, mapper), new WebhookChannel(guard, http, mapper, clock),
             new com.terp.erp.notification.channel.SmsChannel(guard,
-                    mock(com.terp.erp.notification.channel.FormHttp.class)), props, mapper,
+                    mock(com.terp.erp.notification.channel.FormHttp.class)),
+            gcal, props, mapper,
             clock);
     private final Smtp smtp = new Smtp("smtp.example.com", 587, null, null, "TLS", "noreply@example.com", null);
 
@@ -209,5 +212,18 @@ class DeliveryDispatcherTest {
         assertThat(DeliveryDispatcher.chatText(null, ctx, "en", data)).isEqualTo("[ERP] Ticket T-1: Help");
         assertThat(DeliveryDispatcher.chatText("Ticket {ticketNumber}\nby {name}", ctx, "en", data))
                 .isEqualTo("Ticket T-1\nby");
+    }
+
+    @Test
+    void aCalendarRowWhoseIntegrationWasSwitchedOffIsSkippedWithoutACall() {
+        Delivery d = delivery(21L, EChannel.GOOGLE_CALENDAR);
+        when(iam.config(eq(7L), anyString(), any(), any())).thenReturn(new NotificationConfig("7", "en", false, null,
+                null, null, null, List.of(), null, null, null, null, null));
+
+        dispatcher.dispatch(List.of(21L));
+
+        assertThat(d.getStatus()).isEqualTo(EStatus.SKIPPED);
+        assertThat(d.getLastErrorCode()).isEqualTo("INTEGRATION_DISABLED");
+        verify(gcal, never()).send(any(), any(), any(), any(), any());
     }
 }

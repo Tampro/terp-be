@@ -43,6 +43,15 @@ public class IamInternalClient {
     public record Twilio(String accountSid, String authToken, String fromNumber) {
     }
 
+    /** serviceAccountJson: the Google key file, private key included: never logged (toString hides it). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record GoogleCalendar(String calendarId, String serviceAccountJson) {
+        @Override
+        public String toString() {
+            return "GoogleCalendar[calendarId=" + calendarId + ", serviceAccountJson=***]";
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Webhook(String id, String url, String secret) {
     }
@@ -60,18 +69,27 @@ public class IamInternalClient {
     /**
      * …EnabledForEvent: the company's per-event switch of that chat channel; null (an IAM without the switch) = on.
      * twilio: null when SMS is off. templates: null (an IAM without company templates) = every default.
+     * googleCalendar: null when the Google Calendar integration is off (or an IAM without it).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
                                      Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
                                      Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
-                                     Boolean smsEnabledForEvent, Templates templates) {
+                                     Boolean smsEnabledForEvent, Templates templates, GoogleCalendar googleCalendar) {
+        public NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
+                                  Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
+                                  Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
+                                  Boolean smsEnabledForEvent, Templates templates) {
+            this(companyId, defaultLanguage, emailEnabled, smtp, slack, telegram, twilio, webhooks,
+                    slackEnabledForEvent, telegramEnabledForEvent, smsEnabledForEvent, templates, null);
+        }
+
         public NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
                                   Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
                                   Boolean slackEnabledForEvent, Boolean telegramEnabledForEvent,
                                   Boolean smsEnabledForEvent) {
             this(companyId, defaultLanguage, emailEnabled, smtp, slack, telegram, twilio, webhooks,
-                    slackEnabledForEvent, telegramEnabledForEvent, smsEnabledForEvent, null);
+                    slackEnabledForEvent, telegramEnabledForEvent, smsEnabledForEvent, null, null);
         }
 
         public Templates templatesOrNone() {

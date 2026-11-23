@@ -257,7 +257,8 @@ public class SalesDocumentService {
         outbox.publish(d.getCompanyId(), EVENT_POSTED, "SALES_INVOICE", d.getId(), Payload.of(
                 "invoiceId", d.getId(), "number", d.getNumber(), "invoiceType", d.getInvoiceType(),
                 "customerId", d.getCustomerId(), "customerName", d.getCustomerName(), "docDate", d.getDocDate(),
-                "dueDate", d.getDueDate(), "total", d.getTotal(), "balance", d.getBalance()));
+                "dueDate", d.getDueDate(), "total", d.getTotal(), "balance", d.getBalance(),
+                "syncToGoogleCalendar", d.isSyncToGoogleCalendar()));
         outbox.publish(d.getCompanyId(), EVENT_INVOICE_STATUS, "SALES_INVOICE", d.getId(),
                 invoiceStatusPayload(d, EDocumentStatus.DRAFT));
         return DocumentDetail.of(d, today());
@@ -411,6 +412,7 @@ public class SalesDocumentService {
         d.setDueDate(f.dueDate());
         d.setPaymentTerms(blank(f.paymentTerms()));
         d.setNotes(blank(f.notes()));
+        d.setSyncToGoogleCalendar(d.getKind() == EDocumentKind.INVOICE && Boolean.TRUE.equals(f.syncToGoogleCalendar()));
         List<SalesDocumentLine> lines = new ArrayList<>();
         int pos = 1;
         for (LineForm lf : f.lines()) {
@@ -475,6 +477,7 @@ public class SalesDocumentService {
         d.setDueDate(today.plusDays(Math.max(0, days)));
         d.setPaymentTerms(src.getPaymentTerms());
         d.setNotes(src.getNotes());
+        // TODO(assumption): a converted / copied invoice starts without calendar sync; the user ticks it on the draft.
         List<SalesDocumentLine> lines = new ArrayList<>();
         for (SalesDocumentLine s : src.getLines()) {
             SalesDocumentLine l = new SalesDocumentLine();

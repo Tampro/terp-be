@@ -74,6 +74,10 @@ public class SalesDocument extends BaseAuditableEntity implements JournalTracked
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    /** Sync to Google Calendar (ERP manual: sales invoice form): notification-service adds the due date on posting. */
+    @Column(name = "sync_to_google_calendar", nullable = false)
+    private boolean syncToGoogleCalendar;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 12)
     private EDocumentStatus status = EDocumentStatus.DRAFT;

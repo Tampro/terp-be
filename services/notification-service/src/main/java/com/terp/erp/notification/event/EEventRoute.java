@@ -10,9 +10,11 @@ import java.util.Optional;
  * through IAM's internal contact endpoint). An event type not listed here is acknowledged and ignored.
  * Slack / Telegram / SMS fire for a routed event when the company turned the integration on and did not switch the
  * event off for that channel (IAM company_channel_event; no row = on). SMS also needs data.recipientPhone (E.164).
+ * Google Calendar fires for a route with {@link #calendar} when the integration is on and the payload's flag is true.
  */
 public enum EEventRoute {
-    SALES_INVOICE_POSTED("sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE", "New Sales Invoice", "SALES"),
+    SALES_INVOICE_POSTED("sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE", "New Sales Invoice", "SALES",
+            ECalendar.INVOICE_DUE),
     PURCHASE_INVOICE_POSTED("purchase.invoice.posted", null, "NEW_PURCHASE_INVOICE", "New Purchase Invoice",
             "PURCHASE"),
     CUSTOMER_PAYMENT_CLEARED("accounting.customer_payment.cleared", "INVOICE_PAYMENT_CREATED", null, null, null),
@@ -45,7 +47,10 @@ public enum EEventRoute {
     TRAINER_CREATED("employee.trainer.created", null, "NEW_TRAINER", "New Trainer", "TRAINING"),
     AWARD_CREATED("employee.award.created", null, "NEW_AWARD", "New Award", "HRM"),
     ANNOUNCEMENT_PUBLISHED("employee.announcement.published", null, "NEW_ANNOUNCEMENT", "New Announcement", "HRM"),
-    HOLIDAY_CREATED("employee.holiday.created", null, "NEW_HOLIDAY", "New Holidays", "HRM"),
+    HOLIDAY_CREATED("employee.holiday.created", null, "NEW_HOLIDAY", "New Holidays", "HRM", ECalendar.HOLIDAY_CREATE),
+    // Google Calendar only (calendarOnly): no email, webhook, chat or SMS for these.
+    HOLIDAY_UPDATED("employee.holiday.updated", null, null, null, null, ECalendar.HOLIDAY_UPDATE),
+    HOLIDAY_DELETED("employee.holiday.deleted", null, null, null, null, ECalendar.HOLIDAY_DELETE),
     ZOOM_MEETING_CREATED("meeting.zoom.created", null, "NEW_ZOOM_MEETING", "New Zoom Meeting", "MEETING"),
     COMPANY_EVENT_CREATED("meeting.event.created", null, "NEW_EVENT", "New Event", "HRM"),
     JOB_POSTING_PUBLISHED("recruitment.job_posting.published", null, "NEW_JOB_POSTING", "New Job Posting",
@@ -75,13 +80,41 @@ public enum EEventRoute {
     public final String webhookCode;
     public final String webhookName;
     public final String webhookModule;
+    /** null = no Google Calendar entry for this event. */
+    public final ECalendar calendar;
+
+    /**
+     * What the Google Calendar channel does for an event, and the payload switch it needs (true, else no row):
+     * holidays data.calendarSync, sales invoices data.syncToGoogleCalendar.
+     */
+    public enum ECalendar {
+        HOLIDAY_CREATE("calendarSync"), HOLIDAY_UPDATE("calendarSync"), HOLIDAY_DELETE("calendarSync"),
+        INVOICE_DUE("syncToGoogleCalendar");
+
+        public final String flag;
+
+        ECalendar(String flag) {
+            this.flag = flag;
+        }
+    }
 
     EEventRoute(String eventType, String emailCode, String webhookCode, String webhookName, String webhookModule) {
+        this(eventType, emailCode, webhookCode, webhookName, webhookModule, null);
+    }
+
+    EEventRoute(String eventType, String emailCode, String webhookCode, String webhookName, String webhookModule,
+                ECalendar calendar) {
         this.eventType = eventType;
         this.emailCode = emailCode;
         this.webhookCode = webhookCode;
         this.webhookName = webhookName;
         this.webhookModule = webhookModule;
+        this.calendar = calendar;
+    }
+
+    /** Routed for the calendar only: the chat channels and SMS stay quiet. */
+    public boolean calendarOnly() {
+        return calendar != null && emailCode == null && webhookCode == null;
     }
 
     public static Optional<EEventRoute> of(String eventType) {
