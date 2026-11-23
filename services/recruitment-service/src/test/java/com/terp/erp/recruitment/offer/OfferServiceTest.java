@@ -92,6 +92,8 @@ class OfferServiceTest {
         assertThat(d.department().name()).isEqualTo("IT");
         assertThat(d.approvedBy().name()).isEqualTo("Test Approver");
         assertThat(d.expired()).isFalse();
+        assertThat(d.bonus()).isEqualByComparingTo("5000000");
+        assertThat(d.equity()).isEqualTo("0.1% vesting 4y");
         assertThat(candidate.getStatus()).isEqualTo(Candidate.EStatus.OFFER);
         verify(org).department(3L);
     }
@@ -195,7 +197,8 @@ class OfferServiceTest {
     }
 
     private static OfferForm form(Long postingId, LocalDate start, LocalDate expiration, Long approver) {
-        return new OfferForm(7L, postingId, null, new BigDecimal("25000000"), start, expiration, approver, " Laptop ");
+        return new OfferForm(7L, postingId, null, new BigDecimal("25000000"),
+                new BigDecimal("5000000"), " 0.1% vesting 4y ", start, expiration, approver, " Laptop ");
     }
 
     private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, ERecruitmentError code) {

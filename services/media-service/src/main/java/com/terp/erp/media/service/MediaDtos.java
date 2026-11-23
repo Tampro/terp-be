@@ -36,7 +36,8 @@ public final class MediaDtos {
     }
 
     @Schema(description = "Summary cards and sidebar storage")
-    public record StatsDto(long files, long storageBytes, long images) {
+    /** storageLimitBytes: the company plan's storage limit; null = unlimited or several companies / the platform. */
+    public record StatsDto(long files, long storageBytes, long images, Long storageLimitBytes) {
     }
 
     public record FolderForm(

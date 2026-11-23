@@ -17,8 +17,9 @@ public interface LoginHistoryRepository extends JpaRepository<LoginHistory, Long
             + "and (:companyId is null or h.companyId = :companyId) "
             + "and (:userId is null or h.userId = :userId) "
             + "and (:userType is null or h.userType = :userType) "
+            + "and (:ipAddress is null or h.ipAddress = :ipAddress) "
             + "and (:kw = '' or lower(h.username) like :kw escape '!' or lower(h.ipAddress) like :kw escape '!')")
-    Page<LoginHistory> search(Long companyId, Long userId, LoginHistory.EUserType userType, String kw,
+    Page<LoginHistory> search(Long companyId, Long userId, LoginHistory.EUserType userType, String ipAddress, String kw,
                               Pageable pageable);
 
     Optional<LoginHistory> findByIdAndDeletedFalse(Long id);

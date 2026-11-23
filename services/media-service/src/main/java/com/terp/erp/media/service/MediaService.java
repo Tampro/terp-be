@@ -24,6 +24,7 @@ import com.terp.erp.media.storage.FileStorage;
 import com.terp.erp.media.storage.FileTypePolicy;
 import com.terp.erp.media.storage.LinkSigner;
 import com.terp.erp.media.storage.StoragePolicyClient;
+import com.terp.erp.media.storage.StorageQuotaClient;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,6 +45,7 @@ public class MediaService {
     private final LinkSigner links;
     private final MediaProperties props;
     private final StoragePolicyClient storagePolicy;
+    private final StorageQuotaClient storageQuota;
 
     // ------------------------------------------------------------------ folders
 
@@ -103,8 +105,9 @@ public class MediaService {
     public StatsDto stats(Long requestedCompanyId) {
         MediaScope s = MediaScope.forRead(requestedCompanyId);
         Object[] row = files.stats(s.all(), s.companyId()).get(0);
+        Long limit = s.all() || s.companyId() == null ? null : storageQuota.limitBytes(s.companyId());
         return new StatsDto(((Number) row[0]).longValue(), ((Number) row[1]).longValue(),
-                ((Number) row[2]).longValue());
+                ((Number) row[2]).longValue(), limit);
     }
 
     @Transactional(readOnly = true)
@@ -144,6 +147,7 @@ public class MediaService {
             }
             checked.add(new Checked(u, name, type));
         }
+        assertQuota(s, checked.stream().mapToLong(c -> c.file().getSize()).sum());
         List<String> stored = new ArrayList<>();
         try {
             List<MediaFileDto> result = new ArrayList<>();
@@ -174,6 +178,30 @@ public class MediaService {
             log.error("Upload failed: {}", e.getClass().getSimpleName());
             throw ApiException.badRequest(EMediaError.MEDIA_009);
         }
+    }
+
+    /**
+     * The company's plan storage limit (user manual §4.1): used + incoming must fit. Platform files (super admin, no
+     * company) have no limit. TODO(assumption): concurrent uploads are not serialised, so two batches at once can
+     * overshoot the limit by at most one batch.
+     */
+    private void assertQuota(MediaScope s, long incoming) {
+        if (s.companyId() == null) {
+            return;
+        }
+        Long limit = storageQuota.limitBytes(s.companyId());
+        if (limit == null) {
+            return;
+        }
+        long used = ((Number) files.stats(false, s.companyId()).get(0)[1]).longValue();
+        if (used + incoming > limit) {
+            throw ApiException.badRequest(EMediaError.MEDIA_010, gb(limit));
+        }
+    }
+
+    private static String gb(long bytes) {
+        return java.math.BigDecimal.valueOf(bytes).divide(java.math.BigDecimal.valueOf(1024L * 1024 * 1024), 2,
+                java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
     /** Full replacement of display name and folder. */

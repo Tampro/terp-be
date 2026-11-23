@@ -38,7 +38,7 @@ import java.util.Set;
 public class OfferLetterService {
     /** Variables a template may declare to get offer data (names of the TERP Core offer email templates). */
     public static final Set<String> VARIABLES = Set.of("candidate_name", "candidate_email", "position", "job_title",
-            "job_code", "department", "salary", "start_date", "offer_expiration_date", "expiration_date", "offer_date",
+            "job_code", "department", "salary", "bonus", "equity", "start_date", "offer_expiration_date", "expiration_date", "offer_date",
             "benefits", "company_name");
 
     private final OfferService offerService;
@@ -123,6 +123,8 @@ public class OfferLetterService {
         String department = o.getDepartmentId() == null ? null : org.departmentName(o.getDepartmentId());
         v.put("department", department == null ? "" : department);
         v.put("salary", money(o.getSalary()));
+        v.put("bonus", money(o.getBonus()));
+        v.put("equity", o.getEquity() == null ? "" : o.getEquity());
         v.put("start_date", date(o.getStartDate()));
         v.put("offer_expiration_date", date(o.getExpirationDate()));
         v.put("expiration_date", date(o.getExpirationDate()));

@@ -28,13 +28,16 @@ public final class SaasDtos {
                           BigDecimal yearlyPrice, Integer maxUsers, Integer maxEmployees, BigDecimal storageLimitGb,
                           int trialDays, boolean aiIntegration, boolean defaultPlan, boolean enabled,
                           boolean recommended,
+                          @Schema(description = "Free plan: prices are 0") boolean free,
+                          @Schema(description = "Badge text on the plan card; null = none (recommended still shows the "
+                                  + "Recommended badge)", example = "Most Popular") String badge,
                           @Schema(description = "Modules included; empty = every module (no restriction)")
                           java.util.List<EPlanModule> modules) {
         public static PlanDto of(Plan p) {
             return p == null ? null : new PlanDto(SaasDtos.str(p.getId()), p.getCode(), p.getName(), p.getDescription(),
                     p.getMonthlyPrice(), p.getYearlyPrice(), p.getMaxUsers(), p.getMaxEmployees(),
                     p.getStorageLimitGb(), p.getTrialDays(), p.isAiIntegration(), p.isDefaultPlan(), p.isEnabled(),
-                    p.isRecommended(), p.getModules().stream().sorted().toList());
+                    p.isRecommended(), p.isFree(), p.getBadge(), p.getModules().stream().sorted().toList());
         }
     }
 
@@ -61,8 +64,9 @@ public final class SaasDtos {
             @Schema(description = "Max accounts; omit = unlimited", example = "20") @Min(1) Integer maxUsers,
             @Schema(description = "Max employees (stored, enforced later); omit = unlimited", example = "50")
             @Min(1) Integer maxEmployees,
-            @Schema(description = "Storage in GB (stored, enforced later); omit = unlimited", example = "5")
-            @DecimalMin("0") BigDecimal storageLimitGb,
+            @Schema(description = "Storage in GB (2 decimals, smallest 0.01), enforced by media-service on uploads; "
+                    + "omit or -1 = unlimited", example = "5")
+            @DecimalMin("-1") BigDecimal storageLimitGb,
             @Schema(description = "Trial days when given as the default plan to a new company", example = "14")
             @Min(0) int trialDays,
             @Schema(description = "Feature add-on: AI integration enabled for companies on this plan (flag only for now)",
@@ -72,6 +76,10 @@ public final class SaasDtos {
             @Schema(description = "Offered to companies", example = "true") boolean enabled,
             @Schema(description = "Shows the Recommended badge on the plan card", example = "false")
             boolean recommended,
+            @Schema(description = "Free plan: monthlyPrice must be 0 and yearlyPrice 0 or omitted (SAAS_041)",
+                    example = "false") boolean free,
+            @Schema(description = "Badge text on the plan card; omit = none. Shown instead of the Recommended badge "
+                    + "when both are set", example = "Most Popular") @Size(max = 50) String badge,
             @Schema(description = "Modules included (full replacement); null or empty = every module. A company on the "
                     + "plan loses the permissions of the modules left out.", example = "[\"HRM\", \"RECRUITMENT\"]")
             java.util.Set<@NotNull EPlanModule> modules) {

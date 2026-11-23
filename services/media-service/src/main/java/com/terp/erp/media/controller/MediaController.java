@@ -100,7 +100,10 @@ public class MediaController {
         return ApiMessageDto.ok(ResponseListDto.of(media.search(companyId, folderId, kind, keyword, sort, page, size)));
     }
 
-    @Operation(summary = "Summary cards: files, storage used (bytes), images")
+    @Operation(summary = "Summary cards: files, storage used (bytes), images",
+            description = "storageLimitBytes = the company plan's storage limit (null = unlimited, or the super admin "
+                    + "viewing every company / the platform). Read from IAM.")
+    @ApiResponses(@ApiResponse(responseCode = "503", description = "IAM unreachable for the limit (MEDIA_011)"))
     @PreAuthorize("@PermissionChecker.has('MEDIA_VIEW')")
     @GetMapping("/stats")
     public ApiMessageDto<StatsDto> stats(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
@@ -120,8 +123,10 @@ public class MediaController {
                     + "the size limit. The type is checked from the file content; nothing is kept if one file is refused.")
     @ApiResponses({
             @ApiResponse(responseCode = "400", description = "No file (MEDIA_008), type not allowed (MEDIA_004), too "
-                    + "large (MEDIA_005), content does not match type (MEDIA_006), storage error (MEDIA_009)"),
-            @ApiResponse(responseCode = "404", description = "Folder not in your company (MEDIA_002)")})
+                    + "large (MEDIA_005), content does not match type (MEDIA_006), storage error (MEDIA_009), "
+                    + "the company plan's storage limit would be passed (MEDIA_010)"),
+            @ApiResponse(responseCode = "404", description = "Folder not in your company (MEDIA_002)"),
+            @ApiResponse(responseCode = "503", description = "IAM unreachable for the storage limit (MEDIA_011)")})
     @PreAuthorize("@PermissionChecker.has('MEDIA_UPLOAD')")
     @PostMapping(value = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiMessageDto<List<MediaFileDto>> upload(

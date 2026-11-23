@@ -162,6 +162,13 @@ class OfferConversionServiceTest {
         when(templateRepo.findByIdAndDeletedFalse(4L)).thenReturn(Optional.of(t));
         var l = letters.letter(9L, 4L);
         assertThat(new String(l.pdf(), 0, 5, StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
+        offer.setBonus(new BigDecimal("5000000"));
+        offer.setEquity("0.1% vesting 4y");
+        assertThat(letters.values(offer)).containsEntry("bonus", "5,000,000").containsEntry("equity", "0.1% vesting 4y");
+        offer.setBonus(null);
+        offer.setEquity(null);
+        assertThat(letters.values(offer)).containsEntry("bonus", "").containsEntry("equity", "");
+        assertThat(OfferLetterService.VARIABLES).contains("bonus", "equity");
         assertThat(letters.values(offer)).containsEntry("candidate_name", "Test Candidate")
                 .containsEntry("salary", "25,000,000").containsEntry("department", "IT");
         assertThat(OfferPdf.paragraphs("<p>Dear A &amp; B,</p><p>line<br>two</p>"))

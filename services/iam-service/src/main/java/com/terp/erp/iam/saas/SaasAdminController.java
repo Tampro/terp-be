@@ -65,7 +65,7 @@ public class SaasAdminController {
     }
 
     @Operation(summary = "Create a plan", description = "defaultPlan = true moves the default flag to this plan.")
-    @ApiResponses(@ApiResponse(responseCode = "400", description = "Code taken (SAAS_002)"))
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Code taken (SAAS_002), free plan with a price (SAAS_041)"))
     @PostMapping("/plans")
     public ApiMessageDto<PlanDto> createPlan(@Valid @RequestBody PlanForm form) {
         return ApiMessageDto.ok(catalog.createPlan(form));
@@ -75,7 +75,7 @@ public class SaasAdminController {
             description = "PUT replaces every field: omitted limits become unlimited. New limits apply to every "
                     + "company on the plan.")
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Code taken (SAAS_002)"),
+            @ApiResponse(responseCode = "400", description = "Code taken (SAAS_002), free plan with a price (SAAS_041)"),
             @ApiResponse(responseCode = "404", description = "No such plan (SAAS_001)")})
     @PutMapping("/plans/{id}")
     public ApiMessageDto<PlanDto> updatePlan(@PathVariable Long id, @Valid @RequestBody PlanForm form) {

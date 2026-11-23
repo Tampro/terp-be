@@ -19,3 +19,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122900000_recruitment_flow_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123100000_outbox_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123200000_offer_bonus_equity_changelog.mysql.sql

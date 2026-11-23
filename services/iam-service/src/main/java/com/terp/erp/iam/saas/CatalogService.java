@@ -86,6 +86,10 @@ public class CatalogService {
     }
 
     private void apply(Plan p, PlanForm f) {
+        if (f.free() && (f.monthlyPrice().signum() != 0
+                || (f.yearlyPrice() != null && f.yearlyPrice().signum() != 0))) {
+            throw ApiException.badRequest(ESaasError.SAAS_041);
+        }
         if (f.defaultPlan()) {
             // Only one default: the previous one stops being it.
             plans.findFirstByDefaultPlanTrueAndDeletedFalse()
@@ -103,6 +107,8 @@ public class CatalogService {
         p.setTrialDays(f.trialDays());
         p.setAiIntegration(f.aiIntegration());
         p.setRecommended(f.recommended());
+        p.setFree(f.free());
+        p.setBadge(f.badge() == null || f.badge().isBlank() ? null : f.badge().trim());
         p.setDefaultPlan(f.defaultPlan());
         p.setEnabled(f.enabled() || f.defaultPlan());
         p.getModules().clear();

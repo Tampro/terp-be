@@ -35,17 +35,21 @@ public class LoginHistoryController {
 
     @Operation(summary = "Login History", description = "Newest first. A company user sees their company's logins; a "
             + "super admin every login (companyId = one company, userType = SUPER_ADMIN / COMPANY_USER). keyword = "
-            + "username or IP.")
+            + "username or IP (contains); ipAddress = exact IP. Each row carries deviceType, language, "
+            + "timezone (X-Client-Timezone sent by the FE at login), roleAtLogin; city / country / isp stay null "
+            + "until a GeoIP source is chosen.")
     @PreAuthorize("@PermissionChecker.has('IAM_USER_VIEW')")
     @GetMapping
     public ApiMessageDto<ResponseListDto<LoginDto>> list(
             @Parameter(description = "Super admin only: one company") @RequestParam(required = false) Long companyId,
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) EUserType userType,
+            @Parameter(description = "Exact IP address", example = "203.0.113.10")
+            @RequestParam(required = false) String ipAddress,
             @RequestParam(required = false) String keyword,
             @ParameterObject @PageableDefault(size = 20, sort = "loginAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, userId, userType, keyword, pageable)));
+        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, userId, userType, ipAddress, keyword, pageable)));
     }
 
     @Operation(summary = "Login details", description = "IP, browser, OS and the full User-Agent.")

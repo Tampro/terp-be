@@ -47,7 +47,8 @@ public enum ESaasError implements ErrorCode {
     SAAS_037("Stripe payment is not available."),
     SAAS_038("Stripe could not start the payment: {0}."),
     SAAS_039("This order cannot be paid this way."),
-    SAAS_040("The Stripe notification is not valid.");
+    SAAS_040("The Stripe notification is not valid."),
+    SAAS_041("A free plan must have a price of 0.");
 
     private final String message;
 }

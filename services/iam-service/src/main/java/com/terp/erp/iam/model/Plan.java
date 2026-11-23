@@ -40,7 +40,7 @@ public class Plan extends BaseAuditableEntity {
     @Column(name = "max_employees")
     private Integer maxEmployees;
 
-    /** Stored for the file service; not enforced until that service exists. */
+    /** Enforced by media-service on uploads; null or -1 = unlimited. */
     @Column(name = "storage_limit_gb", precision = 10, scale = 2)
     private BigDecimal storageLimitGb;
 
@@ -55,6 +55,17 @@ public class Plan extends BaseAuditableEntity {
     /** "Recommended" badge on the plan card (docs/analysis/06 §10.2.1); display only. */
     @Column(name = "recommended", nullable = false)
     private boolean recommended;
+
+    /** "Free" plan (user manual §4.1): its prices must be 0 (SAAS_041). */
+    @Column(name = "is_free", nullable = false)
+    private boolean free;
+
+    /**
+     * Free badge text on the plan card, e.g. "Most Popular" (user manual §4.1). Independent of recommended: the FE shows
+     * badge when set, else "Recommended" when recommended is true.
+     */
+    @Column(name = "badge", length = 50)
+    private String badge;
 
     @Column(name = "is_default", nullable = false)
     private boolean defaultPlan;
