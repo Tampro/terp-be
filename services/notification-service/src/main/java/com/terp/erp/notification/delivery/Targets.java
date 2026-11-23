@@ -22,4 +22,13 @@ public final class Targets {
         String digits = phone.replaceAll("[^0-9]", "");
         return digits.length() < 3 ? null : "*" + digits.substring(digits.length() - 3);
     }
+
+    /** "abcd…@…": enough to tell two calendars apart, not the whole id (it names a person or a team). */
+    public static String maskCalendarId(String calendarId) {
+        if (calendarId == null || calendarId.isBlank()) {
+            return null;
+        }
+        String id = calendarId.trim();
+        return id.substring(0, Math.min(4, id.length())) + "…@…";
+    }
 }

@@ -47,6 +47,10 @@ public class Holiday extends BaseAuditableEntity {
     @Column(name = "branch_id", nullable = false)
     private Set<Long> branchIds = new HashSet<>();
 
+    /** Calendar sync (ERP manual: holidays): notification-service adds the holiday to the company's Google Calendar. */
+    @Column(name = "calendar_sync", nullable = false)
+    private boolean calendarSync;
+
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
 }

@@ -109,10 +109,7 @@ public class HolidayService {
         apply(h, form);
         holidays.save(h);
         // webhook NEW_HOLIDAY; no recipient
-        outbox.publish(companyId, "employee.holiday.created", "HOLIDAY", h.getId(), Payload.of(
-                "holidayId", h.getId(), "title", h.getName(), "name", h.getName(), "categoryId", h.getCategoryId(),
-                "startDate", h.getStartDate(), "endDate", h.getEndDate(), "paid", h.isPaid(),
-                "branchIds", Payload.ids(h.getBranchIds())));
+        publish("employee.holiday.created", h);
         return dtos(companyId, List.of(h)).get(h.getId());
     }
 
@@ -121,12 +118,26 @@ public class HolidayService {
     public HolidayDto update(Long id, HolidayForm form) {
         Holiday h = require(id);
         apply(h, form);
+        publish("employee.holiday.updated", h);
         return dtos(h.getCompanyId(), List.of(h)).get(id);
     }
 
     @Transactional
     public void delete(Long id) {
-        require(id).setDeleted(true);
+        Holiday h = require(id);
+        h.setDeleted(true);
+        publish("employee.holiday.deleted", h);
+    }
+
+    /**
+     * created / updated / deleted share one payload: webhook NEW_HOLIDAY (created only), no recipient; calendarSync
+     * and name / startDate / endDate let notification-service create, replace or remove the Google Calendar entry.
+     */
+    private void publish(String eventType, Holiday h) {
+        outbox.publish(h.getCompanyId(), eventType, "HOLIDAY", h.getId(), Payload.of(
+                "holidayId", h.getId(), "title", h.getName(), "name", h.getName(), "categoryId", h.getCategoryId(),
+                "startDate", h.getStartDate(), "endDate", h.getEndDate(), "paid", h.isPaid(),
+                "branchIds", Payload.ids(h.getBranchIds()), "calendarSync", h.isCalendarSync()));
     }
 
     private void apply(Holiday h, HolidayForm f) {
@@ -156,6 +167,7 @@ public class HolidayService {
         h.setEndDate(f.endDate());
         h.setDescription(f.description() == null || f.description().isBlank() ? null : f.description().trim());
         h.setPaid(f.isPaid() == null || f.isPaid());
+        h.setCalendarSync(Boolean.TRUE.equals(f.calendarSync()));
         h.getBranchIds().clear();
         h.getBranchIds().addAll(wanted);
     }
@@ -183,7 +195,8 @@ public class HolidayService {
             return new HolidayDto(h.getId().toString(), h.getCompanyId().toString(), h.getName(),
                     c == null ? null : CategoryDto.of(c), h.getStartDate(), h.getEndDate(),
                     ChronoUnit.DAYS.between(h.getStartDate(), h.getEndDate()) + 1, h.getDescription(),
-                    h.isPaid(), h.getBranchIds().isEmpty(), refs, h.getCreatedDate(), h.getUpdatedDate());
+                    h.isPaid(), h.getBranchIds().isEmpty(), refs, h.getCreatedDate(), h.getUpdatedDate(),
+                    h.isCalendarSync());
         }));
     }
 

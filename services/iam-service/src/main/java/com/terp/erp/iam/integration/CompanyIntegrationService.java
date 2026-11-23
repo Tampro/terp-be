@@ -42,7 +42,8 @@ import java.util.Optional;
  * rows of company configuration, with the same permission, encryption key (ERP_SETTINGS_ENC_KEY through
  * {@link SecretCipher}) and table (company_setting, one section per integration). Secrets are stored encrypted and
  * never returned. Slack / Telegram / Twilio are read (decrypted) by notification-service through the internal
- * notification-config; TODO: AI assistant and Google Calendar sync have no consumer yet.
+ * notification-config, Google Calendar too (calendar sync of holidays / sales invoices); TODO: AI assistant has no
+ * consumer yet.
  */
 @Slf4j
 @Service
@@ -214,6 +215,17 @@ public class CompanyIntegrationService {
                 .filter(s -> s.enabled() && s.accountSid() != null && s.authTokenEnc() != null
                         && s.fromNumber() != null)
                 .map(s -> new TwilioTarget(s.accountSid(), cipher.decrypt(s.authTokenEnc()), s.fromNumber()));
+    }
+
+    public record GoogleCalendarTarget(String calendarId, String serviceAccountJson) {
+    }
+
+    /** Calendar id + decrypted service account key file when Google Calendar is on for the company; empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<GoogleCalendarTarget> googleCalendarTarget(Long companyId) {
+        return read(companyId, EIntegration.GOOGLE_CALENDAR, GoogleCalendarStored.class)
+                .filter(s -> s.enabled() && s.calendarId() != null && s.serviceAccountJsonEnc() != null)
+                .map(s -> new GoogleCalendarTarget(s.calendarId(), cipher.decrypt(s.serviceAccountJsonEnc())));
     }
 
     // ------------------------------------------------------------------ views

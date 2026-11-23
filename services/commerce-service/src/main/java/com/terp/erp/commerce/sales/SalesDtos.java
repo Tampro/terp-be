@@ -46,7 +46,15 @@ public final class SalesDtos {
             @Schema(description = "Payment terms", example = "Net 30") @Size(max = 100) String paymentTerms,
             @Schema(description = "Notes", example = "Delivery to the main office") @Size(max = 5000) String notes,
             @Schema(description = "Lines, 1 to 200", requiredMode = Schema.RequiredMode.REQUIRED)
-            @NotEmpty @Size(max = 200) List<@Valid @NotNull LineForm> lines) {
+            @NotEmpty @Size(max = 200) List<@Valid @NotNull LineForm> lines,
+            @Schema(description = "Invoices only: add the due date to the company's Google Calendar when posted "
+                    + "(the Google Calendar integration must be on); omitted = false", example = "false")
+            Boolean syncToGoogleCalendar) {
+        public DocumentForm(Long companyId, Long customerId, Long warehouseId, EInvoiceType invoiceType,
+                            LocalDate docDate, LocalDate dueDate, String paymentTerms, String notes,
+                            List<LineForm> lines) {
+            this(companyId, customerId, warehouseId, invoiceType, docDate, dueDate, paymentTerms, notes, lines, null);
+        }
     }
 
     public record LineDto(String id, String itemId, String itemType, String itemName, String sku, BigDecimal quantity,
@@ -87,10 +95,12 @@ public final class SalesDtos {
         }
     }
 
-    public record DocumentDetail(DocumentRow document, String paymentTerms, String notes, List<LineDto> lines) {
+    public record DocumentDetail(DocumentRow document, String paymentTerms, String notes, List<LineDto> lines,
+                                 @Schema(description = "Invoices: the due date goes to Google Calendar when posted")
+                                 boolean syncToGoogleCalendar) {
         static DocumentDetail of(SalesDocument d, LocalDate today) {
             return new DocumentDetail(DocumentRow.of(d, today), d.getPaymentTerms(), d.getNotes(),
-                    d.getLines().stream().map(LineDto::of).toList());
+                    d.getLines().stream().map(LineDto::of).toList(), d.isSyncToGoogleCalendar());
         }
     }
 

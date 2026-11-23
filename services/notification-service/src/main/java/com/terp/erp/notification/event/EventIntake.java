@@ -108,15 +108,24 @@ public class EventIntake {
                 }
             }
         }
-        if (cfg.slack() != null) {
-            rows.add(chatRow(e, EChannel.SLACK, "hooks.slack.com", cfg.slackOn(), now));
+        if (!route.calendarOnly()) {
+            if (cfg.slack() != null) {
+                rows.add(chatRow(e, EChannel.SLACK, "hooks.slack.com", cfg.slackOn(), now));
+            }
+            if (cfg.telegram() != null) {
+                rows.add(chatRow(e, EChannel.TELEGRAM, "api.telegram.org", cfg.telegramOn(), now));
+            }
+            String phone = phone(e.data());
+            if (cfg.twilio() != null && phone != null) {
+                rows.add(chatRow(e, EChannel.SMS, Targets.maskPhone(phone), cfg.smsOn(), now));
+            }
         }
-        if (cfg.telegram() != null) {
-            rows.add(chatRow(e, EChannel.TELEGRAM, "api.telegram.org", cfg.telegramOn(), now));
-        }
-        String phone = phone(e.data());
-        if (cfg.twilio() != null && phone != null) {
-            rows.add(chatRow(e, EChannel.SMS, Targets.maskPhone(phone), cfg.smsOn(), now));
+        // Google Calendar: only when the document asked for it (its flag) and the integration is on; else no row.
+        // TODO(assumption): an update / delete with the flag off leaves an entry made earlier in the calendar.
+        if (route.calendar != null && cfg.googleCalendar() != null && e.data() != null
+                && e.data().path(route.calendar.flag).asBoolean(false)) {
+            rows.add(row(e, EChannel.GOOGLE_CALENDAR, Targets.maskCalendarId(cfg.googleCalendar().calendarId()),
+                    EStatus.PENDING, null, now));
         }
         if (route.webhookCode != null) {
             for (IamInternalClient.Webhook w : cfg.webhooks()) {

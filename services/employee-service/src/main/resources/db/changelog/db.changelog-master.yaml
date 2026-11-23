@@ -63,3 +63,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122800100_review_status_data_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123400000_outbox_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261123900000_holiday_calendar_sync_changelog.mysql.sql

@@ -111,6 +111,22 @@ class InternalNotificationServiceTest {
     }
 
     @Test
+    void carriesGoogleCalendarOnlyWhenTheIntegrationIsOn() {
+        when(companies.existsById(7L)).thenReturn(true);
+        when(integrations.googleCalendarTarget(7L)).thenReturn(Optional.of(
+                new CompanyIntegrationService.GoogleCalendarTarget("team@group.calendar.google.com", "{\"k\":1}")));
+
+        var c = service.config(7L, "employee.holiday.created", null, "NEW_HOLIDAY");
+
+        assertThat(c.googleCalendar().calendarId()).isEqualTo("team@group.calendar.google.com");
+        assertThat(c.googleCalendar().serviceAccountJson()).isEqualTo("{\"k\":1}");
+        assertThat(c.googleCalendar().toString()).doesNotContain("\"k\"");
+
+        when(integrations.googleCalendarTarget(7L)).thenReturn(Optional.empty());
+        assertThat(service.config(7L, "employee.holiday.created", null, "NEW_HOLIDAY").googleCalendar()).isNull();
+    }
+
+    @Test
     void anUnknownCompanyIs404() {
         assertThatThrownBy(() -> service.config(99L, null, null)).isInstanceOfSatisfying(ApiException.class,
                 e -> assertThat(e.getErrorCode()).isEqualTo(EIamError.IAM_001));

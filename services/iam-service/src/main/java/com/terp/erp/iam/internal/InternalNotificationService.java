@@ -51,6 +51,14 @@ public class InternalNotificationService {
     public record Twilio(String accountSid, String authToken, String fromNumber) {
     }
 
+    /** serviceAccountJson: the decrypted Google key file (holds the private key). */
+    public record GoogleCalendar(String calendarId, String serviceAccountJson) {
+        @Override
+        public String toString() {
+            return "GoogleCalendar[calendarId=" + calendarId + ", serviceAccountJson=***]";
+        }
+    }
+
     /** secret null = unsigned webhook. */
     public record Webhook(String id, String url, String secret) {
     }
@@ -59,12 +67,15 @@ public class InternalNotificationService {
      * emailEnabled: the company's switch of eventCode (no row = on; no eventCode = false). twilio: null when SMS is
      * off. …EnabledForEvent: the per-event chat switch of eventType (company_channel_event; no row or no eventType
      * = true), given even when the channel itself is off. templates: the company's own texts for this event in
-     * defaultLanguage (each part null = notification-service sends its built-in default).
+     * defaultLanguage (each part null = notification-service sends its built-in default). googleCalendar: null
+     * when the Google Calendar integration is off. TODO: no per-event switch for Google Calendar — the document's
+     * own flag (holiday calendarSync, invoice syncToGoogleCalendar) is the switch.
      */
     public record NotificationConfig(String companyId, String defaultLanguage, boolean emailEnabled, Smtp smtp,
                                      Slack slack, Telegram telegram, Twilio twilio, List<Webhook> webhooks,
                                      boolean slackEnabledForEvent, boolean telegramEnabledForEvent,
-                                     boolean smsEnabledForEvent, Overrides templates) {
+                                     boolean smsEnabledForEvent, Overrides templates,
+                                     GoogleCalendar googleCalendar) {
     }
 
     public record Contact(String id, String fullName, String email, String companyId, boolean active) {
@@ -122,7 +133,9 @@ public class InternalNotificationService {
                 channelEvents.enabled(companyId, EChatChannel.SLACK, eventType),
                 channelEvents.enabled(companyId, EChatChannel.TELEGRAM, eventType),
                 channelEvents.enabled(companyId, EChatChannel.SMS, eventType),
-                templates.overrides(companyId, eventType, eventCode, lang));
+                templates.overrides(companyId, eventType, eventCode, lang),
+                integrations.googleCalendarTarget(companyId)
+                        .map(g -> new GoogleCalendar(g.calendarId(), g.serviceAccountJson())).orElse(null));
     }
 
     @Transactional(readOnly = true)

@@ -187,4 +187,57 @@ class EventIntakeTest {
         verify(processed).saveAndFlush(any());
         verify(deliveries, times(0)).saveAll(anyIterable());
     }
+
+    private static final IamInternalClient.GoogleCalendar GCAL =
+            new IamInternalClient.GoogleCalendar("team@group.calendar.google.com", "{\"type\":\"service_account\"}");
+
+    private NotificationConfig withCalendar(IamInternalClient.GoogleCalendar gcal) {
+        return new NotificationConfig("7", "en", false, null, new Slack("https://hooks.slack.com/services/x"), null,
+                null, List.of(), null, null, null, null, gcal);
+    }
+
+    @Test
+    void aHolidayWithCalendarSyncGetsAGoogleCalendarRowWithAMaskedCalendarId() {
+        ObjectNode data = mapper.createObjectNode().put("name", "Test Holiday").put("startDate", "2026-12-24")
+                .put("endDate", "2026-12-24").put("calendarSync", true);
+        when(iam.config(7L, "employee.holiday.created", null, "NEW_HOLIDAY")).thenReturn(withCalendar(GCAL));
+
+        intake.accept(new EventEnvelope("g-1", "employee.holiday.created", 7L, "HOLIDAY", "12", NOW, null, data));
+
+        List<Delivery> rows = savedRows();
+        assertThat(rows).extracting(Delivery::getChannel).containsExactly(EChannel.SLACK, EChannel.GOOGLE_CALENDAR);
+        assertThat(rows.get(1).getStatus()).isEqualTo(EStatus.PENDING);
+        assertThat(rows.get(1).getTarget()).isEqualTo("team…@…");
+    }
+
+    @Test
+    void noCalendarRowWhenTheFlagIsOffOrTheIntegrationIsOff() {
+        ObjectNode off = mapper.createObjectNode().put("number", "INV-1").put("dueDate", "2026-12-31")
+                .put("syncToGoogleCalendar", false);
+        when(iam.config(7L, "sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE"))
+                .thenReturn(withCalendar(GCAL));
+        intake.accept(new EventEnvelope("g-2", "sales.invoice.posted", 7L, "SALES_INVOICE", "9", NOW, null, off));
+        assertThat(savedRows()).extracting(Delivery::getChannel).doesNotContain(EChannel.GOOGLE_CALENDAR);
+    }
+
+    @Test
+    void noCalendarRowWhenTheIntegrationIsOff() {
+        ObjectNode on = mapper.createObjectNode().put("number", "INV-1").put("dueDate", "2026-12-31")
+                .put("syncToGoogleCalendar", true);
+        when(iam.config(7L, "sales.invoice.posted", "INVOICE_SENT", "NEW_SALES_INVOICE"))
+                .thenReturn(withCalendar(null));
+        intake.accept(new EventEnvelope("g-3", "sales.invoice.posted", 7L, "SALES_INVOICE", "9", NOW, null, on));
+        assertThat(savedRows()).extracting(Delivery::getChannel).doesNotContain(EChannel.GOOGLE_CALENDAR);
+    }
+
+    @Test
+    void aHolidayUpdateIsForTheCalendarOnly() {
+        ObjectNode data = mapper.createObjectNode().put("name", "Test Holiday").put("startDate", "2026-12-24")
+                .put("endDate", "2026-12-24").put("calendarSync", true);
+        when(iam.config(7L, "employee.holiday.updated", null, null)).thenReturn(withCalendar(GCAL));
+
+        intake.accept(new EventEnvelope("g-4", "employee.holiday.updated", 7L, "HOLIDAY", "12", NOW, null, data));
+
+        assertThat(savedRows()).extracting(Delivery::getChannel).containsExactly(EChannel.GOOGLE_CALENDAR);
+    }
 }
