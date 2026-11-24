@@ -89,6 +89,28 @@ public class MessengerController {
         return ApiMessageDto.ok(service.unread());
     }
 
+    @PutMapping("/conversations/{userId}/pin")
+    @PreAuthorize("@PermissionChecker.has('MESSENGER_USE')")
+    @Operation(summary = "Pin my conversation with this user (listed first; idempotent, personal)")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
+            @ApiResponse(responseCode = "400", description = "SUP_029, SUP_030"),
+            @ApiResponse(responseCode = "403", description = NO_ACCOUNT + "; COMMON_004 relayed from IAM"),
+            @ApiResponse(responseCode = "503", description = "SUP_003")})
+    public ApiMessageDto<Void> pin(@PathVariable Long userId) {
+        service.pin(userId);
+        return ApiMessageDto.ok(null);
+    }
+
+    @DeleteMapping("/conversations/{userId}/pin")
+    @PreAuthorize("@PermissionChecker.has('MESSENGER_USE')")
+    @Operation(summary = "Unpin my conversation with this user (idempotent)")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
+            @ApiResponse(responseCode = "403", description = NO_ACCOUNT)})
+    public ApiMessageDto<Void> unpin(@PathVariable Long userId) {
+        service.unpin(userId);
+        return ApiMessageDto.ok(null);
+    }
+
     @GetMapping("/favorites")
     @PreAuthorize("@PermissionChecker.has('MESSENGER_USE')")
     @Operation(summary = "My favorite contacts, latest added first")
