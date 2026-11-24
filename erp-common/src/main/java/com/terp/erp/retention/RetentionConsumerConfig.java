@@ -26,7 +26,7 @@ import java.util.List;
  * erp.events with exactly {@code erp.retention.event} (default {@value #EVENT}; accounting and commerce use
  * {@value #FINANCE_EVENT}, sent 10 years after the deletion), dead-lettered to {@code <queue>.dlq} after the listener's retries. Each
  * message runs every {@link CompanyAnonymizeHandler} of the service in one transaction. Opt-in: set the property in a
- * service that has the outbox (exchange bean) and at least one handler. The body is parsed here (no shared
+ * service with spring-boot-starter-amqp and at least one handler. The body is parsed here (no shared
  * MessageConverter is assumed). Never logs anything but the company id.
  */
 @Slf4j
@@ -47,10 +47,19 @@ public class RetentionConsumerConfig {
         return QueueBuilder.durable(env.getRequiredProperty("erp.retention.queue") + ".dlq").build();
     }
 
+    /**
+     * The shared exchange, declared here too (same name and arguments as the outbox's, so declaring it twice is a
+     * no-op) because services without the outbox (attendance, payroll, document, asset, media) only consume.
+     */
     @Bean
-    Binding retentionBinding(@Qualifier("retentionQueue") Queue queue, TopicExchange erpEventsExchange,
-                             Environment env) {
-        return BindingBuilder.bind(queue).to(erpEventsExchange).with(event(env));
+    TopicExchange retentionEventsExchange(Environment env) {
+        return new TopicExchange(env.getProperty("erp.outbox.exchange", "erp.events"), true, false);
+    }
+
+    @Bean
+    Binding retentionBinding(@Qualifier("retentionQueue") Queue queue,
+                             @Qualifier("retentionEventsExchange") TopicExchange exchange, Environment env) {
+        return BindingBuilder.bind(queue).to(exchange).with(event(env));
     }
 
     static String event(Environment env) {

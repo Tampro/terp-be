@@ -3,6 +3,24 @@ server:
   port: ${PAYROLL_PORT:8086}
 
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    connection-timeout: 5s
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # Retention events (erp-common RetentionConsumerConfig): retried in-process, then dead-lettered.
+        default-requeue-rejected: false
+        prefetch: 1
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
   application:
     name: payroll-service
   datasource:
@@ -34,6 +52,11 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  # Finance retention (Law on Accounting 2015 Art. 41; PO 2026-11-24): 10 years after the deletion.
+  # iam.company.anonymize-finance → PayrollAnonymizer.
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.payroll.retention}
+    event: iam.company.anonymize-finance
   payroll:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     employee-service-url: ${EMPLOYEE_SERVICE_URL:http://localhost:8083}
