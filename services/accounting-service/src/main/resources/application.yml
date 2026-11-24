@@ -50,6 +50,11 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  # Finance retention (Law on Accounting 2015 Art. 41; PO 2026-11-24): iam.company.anonymize-finance, sent 10 years
+  # after the company was deleted → AccountingAnonymizer.
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.accounting.retention}
+    event: iam.company.anonymize-finance
   # Transactional outbox (erp-common com.terp.erp.outbox): events are written with the business change and
   # relayed to the erp.events exchange. Off = no relay, and the services that publish fail to start.
   outbox:

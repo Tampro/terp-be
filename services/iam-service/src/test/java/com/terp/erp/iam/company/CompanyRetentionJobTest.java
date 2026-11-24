@@ -31,8 +31,14 @@ class CompanyRetentionJobTest {
 
         CompanyRetentionJob job = new CompanyRetentionJob(companies, anonymizer, Clock.fixed(now, ZoneOffset.UTC));
         ReflectionTestUtils.setField(job, "years", 5);
+        ReflectionTestUtils.setField(job, "financeYears", 10);
+        Company old = new Company();
+        old.setId(3L);
+        when(companies.findTop50ByDeletedTrueAndFinanceAnonymizedAtIsNullAndDeletedAtLessThanEqualOrderByDeletedAtAsc(
+                Instant.parse("2021-11-24T20:30:00Z"))).thenReturn(List.of(old));
         job.run();
 
         verify(anonymizer).anonymize(b);
+        verify(anonymizer).anonymizeFinance(old);
     }
 }

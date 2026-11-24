@@ -40,6 +40,10 @@ public class Company extends BaseAuditableEntity {
     @Column(name = "anonymized_at")
     private java.time.Instant anonymizedAt;
 
+    /** Set once the accounting retention (10 years, Law on Accounting) has been signalled to the finance services. */
+    @Column(name = "finance_anonymized_at")
+    private java.time.Instant financeAnonymizedAt;
+
     /** Current plan; null = no subscription (internal / bootstrap company): no plan limits, never expires. */
     @Column(name = "plan_id")
     private Long planId;

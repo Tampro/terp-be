@@ -71,4 +71,8 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
     /** Retention job: deleted companies past the retention period and not anonymised yet, oldest first. */
     List<Company> findTop50ByDeletedTrueAndAnonymizedAtIsNullAndDeletedAtLessThanEqualOrderByDeletedAtAsc(
             Instant cutoff);
+
+    /** Finance retention: deleted at least 10 years ago, finance services not signalled yet, oldest first. */
+    List<Company> findTop50ByDeletedTrueAndFinanceAnonymizedAtIsNullAndDeletedAtLessThanEqualOrderByDeletedAtAsc(
+            Instant cutoff);
 }
