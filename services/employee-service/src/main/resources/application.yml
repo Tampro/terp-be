@@ -34,6 +34,18 @@ spring:
     connection-timeout: 5s
     # The outbox relay waits for each confirm (RabbitOutboxSender.waitForConfirmsOrDie).
     publisher-confirm-type: simple
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # Retention events (erp-common RetentionConsumerConfig): retried in-process, then dead-lettered.
+        default-requeue-rejected: false
+        prefetch: 1
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
   security:
     oauth2:
       resourceserver:
@@ -42,6 +54,9 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  # Retention (PO 2026-11-24): iam.company.anonymize → EmployeeAnonymizer.
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.employee.retention}
   # Transactional outbox (erp-common com.terp.erp.outbox): events are written with the business change and
   # relayed to the erp.events exchange. Off = no relay, and the services that publish fail to start.
   outbox:
