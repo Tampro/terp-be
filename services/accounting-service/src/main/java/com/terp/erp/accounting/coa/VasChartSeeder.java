@@ -116,6 +116,9 @@ public class VasChartSeeder {
     /** Seeds the company's chart and mapping unless already done; safe to call on every posting. */
     @Transactional
     public void ensureSeeded(Long companyId) {
+        if (setups.existsByCompanyIdAndSeededTrue(companyId)) {
+            return; // no lock on the hot path: parallel reads of a seeded company never wait on each other
+        }
         setups.ensureRow(companyId);
         LedgerSetup setup = setups.lockByCompanyId(companyId).orElseThrow();
         if (setup.isSeeded()) {
