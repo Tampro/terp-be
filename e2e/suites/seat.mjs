@@ -1,5 +1,5 @@
 // Plan downgrade: the newest active accounts over the new plan's user limit are locked; admins are kept;
-// re-activating over the limit is refused (SAAS_011).
+// re-activating is refused (SAAS_011) while all accounts, locked ones included, exceed the limit.
 const base = (await c('GET', '/saas/admin/plans?size=50', null, sa)).data.find(p => p.defaultPlan) || {};
 const big = (await c('POST', '/saas/admin/plans', { code: 'SEATBIG_' + x, name: 'Seat big ' + x, monthlyPrice: 0, maxUsers: 50, storageLimitGb: 1, enabled: true, modules: base.modules || [] }, sa)).data;
 const small = (await c('POST', '/saas/admin/plans', { code: 'SEATSM_' + x, name: 'Seat small ' + x, monthlyPrice: 0, maxUsers: 3, storageLimitGb: 1, enabled: true, modules: base.modules || [] }, sa)).data;
@@ -31,9 +31,13 @@ r = await c('PUT', '/iam/users/' + made[2].id + '/status', { status: 'ACTIVE' },
 ck('re-activate over the limit → SAAS_011', r.s === 400 && r.code === 'SAAS_011', r.s + ' ' + r.code);
 r = await c('PUT', '/iam/users/' + made[0].id + '/status', { status: 'LOCKED' }, t);
 r = await c('PUT', '/iam/users/' + made[2].id + '/status', { status: 'ACTIVE' }, t);
-ck('re-activate after freeing a seat', r.s === 200, r.s + ' ' + r.code);
+ck('locking another account frees no seat (locked accounts count)', r.s === 400 && r.code === 'SAAS_011', r.s + ' ' + r.code);
+r = await c('DELETE', '/iam/users/' + made[0].id, null, t);
+r = await c('PUT', '/iam/users/' + made[2].id + '/status', { status: 'ACTIVE' }, t);
+ck('re-activate after deleting an account', r.s === 200, r.s + ' ' + r.code);
+r = await c('PUT', '/iam/users/' + made[1].id + '/status', { status: 'LOCKED' }, t);
 r = await c('PUT', `/saas/admin/companies/${A.id}/subscription`, { planId: Number(big.id) }, sa);
-ck('upgrade does not unlock anyone', r.s === 200 && await st(made[0].id) === 'LOCKED');
+ck('upgrade does not unlock anyone', r.s === 200 && await st(made[1].id) === 'LOCKED');
 r = await c('PUT', `/saas/admin/companies/${B.id}/subscription`, { planId: Number(small.id) }, sa);
-ck('other company unaffected', await st(made[1].id) === 'ACTIVE');
+ck('other company unaffected', await st(made[2].id) === 'ACTIVE');
 console.log(`\n${n - f}/${n} passed`);

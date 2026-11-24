@@ -110,13 +110,15 @@ class PlanSeatEnforcerTest {
     }
 
     @Test
-    void reactivationIsRefusedAtTheLimit() {
+    void reactivationCountsLockedAccountsToo() {
         user(1, 1, true, EUserStatus.ACTIVE);
         user(2, 2, false, EUserStatus.LOCKED);
-        limit(1);
+        user(3, 3, false, EUserStatus.LOCKED);
+        when(users.countByCompanyIdAndDeletedFalse(7L)).thenAnswer(i -> (long) rows.size());
+        limit(2);
         assertThatThrownBy(() -> enforcer.assertCanActivate(company))
                 .isInstanceOf(ApiException.class).hasMessageContaining("SAAS_011");
-        limit(2);
+        limit(3);
         enforcer.assertCanActivate(company);
     }
 }
