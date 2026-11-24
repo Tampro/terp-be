@@ -67,4 +67,23 @@ class UserCreatedEventTest {
                 .isInstanceOf(IllegalStateException.class);
         verify(outbox, never()).publish(any(), any(), any(), any(), any());
     }
+
+    @Test
+    void aRolledBackCreationDeletesTheKeycloakUser() {
+        when(roles.findByCompanyIdAndCodeAndDeletedFalse(5L, EDefaultRole.COMPANY_ADMIN.name()))
+                .thenReturn(Optional.of(new Role()));
+        when(keycloak.createUser(anyString(), anyString(), anyString(), anyString(), anyBoolean())).thenReturn("kc-9");
+        when(users.save(any(UserAccount.class))).thenAnswer(i -> i.getArgument(0));
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.createSelfRegisteredAdmin(5L, "owner@example.invalid", "Test Owner", "Secret#123");
+            var syncs = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            syncs.forEach(sy -> sy.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_COMMITTED));
+            verify(keycloak, never()).deleteUser("kc-9");
+            syncs.forEach(sy -> sy.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+            verify(keycloak).deleteUser("kc-9");
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 }
