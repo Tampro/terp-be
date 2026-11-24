@@ -16,8 +16,8 @@ import java.util.Set;
  * resolves to (or the IP literal) must be public: not 0.0.0.0/8, loopback, link-local (169.254/16 incl. cloud
  * metadata, fe80::/10), private (10/8, 172.16/12, 192.168/16), CGNAT 100.64/10, unique-local fc00::/7, multicast,
  * broadcast; IPv4-mapped IPv6 is checked as its IPv4 address. Redirects are never followed (see {@link OutboundHttp}).
- * Residual risk: the name is resolved here and again by the HTTP client (DNS rebinding window); pinning the address
- * would need a custom TLS socket factory. TODO: pin the resolved address.
+ * The name is resolved here (early, friendly refusal) and again when connecting; {@link PinnedHttp} checks the
+ * addresses of that second lookup too, so a rebinding answer cannot slip through.
  * Shared by iam-service (saving / testing integrations) and notification-service (real deliveries); each wraps
  * {@link RefusedException} into its own error code. Not a Spring bean: services declare one.
  */

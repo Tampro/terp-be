@@ -33,6 +33,12 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
+        <!-- Outbound calls to URLs a company typed (com.terp.erp.net.PinnedHttp): a DNS resolver that checks the
+             addresses it connects to (no DNS-rebinding window). Version from the Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
         <!-- Outbox (com.terp.erp.outbox): optional, a service opts in with these starters + erp.outbox.enabled=true. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
