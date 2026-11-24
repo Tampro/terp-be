@@ -3,17 +3,19 @@
 //   node e2e/run.mjs acc sales own   only these suites
 //   node e2e/run.mjs --all           also the opt-in suites (s3: needs the seaweedfs container)
 //   node e2e/run.mjs --verbose ...   print every PASS line, not only failures
+//   node e2e/run.mjs --keep ...      keep the test companies (default: soft-deleted afterwards, see cleanup.mjs)
 // Each suite = e2e/lib/head.mjs (login + two fresh test companies) + e2e/suites/<name>.mjs, unless the suite is
 // standalone. Suites that write to public, rate-limited endpoints (career apply, support portal) wait for the
 // gateway bucket to refill (burst 5, 10/min) so back-to-back runs don't fail with 429.
 import fs from 'fs'; import os from 'os'; import path from 'path'; import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { cleanup } from './cleanup.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'suites.json'), 'utf8'));
 const head = fs.readFileSync(path.join(here, 'lib', 'head.mjs'), 'utf8');
 const args = process.argv.slice(2);
-const verbose = args.includes('--verbose'); const all = args.includes('--all');
+const verbose = args.includes('--verbose'); const all = args.includes('--all'); const keep = args.includes('--keep');
 const names = args.filter(a => !a.startsWith('--'));
 const unknown = names.filter(n => !manifest[n]);
 if (unknown.length) { console.error('Unknown suite(s): ' + unknown.join(', ') + '\nKnown: ' + Object.keys(manifest).join(' ')); process.exit(2); }
@@ -32,7 +34,7 @@ function compose(name) {
   return imports.join('\n') + '\n' + h + '\n' + rest.join('\n');
 }
 
-const results = []; let lastPublic = 0;
+const results = []; let lastPublic = 0; const startedAt = new Date(Date.now() - 5000);
 for (const name of selected) {
   const m = manifest[name];
   if (m.publicWrites && lastPublic && Date.now() - lastPublic < PUBLIC_GAP_MS) {
@@ -57,6 +59,9 @@ for (const name of selected) {
   if (!sum) console.log(out.split('\n').filter(l => /Error|at /.test(l)).slice(0, 5).map(l => '  ' + l.slice(0, 200)).join('\n'));
   results.push({ name, ok, line });
 }
+if (!keep) {
+  try { await cleanup({ since: startedAt }); } catch (e) { console.log('cleanup skipped: ' + e.message); }
+}
 const failed = results.filter(r => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} suites green` + (failed.length ? ' — failed: ' + failed.map(r => `${r.name} (${r.line})`).join(', ') : ''));
-process.exit(failed.length ? 1 : 0);
+process.exitCode = failed.length ? 1 : 0; // not process.exit(): cleanup's fetch sockets crash Node on Windows

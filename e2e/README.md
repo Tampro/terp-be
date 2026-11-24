@@ -23,6 +23,7 @@ node e2e/run.mjs                    # every suite except opt-in ones (~30 min)
 node e2e/run.mjs acc sales own      # only these
 node e2e/run.mjs --all              # also opt-in suites (s3 needs the seaweedfs container)
 node e2e/run.mjs --verbose hrm      # print every PASS line
+node e2e/run.mjs --keep acc         # keep the test companies afterwards
 E2E_GATEWAY=http://localhost:18080 node e2e/run.mjs
 ```
 The exit code is 0 only when every selected suite is fully green. Suites listed in `suites.json` are:
@@ -52,5 +53,7 @@ company prefix and a one-line description.
 - **Fake data only:** `@example.com` / `.invalid` addresses, `Test …` names. No real people, companies or keys.
 - **Restore platform-wide settings in `finally`.** These are the storage driver (`s3`), the PayPal switch (`pp`) and
   the platform email toggles (`pl`).
-- The suites leave their test companies in the database (no cleanup); names carry the suite prefix and a random
-  suffix.
+- After the suites, `run.mjs` soft-deletes the test companies created during the run, through the super-admin API.
+  Their Keycloak accounts are removed; business rows in the other services stay. Pass `--keep` to inspect them.
+  Leftovers from earlier runs can be removed with `node e2e/cleanup.mjs [--since 2026-11-01] [--dry-run]`.
+  Only companies whose code ends in `_` plus 6 hex characters and whose email is `@example.com` are touched.
