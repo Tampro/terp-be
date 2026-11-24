@@ -40,7 +40,7 @@ class MessengerServiceTest {
     private final MediaClient media = mock(MediaClient.class);
     private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final MessengerService service = new MessengerService(messages, favorites,
-            mock(ChatPinRepository.class), iam, media,
+            mock(ChatPinRepository.class), mock(ChatPresence.class), iam, media,
             Clock.fixed(NOW, ZoneOffset.UTC), outbox);
 
     @AfterEach

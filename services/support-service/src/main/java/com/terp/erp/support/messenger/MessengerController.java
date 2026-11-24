@@ -89,6 +89,18 @@ public class MessengerController {
         return ApiMessageDto.ok(service.unread());
     }
 
+    @PutMapping("/presence")
+    @PreAuthorize("@PermissionChecker.has('MESSENGER_USE')")
+    @Operation(summary = "Heartbeat: I am active in the messenger",
+            description = "Call about every 60 s while the messenger is open; peers see online = true for 2 minutes "
+                    + "after the last call (conversations list: online, lastSeenAt).")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
+            @ApiResponse(responseCode = "403", description = NO_ACCOUNT)})
+    public ApiMessageDto<Void> heartbeat() {
+        service.heartbeat();
+        return ApiMessageDto.ok(null);
+    }
+
     @PutMapping("/conversations/{userId}/pin")
     @PreAuthorize("@PermissionChecker.has('MESSENGER_USE')")
     @Operation(summary = "Pin my conversation with this user (listed first; idempotent, personal)")

@@ -42,8 +42,9 @@ public class MessengerService {
     }
 
     /** userId = the other user; names come from IAM on the FE side (ids only here). */
+    /** online = the peer's messenger heartbeat is younger than 2 minutes; lastSeenAt null = never seen. */
     public record ConversationDto(String userId, MessageDto lastMessage, long unreadCount, boolean favorite,
-                                  boolean pinned) {
+                                  boolean pinned, boolean online, Instant lastSeenAt) {
     }
 
     public record SendForm(
@@ -69,6 +70,7 @@ public class MessengerService {
     private final ChatMessageRepository messages;
     private final ChatFavoriteRepository favorites;
     private final ChatPinRepository pins;
+    private final ChatPresence presence;
     private final IamClient iam;
     private final MediaClient media;
     private final Clock clock;
@@ -92,11 +94,15 @@ public class MessengerService {
         Set<Long> fav = favoriteIds(me);
         Set<Long> pinned = pins.findByCompanyIdAndUserId(me.companyId(), me.userId()).stream()
                 .map(ChatPin::getPeerUserId).collect(Collectors.toSet());
+        Map<Long, Instant> seen = presence.lastSeen(me.companyId(), peers);
+        Instant onlineAfter = clock.instant().minus(ChatPresence.ONLINE_FOR);
         return page.map(r -> {
             long peer = ((Number) r[0]).longValue();
+            Instant lastSeen = seen.get(peer);
             ChatMessage m = last.get(((Number) r[1]).longValue());
             return new ConversationDto(String.valueOf(peer), m == null ? null : dto(m, me),
-                    unread.getOrDefault(peer, 0L), fav.contains(peer), pinned.contains(peer));
+                    unread.getOrDefault(peer, 0L), fav.contains(peer), pinned.contains(peer),
+                    lastSeen != null && lastSeen.isAfter(onlineAfter), lastSeen);
         });
     }
 
@@ -200,6 +206,13 @@ public class MessengerService {
             p.setPeerUserId(peerId);
             pins.save(p);
         }
+    }
+
+    /** Heartbeat of the messenger screen (every ~60 s): marks me online for 2 minutes. */
+    @Transactional
+    public void heartbeat() {
+        Me me = me();
+        presence.touch(me.companyId(), me.userId(), clock.instant());
     }
 
     /** Idempotent: unpinning a conversation that is not pinned succeeds. */

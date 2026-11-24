@@ -64,6 +64,10 @@ r = await c('PUT', '/messenger/conversations/' + e1.id + '/pin', null, e2.t); ck
 r = await c('GET', '/messenger/conversations', null, e2.t); ck('pinned conversation (e1) listed first, flagged', r.data?.content?.[0]?.userId === String(e1.id) && r.data.content[0].pinned === true && r.data.content[1].pinned === false, show(r.data?.content?.map(z => [z.userId, z.pinned])));
 r = await c('GET', '/messenger/conversations', null, e1.t); ck('pin is personal: e1 sees nothing pinned', (r.data?.content || []).every(z => z.pinned === false), show(r.data?.content?.map(z => [z.userId, z.pinned])));
 r = await c('DELETE', '/messenger/conversations/' + e1.id + '/pin', null, e2.t); r = await c('GET', '/messenger/conversations', null, e2.t); ck('unpin → latest first again', r.data?.content?.[0]?.userId === String(e3.id), show(r.data?.content?.map(z => [z.userId, z.pinned])));
+// presence: e1 sends a heartbeat; e2 sees e1 online, e3 (never seen) offline
+r = await c('PUT', '/messenger/presence', null, e1.t); ck('heartbeat', r.s === 200, r.s + ' ' + r.code);
+r = await c('GET', '/messenger/conversations', null, e2.t); { const byId = Object.fromEntries((r.data?.content || []).map(z => [z.userId, z])); ck('peer online after heartbeat, other peer offline + never seen', byId[String(e1.id)]?.online === true && !!byId[String(e1.id)]?.lastSeenAt && byId[String(e3.id)]?.online === false && byId[String(e3.id)]?.lastSeenAt == null, show(r.data?.content?.map(z => [z.userId, z.online, z.lastSeenAt]))); }
+r = await c('PUT', '/messenger/presence', null, sa); ck('super admin heartbeat → 403 (no messenger)', r.s === 403, r.s + ' ' + r.code);
 r = await c('POST', '/messenger/conversations/' + e1.id + '/messages', { body: 'self' }, e1.t); ck('message myself → SUP_030', r.code === 'SUP_030', r.s + ' ' + r.code);
 const bAdminId = (await c('GET', '/iam/users', null, B.t)).data?.content?.[0]?.id;
 r = await c('POST', '/messenger/conversations/' + bAdminId + '/messages', { body: 'cross' }, e1.t); ck('message a user of company B → SUP_029', r.code === 'SUP_029', r.s + ' ' + r.code);

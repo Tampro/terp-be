@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261123100000_outbox_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261125400000_chat_pin_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261125500000_chat_presence_changelog.mysql.sql
