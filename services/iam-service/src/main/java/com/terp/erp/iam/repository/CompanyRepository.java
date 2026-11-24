@@ -67,4 +67,8 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
     /** Plan-expiry seat job: companies whose trial or paid period has ended. */
     List<Company> findByDeletedFalseAndPlanExpiresAtLessThanEqual(Instant now);
+
+    /** Retention job: deleted companies past the retention period and not anonymised yet, oldest first. */
+    List<Company> findTop50ByDeletedTrueAndAnonymizedAtIsNullAndDeletedAtLessThanEqualOrderByDeletedAtAsc(
+            Instant cutoff);
 }
