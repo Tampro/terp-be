@@ -63,15 +63,17 @@ public class PlanSeatEnforcer {
         return over.size();
     }
 
-    /** Re-activating an account must stay within the plan's limit of active accounts. */
+    /**
+     * Re-activating an account: locked accounts hold a seat like active ones (PO 2026-11-24, same count as
+     * {@link SubscriptionService#assertCanAddUser}). The account being re-activated is already counted, so it is
+     * refused only while the company has more accounts than the plan allows; delete accounts to get back within it.
+     */
     public void assertCanActivate(Company company) {
         var e = subscriptions.effective(company);
         if (e.plan() == null || e.plan().getMaxUsers() == null) {
             return;
         }
-        long active = users.findByCompanyIdAndDeletedFalse(company.getId()).stream()
-                .filter(u -> u.getStatus() == EUserStatus.ACTIVE).count();
-        if (active >= e.plan().getMaxUsers()) {
+        if (users.countByCompanyIdAndDeletedFalse(company.getId()) > e.plan().getMaxUsers()) {
             throw com.terp.erp.exception.ApiException.badRequest(ESaasError.SAAS_011, e.plan().getMaxUsers());
         }
     }
