@@ -48,6 +48,9 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  jobs:
+    lock:
+      enabled: ${ERP_JOBS_LOCK_ENABLED:true}
   notification:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     exchange: ${NOTIFICATION_EXCHANGE:erp.events}

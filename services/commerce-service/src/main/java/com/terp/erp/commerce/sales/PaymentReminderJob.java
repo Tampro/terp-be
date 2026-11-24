@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,9 @@ public class PaymentReminderJob {
 
     @Scheduled(cron = "${erp.commerce.payment-reminder.cron:0 0 8 * * *}",
             zone = "${erp.commerce.payment-reminder.zone:Asia/Ho_Chi_Minh}")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "commerce.payment-reminder", lockAtMostFor = "PT1H",
+            lockAtLeastFor = "PT5M")
     public void run() {
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(zone)));
         int sent = reminders.remind(today);

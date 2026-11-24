@@ -143,3 +143,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261123700001_ai_usage_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123800000_paypal_order_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261125100000_shedlock_changelog.mysql.sql

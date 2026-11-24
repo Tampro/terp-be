@@ -42,6 +42,9 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  jobs:
+    lock:
+      enabled: ${ERP_JOBS_LOCK_ENABLED:true}
   # Transactional outbox (erp-common com.terp.erp.outbox): events are written with the business change and
   # relayed to the erp.events exchange. Off = no relay, and the services that publish fail to start.
   outbox:

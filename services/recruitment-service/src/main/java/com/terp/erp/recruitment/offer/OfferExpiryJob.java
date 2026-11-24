@@ -2,6 +2,7 @@ package com.terp.erp.recruitment.offer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,9 @@ public class OfferExpiryJob {
     private final OfferService offers;
 
     @Scheduled(cron = "${erp.jobs.expiry-cron:0 10 0 * * *}", zone = "Asia/Ho_Chi_Minh")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "recruitment.offer-expiry", lockAtMostFor = "PT1H",
+            lockAtLeastFor = "PT5M")
     public void run() {
         try {
             int n = offers.expireOverdue();
