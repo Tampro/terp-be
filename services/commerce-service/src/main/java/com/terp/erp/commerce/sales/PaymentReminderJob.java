@@ -32,7 +32,9 @@ public class PaymentReminderJob {
 
     @Scheduled(cron = "${erp.commerce.payment-reminder.cron:0 0 8 * * *}",
             zone = "${erp.commerce.payment-reminder.zone:Asia/Ho_Chi_Minh}")
-    @SchedulerLock(name = "commerce.payment-reminder", lockAtMostFor = "PT1H")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "commerce.payment-reminder", lockAtMostFor = "PT1H",
+            lockAtLeastFor = "PT5M")
     public void run() {
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(zone)));
         int sent = reminders.remind(today);

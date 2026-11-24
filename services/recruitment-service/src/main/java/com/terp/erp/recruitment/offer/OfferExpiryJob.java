@@ -17,7 +17,9 @@ public class OfferExpiryJob {
     private final OfferService offers;
 
     @Scheduled(cron = "${erp.jobs.expiry-cron:0 10 0 * * *}", zone = "Asia/Ho_Chi_Minh")
-    @SchedulerLock(name = "recruitment.offer-expiry", lockAtMostFor = "PT1H")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "recruitment.offer-expiry", lockAtMostFor = "PT1H",
+            lockAtLeastFor = "PT5M")
     public void run() {
         try {
             int n = offers.expireOverdue();

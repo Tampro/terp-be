@@ -27,7 +27,9 @@ public class PlanExpirySeatJob {
     private final Clock clock;
 
     @Scheduled(cron = "${erp.saas.plan-expiry-seats.cron:0 5 * * * *}")
-    @SchedulerLock(name = "iam.plan-expiry-seats", lockAtMostFor = "PT55M")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "iam.plan-expiry-seats", lockAtMostFor = "PT55M",
+            lockAtLeastFor = "PT5M")
     public void run() {
         int locked = 0;
         for (Company c : companies.findByDeletedFalseAndPlanExpiresAtLessThanEqual(clock.instant())) {

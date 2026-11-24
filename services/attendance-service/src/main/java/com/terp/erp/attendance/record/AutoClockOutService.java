@@ -45,7 +45,9 @@ public class AutoClockOutService {
     @Scheduled(cron = "${erp.attendance.auto-clock-out.cron:0 */15 * * * *}",
             zone = "${erp.attendance.auto-clock-out.zone:Asia/Ho_Chi_Minh}")
     @Transactional // the scheduler calls the proxy; run() below is a self-call
-    @SchedulerLock(name = "attendance.auto-clock-out", lockAtMostFor = "PT14M")
+    // lockAtLeastFor: the lock outlives a quick run, so an instance whose clock lags cannot run the job again
+    @SchedulerLock(name = "attendance.auto-clock-out", lockAtMostFor = "PT14M",
+            lockAtLeastFor = "PT1M")
     public void scheduled() {
         int closed = run();
         if (closed > 0) {
