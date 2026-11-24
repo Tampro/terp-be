@@ -10,6 +10,7 @@ import com.terp.erp.iam.security.LocalAuthorityResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -31,6 +32,7 @@ public class PlanSeatEnforcer {
     private final LocalAuthorityResolver authorityCache;
 
     /** Locks the accounts over the plan limit; returns how many were locked. Call after the plan changed. */
+    @Transactional
     public int enforce(Company company) {
         var e = subscriptions.effective(company);
         if (e.plan() == null || e.plan().getMaxUsers() == null) {
