@@ -15,4 +15,10 @@ public interface FinancialGoalRepository extends JpaRepository<FinancialGoal, Lo
             + "and (:type is null or g.type = :type)")
     Page<FinancialGoal> search(Long companyId, Long categoryId, EGoalStatus status, EGoalType type,
                                Pageable pageable);
+
+    /** [status, count] rows for the list's tabs: the list filters without status, in one query. */
+    @Query("select g.status, count(g) from FinancialGoal g where g.companyId = :companyId and g.deleted = false "
+            + "and (:categoryId is null or g.categoryId = :categoryId) and (:type is null or g.type = :type) "
+            + "group by g.status")
+    java.util.List<Object[]> countByStatus(Long companyId, Long categoryId, EGoalType type);
 }

@@ -60,6 +60,17 @@ public class GoalController {
         return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, categoryId, status, type, pageable)));
     }
 
+    @Operation(summary = "Count per status", description = "Same filters as the list (categoryId, type), without "
+            + "status; every status is present, 0 when none. All = the sum.")
+    @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (ACC_001)"))
+    @PreAuthorize("@PermissionChecker.has('GOAL_VIEW')")
+    @GetMapping("/status-counts")
+    public ApiMessageDto<java.util.Map<EGoalStatus, Long>> statusCounts(
+            @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
+            @RequestParam(required = false) Long categoryId, @RequestParam(required = false) EGoalType type) {
+        return ApiMessageDto.ok(service.statusCounts(companyId, categoryId, type));
+    }
+
     @Operation(summary = "Goal details")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
     @PreAuthorize("@PermissionChecker.has('GOAL_VIEW')")
