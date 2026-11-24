@@ -1,10 +1,13 @@
 package com.terp.erp.iam.user;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.iam.constant.EDefaultRole;
 import com.terp.erp.iam.constant.EIamError;
@@ -33,6 +36,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -69,10 +73,9 @@ public class UserService {
     }
 
     /**
-     * Creates the Keycloak user first (with a temporary password), then the ERP row. If the database write fails
-     * after Keycloak succeeded, the Keycloak user is left without an ERP profile: it cannot use ERP (AUTH_006) and
-     * an administrator can retry with the same username once it is removed in Keycloak.
-     * TODO(assumption): no compensation (delete in Keycloak) yet — decide whether orphans need cleanup.
+     * Creates the Keycloak user first (with a temporary password), then the ERP row. If the transaction rolls back
+     * after Keycloak succeeded, the Keycloak user is deleted again ({@link #deleteInKeycloakOnRollback}), so the
+     * administrator can retry with the same username.
      */
     @Transactional
     public CreatedUserDto create(Long requestedCompanyId, UserCreateForm form) {
@@ -105,6 +108,7 @@ public class UserService {
         Set<Role> assigned = resolveAssignable(companyId, roleIds);
         String temporaryPassword = form.password() != null ? form.password() : generatePassword();
         String keycloakId = keycloak.createUser(form.username(), form.email(), form.fullName(), temporaryPassword);
+        deleteInKeycloakOnRollback(keycloakId);
 
         UserAccount u = new UserAccount();
         u.setKeycloakId(keycloakId);
@@ -137,6 +141,7 @@ public class UserService {
         Role admin = roles.findByCompanyIdAndCodeAndDeletedFalse(companyId,
                 com.terp.erp.iam.constant.EDefaultRole.COMPANY_ADMIN.name()).orElseThrow();
         String keycloakId = keycloak.createUser(email, email, fullName, password, false);
+        deleteInKeycloakOnRollback(keycloakId);
         UserAccount u = new UserAccount();
         u.setKeycloakId(keycloakId);
         u.setCompanyId(companyId);
@@ -152,9 +157,35 @@ public class UserService {
 
     /**
      * NEW_USER webhook / chat line. In the same transaction as the row: a failed DB write publishes nothing (the
-     * Keycloak user it leaves behind is the known orphan case above). No email address, username (often the
+     * Keycloak user is deleted again on rollback). No email address, username (often the
      * email) or password in the payload.
      */
+    /**
+     * Compensation for a user created in Keycloak inside a transaction that then rolls back (a DB constraint, a
+     * failure at commit, or a later step such as company sign-up). Runs after the rollback, on the same thread. If
+     * Keycloak is down too, the orphan stays: it cannot use ERP (AUTH_006) and is logged for manual removal.
+     */
+    private void deleteInKeycloakOnRollback(String keycloakId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_ROLLED_BACK) {
+                    return;
+                }
+                try {
+                    keycloak.deleteUser(keycloakId);
+                    log.info("User creation rolled back: Keycloak user {} deleted", keycloakId);
+                } catch (RuntimeException ex) {
+                    log.error("User creation rolled back but Keycloak user {} could not be deleted: {}", keycloakId,
+                            ex.getClass().getSimpleName());
+                }
+            }
+        });
+    }
+
     private void publishCreated(UserAccount u) {
         outbox.publish(u.getCompanyId(), EVENT_USER_CREATED, "USER", u.getId(), Payload.of(
                 "userId", u.getId(), "title", u.getFullName(), "name", u.getFullName()));
