@@ -172,10 +172,10 @@ class TicketServiceTest {
     @Test
     void statusCountsFillTheTabs() {
         TestLogin.as(10L, "SUPPORT_TICKET_VIEW");
-        when(tickets.countByStatus(10L)).thenReturn(List.of(new Object[]{EStatus.IN_PROGRESS, 4L},
+        when(tickets.countByStatus(10L, null, null, null)).thenReturn(List.of(new Object[]{EStatus.IN_PROGRESS, 4L},
                 new Object[]{EStatus.CLOSED, 2L}));
 
-        var c = service.statusCounts(null);
+        var c = service.statusCounts(null, null, null, null);
 
         assertThat(c.all()).isEqualTo(6);
         assertThat(c.inProgress()).isEqualTo(4);
