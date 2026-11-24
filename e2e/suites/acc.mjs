@@ -20,6 +20,12 @@ const ven = (await c('POST', '/accounting/vendors', { companyName: 'Test Vendor 
 r = await c('POST', '/accounting/bank-accounts', { holderName: 'Main Account', bankName: 'Test Bank', accountNumber: 'A1-' + x, openingBalance: 1000, active: true, branch: 'HQ', accountType: 'CHECKING', iban: 'VN00TEST' }, t);
 const bank = r.data; ck('bank account (CHECKING, opening 1000)', r.s === 200 && num(bank.balance) === 1000, r.s + ' ' + r.code + ' ' + r.msg);
 const bank2 = (await c('POST', '/accounting/bank-accounts', { holderName: 'Savings', bankName: 'Test Bank', accountNumber: 'A2-' + x, openingBalance: 0, active: true, accountType: 'SAVINGS' }, t)).data;
+r = await c('GET', '/accounting/bank-accounts?accountType=SAVINGS&size=50', null, t);
+ck('bank list filtered by type SAVINGS → only the savings account', r.data?.content?.length === 1 && r.data.content[0].id === bank2.id, JSON.stringify(r.data?.content?.map(z => z.accountType)));
+r = await c('GET', '/accounting/bank-accounts?accountType=LOAN', null, t);
+ck('bank list filtered by type LOAN → empty', r.s === 200 && r.data?.content?.length === 0, r.s + ' ' + r.data?.content?.length);
+r = await c('GET', '/accounting/bank-accounts?accountType=NOPE', null, t);
+ck('unknown account type → 400', r.s === 400, r.s + ' ' + r.code);
 // FR-ACC-PAY-003 GWT: SI balance 500, bank 1000, payment 500 cleared
 r = await c('POST', '/sales/invoices', { customerId: Number(cust.id), invoiceType: 'SERVICE', docDate: today, dueDate: due, lines: [{ itemId: Number(svc.id) }] }, t);
 const si = r.data?.document; await c('POST', '/sales/invoices/' + si.id + '/post', null, t);

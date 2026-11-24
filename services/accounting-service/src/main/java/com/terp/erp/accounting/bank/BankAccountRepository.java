@@ -10,12 +10,13 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.Optional;
 
 public interface BankAccountRepository extends JpaRepository<BankAccount, Long> {
-    /** keyword on holder, bank and number; active null = all; the caller escapes with !. */
+    /** keyword on holder, bank and number; active / type null = all; the caller escapes with !. */
     @Query("select a from BankAccount a where a.companyId = :companyId and a.deleted = false "
-            + "and (:active is null or a.active = :active) and (:kw = '' "
+            + "and (:active is null or a.active = :active) and (:type is null or a.accountType = :type) "
+            + "and (:kw = '' "
             + "or lower(a.holderName) like :kw escape '!' or lower(a.bankName) like :kw escape '!' "
             + "or lower(a.accountNumber) like :kw escape '!')")
-    Page<BankAccount> search(Long companyId, Boolean active, String kw, Pageable pageable);
+    Page<BankAccount> search(Long companyId, Boolean active, EBankAccountType type, String kw, Pageable pageable);
 
     Optional<BankAccount> findByIdAndDeletedFalse(Long id);
 

@@ -44,17 +44,19 @@ public class BankAccountController {
     private final BankAccountService service;
 
     @Operation(summary = "Bank accounts of the company", description = "keyword = holder, bank or account "
-            + "number; active filters by status (omit for all).")
+            + "number; active filters by status, accountType by CHECKING / SAVINGS / CREDIT / LOAN "
+            + "(omit either for all).")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (ACC_001)"))
     @PreAuthorize(READ)
     @GetMapping
     public ApiMessageDto<ResponseListDto<BankAccountDto>> list(
             @Parameter(description = COMPANY) @RequestParam(required = false) Long companyId,
             @RequestParam(required = false) Boolean active,
+            @RequestParam(required = false) EBankAccountType accountType,
             @RequestParam(required = false) String keyword,
             @ParameterObject @PageableDefault(size = 20, sort = "bankName", direction = Sort.Direction.ASC)
             Pageable pageable) {
-        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, active, keyword, pageable)));
+        return ApiMessageDto.ok(ResponseListDto.of(service.search(companyId, active, accountType, keyword, pageable)));
     }
 
     @Operation(summary = "Bank account details")
