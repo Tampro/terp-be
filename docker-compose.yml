@@ -205,6 +205,10 @@ services:
       # Creates the bucket on first S3 use (instead of an init container). Keep false for real S3/Wasabi.
       MEDIA_S3_CREATE_BUCKET: ${MEDIA_S3_CREATE_BUCKET:-true}
       MEDIA_S3_ALLOWED_HTTP_HOSTS: seaweedfs
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18082:8082"
     volumes:
@@ -213,6 +217,8 @@ services:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   employee-service:
@@ -260,12 +266,18 @@ services:
       MEDIA_SERVICE_URL: http://media-service:8082
       # Reached through the gateway: the client IP of the device limits is the last X-Forwarded-For entry.
       DEVICE_RATE_TRUST_FORWARDED_FOR: "true"
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18084:8084"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   recruitment-service:
@@ -311,12 +323,18 @@ services:
       ACCOUNTING_SERVICE_URL: http://accounting-service:8093
       EMPLOYEE_SERVICE_URL: http://employee-service:8083
       ATTENDANCE_SERVICE_URL: http://attendance-service:8084
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18086:8086"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   asset-service:
@@ -332,12 +350,18 @@ services:
       IAM_SERVICE_URL: http://iam-service:8081
       EMPLOYEE_SERVICE_URL: http://employee-service:8083
       MEDIA_SERVICE_URL: http://media-service:8082
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18087:8087"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   meeting-service:
@@ -384,12 +408,18 @@ services:
       IAM_SERVICE_URL: http://iam-service:8081
       EMPLOYEE_SERVICE_URL: http://employee-service:8083
       MEDIA_SERVICE_URL: http://media-service:8082
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18089:8089"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   # Dashboard and calendar: no database, no secret; reads the other services with the caller's token.

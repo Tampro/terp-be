@@ -3,6 +3,24 @@ server:
   port: ${MEDIA_PORT:8082}
 
 spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    connection-timeout: 5s
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # Retention events (erp-common RetentionConsumerConfig): retried in-process, then dead-lettered.
+        default-requeue-rejected: false
+        prefetch: 1
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
   application:
     name: media-service
   datasource:
@@ -34,6 +52,11 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  # Finance retention (Law on Accounting 2015 Art. 41; PO 2026-11-24): 10 years after the deletion.
+  # iam.company.anonymize-finance → MediaAnonymizer.
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.media.retention}
+    event: iam.company.anonymize-finance
   media:
     storage-dir: ${MEDIA_STORAGE_DIR:./media-data}
     link-secret: ${MEDIA_LINK_SECRET}
