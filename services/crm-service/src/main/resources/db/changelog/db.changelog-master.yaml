@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261123100000_outbox_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123200000_contract_signature_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261124100000_contract_owner_changelog.mysql.sql

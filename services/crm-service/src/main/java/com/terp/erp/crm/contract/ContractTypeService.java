@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Contract types (ERP manual 7.5): name unique per company, soft-deleted only while no contract uses them. */
 @Service
@@ -30,16 +32,24 @@ public class ContractTypeService {
             @NotNull Boolean active) {
     }
 
-    public record TypeDto(String id, String companyId, String name, boolean active) {
-        static TypeDto of(ContractType t) {
-            return new TypeDto(t.getId().toString(), t.getCompanyId().toString(), t.getName(), t.isActive());
+    public record TypeDto(String id, String companyId, String name, boolean active,
+                          @Schema(description = "Contracts (not deleted) of this type in the company; every "
+                                  + "contract, not only the caller's own", example = "3") long contractCount) {
+        static TypeDto of(ContractType t, long contractCount) {
+            return new TypeDto(t.getId().toString(), t.getCompanyId().toString(), t.getName(), t.isActive(),
+                    contractCount);
         }
     }
 
     @Transactional(readOnly = true)
     public List<TypeDto> list(Long companyId) {
         Long company = TenantGuard.resolveCompany(companyId, EContractError.CTR_001);
-        return types.findByCompanyIdAndDeletedFalseOrderByNameAsc(company).stream().map(TypeDto::of).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        for (Object[] r : contracts.countByType(company)) {
+            counts.put((Long) r[0], ((Number) r[1]).longValue());
+        }
+        return types.findByCompanyIdAndDeletedFalseOrderByNameAsc(company).stream()
+                .map(t -> TypeDto.of(t, counts.getOrDefault(t.getId(), 0L))).toList();
     }
 
     @Transactional
@@ -53,7 +63,7 @@ public class ContractTypeService {
         t.setCompanyId(company);
         t.setName(name);
         t.setActive(f.active());
-        return TypeDto.of(types.save(t));
+        return TypeDto.of(types.save(t), 0);
     }
 
     @Transactional
@@ -65,7 +75,7 @@ public class ContractTypeService {
         }
         t.setName(name);
         t.setActive(f.active());
-        return TypeDto.of(t);
+        return TypeDto.of(t, contracts.countByContractTypeIdAndDeletedFalse(id));
     }
 
     @Transactional

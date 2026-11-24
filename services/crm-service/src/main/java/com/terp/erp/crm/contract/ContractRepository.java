@@ -22,6 +22,12 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     boolean existsByContractTypeIdAndDeletedFalse(Long contractTypeId);
 
+    long countByContractTypeIdAndDeletedFalse(Long contractTypeId);
+
+    @Query("select c.contractTypeId, count(c) from Contract c where c.companyId = :companyId and c.deleted = false "
+            + "group by c.contractTypeId")
+    List<Object[]> countByType(@Param("companyId") Long companyId);
+
     boolean existsByCompanyIdAndNumber(Long companyId, String number);
 
     @Query("""

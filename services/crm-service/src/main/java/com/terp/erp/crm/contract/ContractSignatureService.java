@@ -198,7 +198,7 @@ public class ContractSignatureService {
     }
 
     /** Full name from the Keycloak token (name, else given + family), else the username. */
-    private static String tokenName() {
+    static String tokenName() {
         String name = claim("name");
         if (name == null) {
             String given = claim("given_name");
