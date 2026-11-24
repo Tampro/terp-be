@@ -19,3 +19,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122330000_time_entry_type_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261122720000_clock_ip_auto_clock_out_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261125100000_shedlock_changelog.mysql.sql

@@ -5,6 +5,7 @@ import com.terp.erp.iam.repository.CompanyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class PlanExpirySeatJob {
     private final Clock clock;
 
     @Scheduled(cron = "${erp.saas.plan-expiry-seats.cron:0 5 * * * *}")
+    @SchedulerLock(name = "iam.plan-expiry-seats", lockAtMostFor = "PT55M")
     public void run() {
         int locked = 0;
         for (Company c : companies.findByDeletedFalseAndPlanExpiresAtLessThanEqual(clock.instant())) {
