@@ -103,6 +103,8 @@ class BudgetServiceTest {
         });
         when(budgetRows.findByIdAndDeletedFalse(anyLong()))
                 .thenAnswer(i -> Optional.ofNullable(budgetMap.get(i.<Long>getArgument(0))));
+        when(budgetRows.lockByIdAndDeletedFalse(anyLong()))
+                .thenAnswer(i -> Optional.ofNullable(budgetMap.get(i.<Long>getArgument(0))));
         when(allocationRows.findByBudgetIdOrderByIdAsc(anyLong())).thenAnswer(i -> allocationMap.values().stream()
                 .filter(a -> a.getBudgetId().equals(i.getArgument(0))).toList());
         when(allocationRows.findById(anyLong()))
