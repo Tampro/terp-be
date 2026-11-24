@@ -100,9 +100,10 @@ public class BankAccountService {
     }
 
     @Transactional(readOnly = true)
-    public Page<BankAccountDto> search(Long requestedCompanyId, Boolean active, String keyword, Pageable pageable) {
+    public Page<BankAccountDto> search(Long requestedCompanyId, Boolean active, EBankAccountType type, String keyword,
+                                       Pageable pageable) {
         Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
-        return accounts.search(companyId, active, kw(keyword), pageable).map(BankAccountService::dto);
+        return accounts.search(companyId, active, type, kw(keyword), pageable).map(BankAccountService::dto);
     }
 
     @Transactional(readOnly = true)
