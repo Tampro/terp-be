@@ -56,9 +56,18 @@ r = await c('POST', '/messenger/conversations/' + e1.id + '/read', null, e2.t); 
 r = await c('GET', '/messenger/unread-count', null, e2.t); ck('unread 0', r.data?.total === 0, show(r.data));
 r = await c('PUT', '/messenger/favorites/' + e1.id, null, e2.t); ck('favorite', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
 r = await c('GET', '/messenger/favorites', null, e2.t); ck('favorites list', r.data?.length === 1 || r.data?.content?.length === 1, show(r.data));
+// pin: e3 writes after e1, so e3 is the latest; e2 pins e1 → e1 listed first
+const e3 = await mkUser('EMPLOYEE', 'e3'); await c('POST', '/messenger/conversations/' + e2.id + '/messages', { body: 'Later message' }, e3.t);
+r = await c('GET', '/messenger/conversations', null, e2.t); ck('unpinned: latest conversation (e3) first', r.data?.content?.[0]?.userId === String(e3.id) && r.data.content[0].pinned === false, show(r.data?.content?.map(z => [z.userId, z.pinned])));
+r = await c('PUT', '/messenger/conversations/' + e1.id + '/pin', null, e2.t); ck('pin', r.s === 200, r.s + ' ' + r.code);
+r = await c('PUT', '/messenger/conversations/' + e1.id + '/pin', null, e2.t); ck('pin again is idempotent', r.s === 200, r.s + ' ' + r.code);
+r = await c('GET', '/messenger/conversations', null, e2.t); ck('pinned conversation (e1) listed first, flagged', r.data?.content?.[0]?.userId === String(e1.id) && r.data.content[0].pinned === true && r.data.content[1].pinned === false, show(r.data?.content?.map(z => [z.userId, z.pinned])));
+r = await c('GET', '/messenger/conversations', null, e1.t); ck('pin is personal: e1 sees nothing pinned', (r.data?.content || []).every(z => z.pinned === false), show(r.data?.content?.map(z => [z.userId, z.pinned])));
+r = await c('DELETE', '/messenger/conversations/' + e1.id + '/pin', null, e2.t); r = await c('GET', '/messenger/conversations', null, e2.t); ck('unpin → latest first again', r.data?.content?.[0]?.userId === String(e3.id), show(r.data?.content?.map(z => [z.userId, z.pinned])));
 r = await c('POST', '/messenger/conversations/' + e1.id + '/messages', { body: 'self' }, e1.t); ck('message myself → SUP_030', r.code === 'SUP_030', r.s + ' ' + r.code);
 const bAdminId = (await c('GET', '/iam/users', null, B.t)).data?.content?.[0]?.id;
 r = await c('POST', '/messenger/conversations/' + bAdminId + '/messages', { body: 'cross' }, e1.t); ck('message a user of company B → SUP_029', r.code === 'SUP_029', r.s + ' ' + r.code);
+r = await c('PUT', '/messenger/conversations/' + bAdminId + '/pin', null, e1.t); ck('pin a user of company B → SUP_029', r.code === 'SUP_029', r.s + ' ' + r.code);
 r = await c('GET', '/iam/colleagues/' + bAdminId, null, e1.t); ck('colleague of company B → 404', r.s === 404, r.s + ' ' + r.code);
 r = await c('GET', '/messenger/conversations/' + e1.id + '/messages', null, B.t); ck('company B reads A conversation → empty or refused', r.s !== 200 || (r.data?.content?.length ?? 0) === 0, r.s + ' ' + show(r.data));
 // isolation & permissions

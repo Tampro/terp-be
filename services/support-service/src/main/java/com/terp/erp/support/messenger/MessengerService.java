@@ -42,7 +42,8 @@ public class MessengerService {
     }
 
     /** userId = the other user; names come from IAM on the FE side (ids only here). */
-    public record ConversationDto(String userId, MessageDto lastMessage, long unreadCount, boolean favorite) {
+    public record ConversationDto(String userId, MessageDto lastMessage, long unreadCount, boolean favorite,
+                                  boolean pinned) {
     }
 
     public record SendForm(
@@ -67,6 +68,7 @@ public class MessengerService {
 
     private final ChatMessageRepository messages;
     private final ChatFavoriteRepository favorites;
+    private final ChatPinRepository pins;
     private final IamClient iam;
     private final MediaClient media;
     private final Clock clock;
@@ -88,11 +90,13 @@ public class MessengerService {
             }
         }
         Set<Long> fav = favoriteIds(me);
+        Set<Long> pinned = pins.findByCompanyIdAndUserId(me.companyId(), me.userId()).stream()
+                .map(ChatPin::getPeerUserId).collect(Collectors.toSet());
         return page.map(r -> {
             long peer = ((Number) r[0]).longValue();
             ChatMessage m = last.get(((Number) r[1]).longValue());
             return new ConversationDto(String.valueOf(peer), m == null ? null : dto(m, me),
-                    unread.getOrDefault(peer, 0L), fav.contains(peer));
+                    unread.getOrDefault(peer, 0L), fav.contains(peer), pinned.contains(peer));
         });
     }
 
@@ -179,6 +183,30 @@ public class MessengerService {
         Me me = me();
         favorites.findByCompanyIdAndUserIdAndFavoriteUserId(me.companyId(), me.userId(), peerId)
                 .ifPresent(favorites::delete);
+    }
+
+    /** Pins my conversation with this user to the top of my list. Idempotent; personal (the peer sees nothing). */
+    @Transactional
+    public void pin(Long peerId) {
+        Me me = me();
+        if (peerId.equals(me.userId())) {
+            throw ApiException.badRequest(ESupportError.SUP_030);
+        }
+        if (pins.findByCompanyIdAndUserIdAndPeerUserId(me.companyId(), me.userId(), peerId).isEmpty()) {
+            iam.requireActiveCompanyUser(peerId, me.companyId());
+            ChatPin p = new ChatPin();
+            p.setCompanyId(me.companyId());
+            p.setUserId(me.userId());
+            p.setPeerUserId(peerId);
+            pins.save(p);
+        }
+    }
+
+    /** Idempotent: unpinning a conversation that is not pinned succeeds. */
+    @Transactional
+    public void unpin(Long peerId) {
+        Me me = me();
+        pins.findByCompanyIdAndUserIdAndPeerUserId(me.companyId(), me.userId(), peerId).ifPresent(pins::delete);
     }
 
     // ----

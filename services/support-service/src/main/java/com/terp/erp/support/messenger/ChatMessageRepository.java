@@ -19,10 +19,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     Page<ChatMessage> between(@Param("company") Long companyId, @Param("me") Long me, @Param("peer") Long peer,
                               Pageable pageable);
 
-    /** [peer id, id of the last message] per conversation of me, most recent first. */
+    /** [peer id, id of the last message] per conversation of me: pinned ones first, then most recent first. */
     @Query(value = "SELECT x.peer, MAX(x.id) AS last_id FROM (SELECT CASE WHEN from_user_id = :me THEN to_user_id"
             + " ELSE from_user_id END AS peer, id FROM chat_message WHERE company_id = :company"
-            + " AND (from_user_id = :me OR to_user_id = :me)) x GROUP BY x.peer ORDER BY last_id DESC",
+            + " AND (from_user_id = :me OR to_user_id = :me)) x GROUP BY x.peer"
+            + " ORDER BY EXISTS (SELECT 1 FROM chat_pin p WHERE p.company_id = :company AND p.user_id = :me"
+            + " AND p.peer_user_id = x.peer) DESC, last_id DESC",
             countQuery = "SELECT COUNT(DISTINCT CASE WHEN from_user_id = :me THEN to_user_id ELSE from_user_id END)"
                     + " FROM chat_message WHERE company_id = :company AND (from_user_id = :me OR to_user_id = :me)",
             nativeQuery = true)
