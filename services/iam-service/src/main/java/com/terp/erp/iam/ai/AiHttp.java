@@ -1,23 +1,22 @@
 package com.terp.erp.iam.ai;
 
+import com.terp.erp.net.PinnedHttp;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 
 /**
- * One POST to an AI provider URL already accepted by UrlGuard: 5 s connect, 30 s for the answer, redirects never
- * followed, no retry (a completion costs money and is not idempotent). Unlike the webhook OutboundHttp, the body is
- * read (it is the generated text) but capped, so a misbehaving host cannot fill memory. Never logs anything: the
- * headers carry the API key and the body carries the user's text.
+ * One POST to an AI provider URL already accepted by UrlGuard, through {@link PinnedHttp} (the address connected to
+ * is the one checked): 5 s connect, 30 s for the answer, redirects never followed, no retry (a completion costs money
+ * and is not idempotent). Unlike the webhook OutboundHttp, the body is read (it is the generated text) but capped,
+ * so a misbehaving host cannot fill memory. Never logs anything: the headers carry the API key and the body carries
+ * the user's text.
  */
 @Component
 public class AiHttp {
@@ -45,31 +44,19 @@ public class AiHttp {
         }
     }
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    private final PinnedHttp http = new PinnedHttp(Duration.ofSeconds(5), Duration.ofSeconds(30),
+            "ERP-AI-Assistant/1.0");
 
     public Response postJson(URI uri, String json, Map<String, String> headers) {
-        HttpRequest.Builder b = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "ERP-AI-Assistant/1.0")
-                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8));
-        headers.forEach(b::header);
-        try {
-            HttpResponse<InputStream> r = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
-            try (InputStream in = r.body()) {
-                byte[] bytes = in.readNBytes(MAX_BODY_BYTES + 1);
-                String body = bytes.length > MAX_BODY_BYTES ? null : new String(bytes, StandardCharsets.UTF_8);
-                return new Response(r.statusCode(), body);
-            }
-        } catch (HttpTimeoutException e) {
-            throw new TransportException("TIMEOUT");
-        } catch (IOException e) {
-            throw new TransportException("CONNECTION_ERROR");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new TransportException("CONNECTION_ERROR");
+        HttpPost post = new HttpPost(uri);
+        post.setEntity(new StringEntity(json, ContentType.APPLICATION_JSON.withCharset(StandardCharsets.UTF_8)));
+        headers.forEach(post::setHeader);
+        PinnedHttp.Exchange x = http.execute(post, MAX_BODY_BYTES);
+        if (x.status() == null) {
+            throw new TransportException(x.failure());
         }
+        String body = x.truncated() ? null
+                : x.body() == null ? "" : new String(x.body(), StandardCharsets.UTF_8);
+        return new Response(x.status(), body);
     }
 }

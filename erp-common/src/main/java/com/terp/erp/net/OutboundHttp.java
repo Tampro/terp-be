@@ -1,18 +1,18 @@
 package com.terp.erp.net;
 
-import java.io.IOException;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Map;
 
 /**
- * One POST to a URL that {@link UrlGuard} has already accepted: 3 s connect, 5 s total, redirects never followed,
- * the response body discarded (only its status is reported, so a test cannot be used to read an internal page).
- * No retry: a webhook POST is not idempotent. Never log the URL: Slack / Telegram URLs carry the secret.
+ * One POST to a URL that {@link UrlGuard} has already accepted, through {@link PinnedHttp} (the address connected to
+ * is the one checked): 3 s connect, 5 s for the answer, redirects never followed, the response body discarded (only
+ * its status is reported, so a test cannot be used to read an internal page). No retry: a webhook POST is not
+ * idempotent. Never log the URL: Slack / Telegram URLs carry the secret.
  * Not a Spring bean: services declare one (iam-service subclasses it as a component).
  */
 public class OutboundHttp {
@@ -20,28 +20,21 @@ public class OutboundHttp {
     public record Result(boolean delivered, Integer statusCode, String failure) {
     }
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(3))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    private final PinnedHttp http = new PinnedHttp(Duration.ofSeconds(3), Duration.ofSeconds(5), "ERP-Webhook/1.0");
 
     public Result postJson(URI uri, String json, Map<String, String> headers) {
-        HttpRequest.Builder b = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(5))
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "ERP-Webhook/1.0")
-                .POST(HttpRequest.BodyPublishers.ofString(json));
-        headers.forEach(b::header);
-        try {
-            HttpResponse<Void> r = client.send(b.build(), HttpResponse.BodyHandlers.discarding());
-            int s = r.statusCode();
-            return new Result(s >= 200 && s < 300, s, null);
-        } catch (HttpTimeoutException e) {
-            return new Result(false, null, "TIMEOUT");
-        } catch (IOException e) {
-            return new Result(false, null, "CONNECTION_ERROR");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return new Result(false, null, "CONNECTION_ERROR");
+        HttpPost post = new HttpPost(uri);
+        post.setEntity(new StringEntity(json, ContentType.APPLICATION_JSON));
+        headers.forEach(post::setHeader);
+        return of(http.execute(post, 0));
+    }
+
+    /** The webhook-style result of an exchange: delivered = 2xx. */
+    public static Result of(PinnedHttp.Exchange x) {
+        if (x.status() == null) {
+            return new Result(false, null, x.failure());
         }
+        int s = x.status();
+        return new Result(s >= 200 && s < 300, s, null);
     }
 }
