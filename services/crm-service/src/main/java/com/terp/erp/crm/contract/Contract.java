@@ -56,6 +56,13 @@ public class Contract extends BaseAuditableEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /**
+     * Display name of the user who created the contract, taken from the token at create. Null on contracts created
+     * before the column existed. TODO(assumption): the owner is the creator; a contract has no assignee field.
+     */
+    @Column(name = "owner_name", length = 150)
+    private String ownerName;
+
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
 }

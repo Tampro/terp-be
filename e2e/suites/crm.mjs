@@ -63,6 +63,9 @@ r = await c('POST', '/crm/contracts', { subject: 'Bad dates', customerId: Number
 r = await c('POST', '/crm/contracts/' + con.id + '/renewals', { startDate: later, endDate: later, value: 25000000, status: 'ACTIVE' }, t); ck('renewal', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
 r = await c('POST', '/crm/contracts/' + con.id + '/comments', { message: 'Signed copy received' }, t); ck('contract comment', r.s === 200, r.s + ' ' + r.code);
 r = await c('POST', '/crm/contracts/' + con.id + '/duplicate', null, t); ck('duplicate → CON0002', r.s === 200 && r.data.contract.number === 'CON0002', r.s + ' ' + r.code + ' ' + r.data?.contract?.number);
+r = await c('GET', '/crm/contracts/' + con.id, null, t); ck('contract owner = creator (id + name)', r.s === 200 && !!r.data.contract.ownerId && !!r.data.contract.ownerName, r.s + ' ' + r.data?.contract?.ownerId + ' ' + r.data?.contract?.ownerName);
+r = await c('GET', '/crm/contracts?size=50', null, t); ck('contract list rows carry ownerName', r.s === 200 && r.data.content.every(x => !!x.ownerName), r.s + ' ' + r.data?.content?.map(x => x.ownerName).join(','));
+r = await c('GET', '/crm/contract-types', null, t); ck('contract type contractCount = 2', r.s === 200 && r.data.find(x => x.id === ct.id)?.contractCount === 2, r.s + ' ' + JSON.stringify(r.data?.map(x => [x.name, x.contractCount])));
 r = await c('GET', '/crm/contracts/status-counts', null, t); ck('status counts total 2', r.s === 200 && r.data.total === 2, r.s + ' ' + JSON.stringify(r.data));
 
 // isolation & permissions

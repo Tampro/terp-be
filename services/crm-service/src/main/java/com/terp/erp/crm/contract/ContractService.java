@@ -115,7 +115,10 @@ public class ContractService {
 
     public record ContractRow(String id, String number, String subject, String customerId, String customerName,
                               String contractTypeId, BigDecimal value, LocalDate startDate, LocalDate endDate,
-                              Contract.EStatus status, int progressPercent, long daysLeft, Instant createdDate) {
+                              Contract.EStatus status, int progressPercent, long daysLeft, Instant createdDate,
+                              @Schema(description = "Owner (creator) Keycloak user id") String ownerId,
+                              @Schema(description = "Owner (creator) display name; null on contracts created before "
+                                      + "2026-11-24", example = "Test User") String ownerName) {
     }
 
     public record RenewalDto(String id, LocalDate startDate, LocalDate endDate, BigDecimal value,
@@ -197,6 +200,7 @@ public class ContractService {
         Long company = TenantGuard.resolveCompany(f.companyId(), EContractError.CTR_001);
         Contract c = new Contract();
         c.setCompanyId(company);
+        c.setOwnerName(ContractSignatureService.tokenName());
         apply(c, f, null);
         c.setNumber(settings.take(company));
         return detail(created(contracts.save(c)));
@@ -233,6 +237,8 @@ public class ContractService {
         Contract src = require(id);
         Contract c = new Contract();
         c.setCompanyId(src.getCompanyId());
+        // The copy is created by (and so owned by) the caller, like created_by.
+        c.setOwnerName(ContractSignatureService.tokenName());
         // TODO(assumption): the subject is copied as is (no " (copy)" suffix); renewals, comments, notes and
         //  attachments stay with the original.
         c.setSubject(src.getSubject());
@@ -418,7 +424,7 @@ public class ContractService {
         return new ContractRow(String.valueOf(c.getId()), c.getNumber(), c.getSubject(), c.getCustomerId().toString(),
                 c.getCustomerName(), c.getContractTypeId().toString(), c.getValue(), c.getStartDate(), c.getEndDate(),
                 c.getStatus(), progressPercent(c.getStartDate(), c.getEndDate(), today),
-                daysLeft(c.getEndDate(), today), c.getCreatedDate());
+                daysLeft(c.getEndDate(), today), c.getCreatedDate(), c.getCreatedBy(), c.getOwnerName());
     }
 
     private ContractDetail detail(Contract c) {
