@@ -64,4 +64,7 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
     /** Super admin dashboard: every live company (the platform has few enough to aggregate in memory). */
     List<Company> findAllByDeletedFalse();
+
+    /** Plan-expiry seat job: companies whose trial or paid period has ended. */
+    List<Company> findByDeletedFalseAndPlanExpiresAtLessThanEqual(Instant now);
 }
