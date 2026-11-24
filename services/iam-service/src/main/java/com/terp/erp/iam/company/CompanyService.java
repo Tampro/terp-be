@@ -244,6 +244,7 @@ public class CompanyService {
         }
         orderService.cancelPendingOf(c.getId());
         c.setDeleted(true);
+        c.setDeletedAt(java.time.Instant.now());
         c.setStatus(ECompanyStatus.SUSPENDED);
         authorityCache.evictAll();
         log.info("Company {} deleted (soft)", c.getCode());

@@ -32,6 +32,14 @@ public class Company extends BaseAuditableEntity {
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
 
+    /** When the company was deleted: starts the retention period (PO 2026-11-24: 5 years, then anonymised). */
+    @Column(name = "deleted_at")
+    private java.time.Instant deletedAt;
+
+    /** Set once {@link com.terp.erp.iam.company.CompanyAnonymizer} has run; the row then holds no personal data. */
+    @Column(name = "anonymized_at")
+    private java.time.Instant anonymizedAt;
+
     /** Current plan; null = no subscription (internal / bootstrap company): no plan limits, never expires. */
     @Column(name = "plan_id")
     private Long planId;
