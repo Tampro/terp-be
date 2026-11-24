@@ -147,3 +147,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261125100000_shedlock_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261125200000_company_retention_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261125300000_company_finance_retention_changelog.mysql.sql

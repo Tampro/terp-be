@@ -29,7 +29,8 @@ class RetentionListenerTest {
         PlatformTransactionManager tm = mock(PlatformTransactionManager.class);
         when(tm.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         listener = new RetentionConsumerConfig.RetentionListener(
-                new ObjectMapper().registerModule(new JavaTimeModule()), List.of(a, b), new TransactionTemplate(tm));
+                new ObjectMapper().registerModule(new JavaTimeModule()), List.of(a, b), new TransactionTemplate(tm),
+                RetentionConsumerConfig.EVENT);
     }
 
     private static Message msg(String json) {

@@ -31,6 +31,8 @@ import java.time.Clock;
 @RequiredArgsConstructor
 public class CompanyAnonymizer {
     public static final String EVENT = "iam.company.anonymize";
+    /** Accounting vouchers and books are kept 10 years (Law on Accounting 2015 Art. 41; PO 2026-11-24). */
+    public static final String FINANCE_EVENT = "iam.company.anonymize-finance";
     static final String ANON = "[anonymized]";
 
     private final JdbcTemplate jdbc;
@@ -54,5 +56,15 @@ public class CompanyAnonymizer {
         jdbc.update("DELETE FROM company_allowed_ip WHERE company_id = ?", id);
         outbox.publish(id, EVENT, "COMPANY", id, Payload.of("companyId", id));
         log.info("Retention: company {} anonymised", id);
+    }
+
+    /** Second stage, 10 years after the deletion: accounting and commerce anonymise their party data. */
+    @Transactional
+    public void anonymizeFinance(Company company) {
+        long id = company.getId();
+        jdbc.update("UPDATE company SET finance_anonymized_at = ? WHERE id = ? AND deleted = 1",
+                java.sql.Timestamp.from(clock.instant()), id);
+        outbox.publish(id, FINANCE_EVENT, "COMPANY", id, Payload.of("companyId", id));
+        log.info("Retention: finance data of company {} signalled for anonymisation", id);
     }
 }

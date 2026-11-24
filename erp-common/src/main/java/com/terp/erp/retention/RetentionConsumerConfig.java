@@ -23,7 +23,8 @@ import java.util.List;
 
 /**
  * Consumer side of retention: a durable queue {@code erp.retention.queue} (e.g. erp.employee.retention) bound to
- * erp.events with exactly {@value #EVENT}, dead-lettered to {@code <queue>.dlq} after the listener's retries. Each
+ * erp.events with exactly {@code erp.retention.event} (default {@value #EVENT}; accounting and commerce use
+ * {@value #FINANCE_EVENT}, sent 10 years after the deletion), dead-lettered to {@code <queue>.dlq} after the listener's retries. Each
  * message runs every {@link CompanyAnonymizeHandler} of the service in one transaction. Opt-in: set the property in a
  * service that has the outbox (exchange bean) and at least one handler. The body is parsed here (no shared
  * MessageConverter is assumed). Never logs anything but the company id.
@@ -33,6 +34,7 @@ import java.util.List;
 @ConditionalOnProperty(name = "erp.retention.queue")
 public class RetentionConsumerConfig {
     public static final String EVENT = "iam.company.anonymize";
+    public static final String FINANCE_EVENT = "iam.company.anonymize-finance";
 
     @Bean
     Queue retentionQueue(Environment env) {
@@ -46,14 +48,19 @@ public class RetentionConsumerConfig {
     }
 
     @Bean
-    Binding retentionBinding(@Qualifier("retentionQueue") Queue queue, TopicExchange erpEventsExchange) {
-        return BindingBuilder.bind(queue).to(erpEventsExchange).with(EVENT);
+    Binding retentionBinding(@Qualifier("retentionQueue") Queue queue, TopicExchange erpEventsExchange,
+                             Environment env) {
+        return BindingBuilder.bind(queue).to(erpEventsExchange).with(event(env));
+    }
+
+    static String event(Environment env) {
+        return env.getProperty("erp.retention.event", EVENT);
     }
 
     @Bean
     RetentionListener retentionListener(ObjectMapper mapper, List<CompanyAnonymizeHandler> handlers,
-                                        TransactionTemplate tx) {
-        return new RetentionListener(mapper, handlers, tx);
+                                        TransactionTemplate tx, Environment env) {
+        return new RetentionListener(mapper, handlers, tx, event(env));
     }
 
     /** Listener of the retention queue. */
@@ -62,11 +69,14 @@ public class RetentionConsumerConfig {
         private final ObjectMapper mapper;
         private final List<CompanyAnonymizeHandler> handlers;
         private final TransactionTemplate tx;
+        private final String event;
 
-        RetentionListener(ObjectMapper mapper, List<CompanyAnonymizeHandler> handlers, TransactionTemplate tx) {
+        RetentionListener(ObjectMapper mapper, List<CompanyAnonymizeHandler> handlers, TransactionTemplate tx,
+                          String event) {
             this.mapper = mapper;
             this.handlers = handlers;
             this.tx = tx;
+            this.event = event;
         }
 
         @RabbitListener(queues = "${erp.retention.queue}")
@@ -77,7 +87,7 @@ public class RetentionConsumerConfig {
             } catch (IOException ex) {
                 throw new AmqpRejectAndDontRequeueException("malformed retention event");
             }
-            if (e.companyId() == null || !EVENT.equals(e.eventType())) {
+            if (e.companyId() == null || !event.equals(e.eventType())) {
                 throw new AmqpRejectAndDontRequeueException("unexpected retention event");
             }
             long companyId = e.companyId();
