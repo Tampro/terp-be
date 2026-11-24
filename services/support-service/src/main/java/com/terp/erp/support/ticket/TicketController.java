@@ -65,11 +65,16 @@ public class TicketController {
 
     @GetMapping("/tickets/status-counts")
     @PreAuthorize("@PermissionChecker.hasAny('SUPPORT_TICKET_VIEW','SUPPORT_TICKET_VIEW_OWN')")
-    @Operation(summary = "Counts for the tabs All / In Progress / On Hold / Closed")
+    @Operation(summary = "Counts for the tabs All / In Progress / On Hold / Closed",
+            description = "Same filters as the list (categoryId, accountType, keyword), without status, so the tab "
+                    + "numbers match the filtered list.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "OK"),
             @ApiResponse(responseCode = "400", description = "SUP_001")})
-    public ApiMessageDto<StatusCounts> statusCounts(@RequestParam(required = false) Long companyId) {
-        return ApiMessageDto.ok(service.statusCounts(companyId));
+    public ApiMessageDto<StatusCounts> statusCounts(@RequestParam(required = false) Long companyId,
+                                                    @RequestParam(required = false) Long categoryId,
+                                                    @RequestParam(required = false) EAccountType accountType,
+                                                    @RequestParam(required = false) String keyword) {
+        return ApiMessageDto.ok(service.statusCounts(companyId, categoryId, accountType, keyword));
     }
 
     @GetMapping("/tickets/stats")

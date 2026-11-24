@@ -123,12 +123,14 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public StatusCounts statusCounts(Long requestedCompanyId) {
+    public StatusCounts statusCounts(Long requestedCompanyId, Long categoryId, EAccountType accountType,
+                                     String keyword) {
         Map<EStatus, Long> by = new HashMap<>();
         Long companyId = Texts.company(requestedCompanyId);
         for (Object[] r : TicketScope.ownView()
-                ? tickets.countByStatusOwn(companyId, OwnScope.sub(), TicketScope.myEmail())
-                : tickets.countByStatus(companyId)) {
+                ? tickets.countByStatusOwn(companyId, OwnScope.sub(), TicketScope.myEmail(), categoryId, accountType,
+                Texts.kw(keyword))
+                : tickets.countByStatus(companyId, categoryId, accountType, Texts.kw(keyword))) {
             by.put((EStatus) r[0], ((Number) r[1]).longValue());
         }
         long in = by.getOrDefault(EStatus.IN_PROGRESS, 0L);

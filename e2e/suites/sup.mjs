@@ -24,6 +24,8 @@ r = await c('POST', S + '/tickets/' + ptId + '/replies', { description: 'Try res
 r = await c('POST', P + slug + '/tickets/reply', { trackingToken: pt.trackingToken, description: 'Thanks, works' }); ck('customer reply via token, conversation of 2', r.s === 200 && r.data.replies.length === 2, r.s + ' ' + r.code + ' ' + show(r.data?.replies));
 r = await c('PUT', S + '/tickets/' + ptId + '/status', { status: 'ON_HOLD' }, t); ck('status ON_HOLD', r.s === 200 && r.data.status === 'ON_HOLD', r.s + ' ' + r.code + ' ' + show(r.data));
 r = await c('GET', S + '/tickets/status-counts', null, t); ck('status counts all 2 / onHold 1', r.data?.all === 2 && r.data?.onHold === 1, show(r.data));
+r = await c('GET', S + '/tickets/status-counts?keyword=Cannot', null, t); ck('status counts follow the keyword filter: 1 / onHold 1', r.data?.all === 1 && r.data?.onHold === 1 && r.data?.inProgress === 0, show(r.data));
+r = await c('GET', S + '/tickets/status-counts?accountType=CLIENT', null, t); ck('status counts follow accountType: CLIENT → 1 in progress', r.data?.all === 1 && r.data?.inProgress === 1, show(r.data));
 await c('PUT', S + '/tickets/' + ptId + '/status', { status: 'CLOSED' }, t);
 r = await c('POST', S + '/tickets/' + ptId + '/replies', { description: 'late' }, t); ck('reply to closed → SUP_006', r.code === 'SUP_006', r.s + ' ' + r.code);
 r = await c('POST', P + slug + '/tickets/reply', { ticketNumber: pt.ticketNumber, email: pubEmail, description: 'again' }); ck('public reply to closed → SUP_006', r.code === 'SUP_006', r.s + ' ' + r.code);

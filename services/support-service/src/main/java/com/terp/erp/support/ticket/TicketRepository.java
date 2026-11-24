@@ -45,14 +45,25 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
                            Pageable pageable);
 
     @Query("select t.status, count(t) from Ticket t where t.companyId = :company and t.deleted = false"
-            + " and (t.createdBy = :sub or (:email is not null and t.email = :email)) group by t.status")
+            + " and (t.createdBy = :sub or (:email is not null and t.email = :email))"
+            + " and (:category is null or t.categoryId = :category)"
+            + " and (:accountType is null or t.accountType = :accountType)"
+            + " and (:kw is null or lower(t.ticketNumber) like concat('%', :kw, '%')"
+            + " or lower(t.subject) like concat('%', :kw, '%') or lower(t.name) like concat('%', :kw, '%')"
+            + " or lower(t.email) like concat('%', :kw, '%'))" + " group by t.status")
     List<Object[]> countByStatusOwn(@Param("company") Long companyId, @Param("sub") String sub,
-                                    @Param("email") String email);
+                                    @Param("email") String email, @Param("category") Long categoryId,
+                                    @Param("accountType") Ticket.EAccountType accountType, @Param("kw") String keyword);
 
-    /** [status, count] rows for the tabs, in one query. */
+    /** [status, count] rows for the tabs, in one query: {@link #search}'s filters without status. */
     @Query("select t.status, count(t) from Ticket t where t.companyId = :company and t.deleted = false"
-            + " group by t.status")
-    List<Object[]> countByStatus(@Param("company") Long companyId);
+            + " and (:category is null or t.categoryId = :category)"
+            + " and (:accountType is null or t.accountType = :accountType)"
+            + " and (:kw is null or lower(t.ticketNumber) like concat('%', :kw, '%')"
+            + " or lower(t.subject) like concat('%', :kw, '%') or lower(t.name) like concat('%', :kw, '%')"
+            + " or lower(t.email) like concat('%', :kw, '%'))" + " group by t.status")
+    List<Object[]> countByStatus(@Param("company") Long companyId, @Param("category") Long categoryId,
+                                    @Param("accountType") Ticket.EAccountType accountType, @Param("kw") String keyword);
 
     /** Dashboard: every live ticket of the company. */
     List<Ticket> findByCompanyIdAndDeletedFalse(Long companyId);
