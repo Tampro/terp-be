@@ -112,6 +112,20 @@ public class GoalService {
         return goals.search(companyId, categoryId, status, type, pageable).map(GoalService::dto);
     }
 
+    /** Count per status with the list's other filters; every status is present (0 when none). */
+    @Transactional(readOnly = true)
+    public java.util.Map<EGoalStatus, Long> statusCounts(Long requestedCompanyId, Long categoryId, EGoalType type) {
+        Long companyId = TenantGuard.resolveCompany(requestedCompanyId, EAccountingError.ACC_001);
+        java.util.Map<EGoalStatus, Long> counts = new java.util.EnumMap<>(EGoalStatus.class);
+        for (EGoalStatus s : EGoalStatus.values()) {
+            counts.put(s, 0L);
+        }
+        for (Object[] r : goals.countByStatus(companyId, categoryId, type)) {
+            counts.put((EGoalStatus) r[0], ((Number) r[1]).longValue());
+        }
+        return counts;
+    }
+
     @Transactional(readOnly = true)
     public GoalDto get(Long id) {
         return dto(require(id));

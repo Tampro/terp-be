@@ -22,6 +22,11 @@ r = await c('GET', '/accounting/goals/' + goal.id + '/tracking', null, t); const
 ck('tracking: 500 = 50 %, ON_TRACK, previous 300', r.s === 200 && num(tk.currentAmount) === 500 && num(tk.progressPercent) === 50 && tk.trackingStatus === 'ON_TRACK' && num(tk.previousAmount) === 300, r.s + ' ' + show({ c: tk?.currentAmount, p: tk?.progressPercent, e: tk?.elapsedPercent, s: tk?.trackingStatus, prev: tk?.previousAmount, proj: tk?.projectedCompletionDate }));
 ck('milestones: Half ACHIEVED, Missed PENDING + overdue', tk.milestones.some(m => m.name === 'Half' && m.status === 'ACHIEVED') && tk.milestones.some(m => m.name === 'Missed' && m.status === 'PENDING' && m.overdue), show(tk.milestones));
 r = await c('POST', '/accounting/goals', { name: 'Ledger goal', type: 'SAVINGS', targetAmount: 1000, startDate: ago(10), targetDate: ahead(90), accountId: acc('1281') || acc('112') }, t); const g2 = r.data;
+r = await c('GET', '/accounting/goals/status-counts', null, t); const sc = r.data || {};
+const tot = async st => (await c('GET', '/accounting/goals?size=1' + (st ? '&status=' + st : ''), null, t)).data?.totalElements;
+ck('status-counts match the filtered list totals', r.s === 200 && sc.DRAFT === await tot('DRAFT') && sc.ACTIVE === await tot('ACTIVE') && sc.COMPLETED === await tot('COMPLETED') && sc.DRAFT + sc.ACTIVE + sc.COMPLETED === await tot(), show(sc));
+r = await c('GET', '/accounting/goals/status-counts', null, B.t);
+ck('status-counts of company B do not see A', r.s === 200 && Object.values(r.data || {}).every(v => v === 0), show(r.data));
 await c('POST', '/accounting/goals/' + g2.id + '/activate', null, t);
 const gacc = accts.find(a => Number(a.id) === Number(g2.accountId))?.code ?? '112';
 await je(today, [L(gacc, 250, null), L('5111', null, 250)]);
