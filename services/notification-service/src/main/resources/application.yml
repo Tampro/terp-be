@@ -48,6 +48,9 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
+  # Retention (PO 2026-11-24): iam.company.anonymize → NotificationAnonymizer.
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.notification.retention}
   jobs:
     lock:
       enabled: ${ERP_JOBS_LOCK_ENABLED:true}
