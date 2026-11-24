@@ -9,9 +9,17 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.Optional;
 
 public interface LedgerSetupRepository extends JpaRepository<LedgerSetup, Long> {
-    /** INSERT IGNORE so two first uses in one company at once don't fail. */
+    /** Non-locking fast path: true once the company's chart is seeded (every call after the first). */
+    boolean existsByCompanyIdAndSeededTrue(Long companyId);
+
+    /**
+     * Creates the row if missing. ON DUPLICATE KEY UPDATE (not INSERT IGNORE) takes an exclusive lock on an existing
+     * row: INSERT IGNORE took a shared one, and two requests then deadlocked upgrading it in lockByCompanyId (MySQL
+     * 1213, seen with parallel reads 2026-11-24).
+     */
     @Modifying
-    @Query(value = "insert ignore into ledger_setup (company_id, seeded) values (:companyId, 0)", nativeQuery = true)
+    @Query(value = "insert into ledger_setup (company_id, seeded) values (:companyId, 0) "
+            + "on duplicate key update company_id = company_id", nativeQuery = true)
     void ensureRow(Long companyId);
 
     /** SELECT ... FOR UPDATE: a second first use waits for the seed, then sees seeded = true. */
