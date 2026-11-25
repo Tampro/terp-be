@@ -22,6 +22,7 @@ import com.terp.erp.employee.employee.EmployeeDtos.DocumentForm;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeCreateForm;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeDetail;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeListItem;
+import com.terp.erp.employee.employee.EmployeeDtos.MyEmployeeRef;
 import com.terp.erp.employee.employee.EmployeeDtos.Filter;
 import com.terp.erp.employee.employee.EmployeeDtos.ProfileForm;
 import com.terp.erp.employee.employee.EmployeeDtos.Ref;
@@ -141,6 +142,18 @@ public class EmployeeService {
         }
         return toDetail(employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(p.companyId(), p.userId())
                 .orElseThrow(() -> ApiException.notFound(EEmployeeError.EMP_001)));
+    }
+
+    /** The caller's own employee id, for "my …" features of other services that need no profile permission. */
+    @Transactional(readOnly = true)
+    public MyEmployeeRef myRef() {
+        com.terp.erp.security.ErpPrincipal p = CurrentUser.get();
+        if (p.companyId() == null || p.userId() == null) {
+            throw ApiException.forbidden(EEmployeeError.EMP_041);
+        }
+        Employee e = employees.findFirstByCompanyIdAndUserIdAndDeletedFalse(p.companyId(), p.userId())
+                .orElseThrow(() -> ApiException.notFound(EEmployeeError.EMP_001));
+        return new MyEmployeeRef(String.valueOf(e.getId()), String.valueOf(e.getCompanyId()), e.getFullName());
     }
 
     @Transactional(readOnly = true)
