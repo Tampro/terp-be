@@ -1,8 +1,12 @@
 # No database and no secret: everything is read from the other services with the caller's own token.
 server:
   port: ${REPORT_PORT:8090}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
   application:
     name: report-service
   messages:

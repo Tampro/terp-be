@@ -1,8 +1,12 @@
 # Every secret comes from the environment with no default (see .env.example); non-secret values have local defaults.
 server:
   port: ${IAM_PORT:8081}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
   application:
     name: iam-service
   datasource:

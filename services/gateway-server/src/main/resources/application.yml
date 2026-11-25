@@ -1,7 +1,11 @@
 server:
   port: ${GATEWAY_PORT:8080}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
   application:
     name: gateway-server
   security:
@@ -122,6 +126,13 @@ springdoc:
       - { name: meeting-service, url: /docs/meeting/v3/api-docs }
       - { name: document-service, url: /docs/document/v3/api-docs }
       - { name: report-service, url: /docs/report/v3/api-docs }
+      - { name: inventory-service, url: /docs/inventory/v3/api-docs }
+      - { name: commerce-service, url: /docs/commerce/v3/api-docs }
+      - { name: accounting-service, url: /docs/accounting/v3/api-docs }
+      - { name: crm-service, url: /docs/crm/v3/api-docs }
+      - { name: project-service, url: /docs/project/v3/api-docs }
+      - { name: support-service, url: /docs/support/v3/api-docs }
+      - { name: notification-service, url: /docs/notification/v3/api-docs }
 
 management:
   endpoints:
