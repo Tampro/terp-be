@@ -54,6 +54,7 @@ public class UserService {
     private final com.terp.erp.iam.email.EmailNotifier notifier;
     private final OutboxPublisher outbox;
     private final com.terp.erp.iam.saas.PlanSeatEnforcer seats;
+    private final org.springframework.beans.factory.ObjectProvider<KeycloakOrphanJob> orphans;
 
     @Transactional(readOnly = true)
     public Page<UserDto> search(Long requestedCompanyId, String keyword, Pageable pageable) {
@@ -163,8 +164,21 @@ public class UserService {
     /**
      * Compensation for a user created in Keycloak inside a transaction that then rolls back (a DB constraint, a
      * failure at commit, or a later step such as company sign-up). Runs after the rollback, on the same thread. If
-     * Keycloak is down too, the orphan stays: it cannot use ERP (AUTH_006) and is logged for manual removal.
+     * Keycloak is down too, the id goes to keycloak_orphan and {@link KeycloakOrphanJob} deletes it later; meanwhile
+     * the orphan cannot use ERP (AUTH_006).
      */
+    private void recordOrphan(String keycloakId) {
+        KeycloakOrphanJob job = orphans.getIfAvailable();
+        if (job == null) {
+            return;
+        }
+        try {
+            job.record(keycloakId);
+        } catch (RuntimeException ex) {
+            log.error("Keycloak orphan {} not queued: {} — remove it by hand", keycloakId, ex.getClass().getSimpleName());
+        }
+    }
+
     private void deleteInKeycloakOnRollback(String keycloakId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             return;
@@ -179,8 +193,9 @@ public class UserService {
                     keycloak.deleteUser(keycloakId);
                     log.info("User creation rolled back: Keycloak user {} deleted", keycloakId);
                 } catch (RuntimeException ex) {
-                    log.error("User creation rolled back but Keycloak user {} could not be deleted: {}", keycloakId,
-                            ex.getClass().getSimpleName());
+                    log.error("User creation rolled back but Keycloak user {} could not be deleted: {}; queued for "
+                            + "retry", keycloakId, ex.getClass().getSimpleName());
+                    recordOrphan(keycloakId);
                 }
             }
         });
