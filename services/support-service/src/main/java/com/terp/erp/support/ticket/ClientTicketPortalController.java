@@ -57,6 +57,16 @@ public class ClientTicketPortalController {
         return ApiMessageDto.ok(service.categories());
     }
 
+    @Operation(summary = "Custom ticket fields to fill",
+            description = "Active custom fields of my company in display order (same shape as the public portal's "
+                    + "ticketFields); send their values as customFields when raising a ticket — required ones are "
+                    + "checked (SUP_037).")
+    @PreAuthorize("@PermissionChecker.has('PORTAL_CLIENT')")
+    @GetMapping("/fields")
+    public ApiMessageDto<List<TicketFieldService.FieldDto>> fields() {
+        return ApiMessageDto.ok(service.fields());
+    }
+
     @Operation(summary = "One of my tickets", description = "With the conversation; staff replies carry no sender name.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_MINE))
     @PreAuthorize("@PermissionChecker.has('PORTAL_CLIENT')")

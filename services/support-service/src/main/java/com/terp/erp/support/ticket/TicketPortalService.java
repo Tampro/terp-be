@@ -80,6 +80,12 @@ public class TicketPortalService {
         return categories.listOf(companyId());
     }
 
+    /** Active custom fields of my company, so the form can send the required ones (else SUP_037). */
+    @Transactional(readOnly = true)
+    public List<TicketFieldService.FieldDto> fields() {
+        return fields.activeOf(companyId());
+    }
+
     @Transactional(readOnly = true)
     public PortalTicket get(Long id) {
         return view(requireMine(id));
