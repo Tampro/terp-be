@@ -37,10 +37,13 @@ public class AwardService {
     private final LifecycleSupport support;
     private final OutboxPublisher outbox;
 
-    /** certificate / photo are only filled on the details. */
+    /**
+     * certificate / photo (name, links) are only filled on the details — one media lookup per file; the lists carry
+     * certificateMediaId / photoMediaId so a row can show that a file exists and open it (like the warning list).
+     */
     public record AwardDto(String id, EmployeeRef employee, Ref awardType, LocalDate awardDate, String gift,
-                           String description, FileRef certificate, FileRef photo, Instant createdDate,
-                           Instant updatedDate) {
+                           String description, String certificateMediaId, FileRef certificate, String photoMediaId,
+                           FileRef photo, Instant createdDate, Instant updatedDate) {
     }
 
     public record AwardForm(
@@ -133,9 +136,13 @@ public class AwardService {
 
     private AwardDto dto(EmployeeAward a, EmployeeRef employee, String typeName, boolean withFiles) {
         return new AwardDto(a.getId().toString(), employee, new Ref(a.getAwardTypeId().toString(), typeName),
-                a.getAwardDate(), a.getGift(), a.getDescription(),
-                withFiles ? support.fileRef(a.getCertificateMediaId()) : null,
+                a.getAwardDate(), a.getGift(), a.getDescription(), idOf(a.getCertificateMediaId()),
+                withFiles ? support.fileRef(a.getCertificateMediaId()) : null, idOf(a.getPhotoMediaId()),
                 withFiles ? support.fileRef(a.getPhotoMediaId()) : null, a.getCreatedDate(), a.getUpdatedDate());
+    }
+
+    private static String idOf(Long id) {
+        return id == null ? null : id.toString();
     }
 
     private EmployeeAward require(Long id) {

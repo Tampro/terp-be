@@ -88,6 +88,12 @@ r = await c('GET', '/org/holidays/' + hol?.id, null, t); ck('holiday isPaid=fals
 // ---------- 5. documents
 const up = async (tok) => { const fd = new FormData(); fd.append('files', new Blob([Buffer.from('%PDF-1.4 test')], { type: 'application/pdf' }), 'test-policy.pdf'); const res = await fetch(G + '/media/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Accept-Language': 'en' }, body: fd }); const j = await res.json().catch(() => ({})); return { s: res.status, code: j.code, data: j.data }; };
 r = await up(t); const file = Array.isArray(r.data) ? r.data[0] : (r.data?.files?.[0] ?? r.data); ck('media upload', r.s === 200 && !!file?.id, r.s + ' ' + r.code + ' ' + JSON.stringify(r.data)?.slice(0, 150));
+// award list carries the certificate file id (FE column), the details the full file
+const atype = (await c('POST', '/org/award-types', { name: 'Test Award ' + x }, t)).data;
+r = await c('POST', '/lifecycle/awards', { employeeId: num(emp.id), awardTypeId: num(atype?.id), awardDate: today, certificateMediaId: num(file?.id) }, t); const award = r.data;
+ck('award with certificate → details carry the file', award?.certificate?.id === String(file?.id), sh(r));
+r = await c('GET', '/lifecycle/awards?employeeId=' + emp.id, null, t); const arow = r.data?.find?.(z => z.id === award?.id) ?? r.data?.content?.find?.(z => z.id === award?.id);
+ck('award list row carries certificateMediaId', arow?.certificateMediaId === String(file?.id), sh(r));
 const dcat = (await c('POST', '/document/categories', { name: 'Test Policies ' + x, status: 'ACTIVE' }, t)).data;
 const mkDoc = async (title) => c('POST', '/document/documents', { title, categoryId: num(dcat?.id), fileId: num(file?.id), effectiveDate: today, requiresAcknowledgment: false }, t);
 r = await mkDoc('Test Handbook'); const doc = r.data; ck('HR document → PENDING', doc?.status === 'PENDING', sh(r));
