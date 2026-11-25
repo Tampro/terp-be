@@ -1,8 +1,12 @@
 # Every secret comes from the environment with no default; non-secret values have local defaults.
 server:
   port: ${MEDIA_PORT:8082}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}
