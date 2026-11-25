@@ -9,6 +9,7 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuil
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.concurrent.Cancellable;
 import org.apache.hc.core5.util.Timeout;
 
 import java.io.IOException;
@@ -18,13 +19,20 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * HTTP client for URLs {@link UrlGuard} accepted, closing its DNS-rebinding window: a connection is opened only to
  * addresses this client's own DNS resolver returned and checked with {@link UrlGuard#isPublic} (every address must
  * be public, as in {@link UrlGuard#check}). The name is checked and used in the same lookup, while TLS still
  * verifies the certificate and SNI against the host name. Redirects, retries, cookies and system proxies are off.
- * Timeouts: connect, then {@code response} for the answer to start and between reads (no overall deadline).
+ * Timeouts: connect, then {@code response} for the answer to start and between reads, and an overall deadline of
+ * connect + response for the whole exchange — a server dripping one byte per read window would otherwise hold the
+ * calling thread for as long as it likes. Past the deadline the request is aborted and reported as TIMEOUT.
  */
 public class PinnedHttp {
     /** status null = no HTTP answer, failure TIMEOUT or CONNECTION_ERROR then; body only when it was asked for. */
@@ -35,16 +43,29 @@ public class PinnedHttp {
         }
     }
 
+    private static final ScheduledExecutorService DEADLINES = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "pinned-http-deadline");
+        t.setDaemon(true);
+        return t;
+    });
+
     private final CloseableHttpClient client;
+    private final Duration deadline;
 
     public PinnedHttp(Duration connect, Duration response, String userAgent) {
         this(connect, response, userAgent, InetAddress::getAllByName);
     }
 
     public PinnedHttp(Duration connect, Duration response, String userAgent, UrlGuard.HostResolver lookup) {
+        this(connect, response, connect.plus(response), userAgent, new PublicOnlyResolver(lookup));
+    }
+
+    /** Tests only: any resolver (a local test server is not public) and an explicit deadline. */
+    PinnedHttp(Duration connect, Duration response, Duration deadline, String userAgent, DnsResolver resolver) {
+        this.deadline = deadline;
         this.client = HttpClients.custom()
                 .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
-                        .setDnsResolver(new PublicOnlyResolver(lookup))
+                        .setDnsResolver(resolver)
                         .setDefaultConnectionConfig(ConnectionConfig.custom()
                                 .setConnectTimeout(Timeout.of(connect))
                                 .setSocketTimeout(Timeout.of(response)).build())
@@ -59,6 +80,13 @@ public class PinnedHttp {
 
     /** maxBody 0 = discard the body; otherwise read at most maxBody bytes (truncated = there was more). */
     public Exchange execute(ClassicHttpRequest request, int maxBody) {
+        AtomicBoolean expired = new AtomicBoolean();
+        ScheduledFuture<?> abort = request instanceof Cancellable c
+                ? DEADLINES.schedule(() -> {
+                    expired.set(true);
+                    c.cancel();
+                }, deadline.toMillis(), TimeUnit.MILLISECONDS)
+                : null;
         try {
             return client.execute(request, r -> {
                 HttpEntity e = r.getEntity();
@@ -79,7 +107,12 @@ public class PinnedHttp {
             // connect and socket timeouts are InterruptedIOExceptions in HttpClient 5
             return new Exchange(null, null, false, "TIMEOUT");
         } catch (IOException e) {
-            return new Exchange(null, null, false, "CONNECTION_ERROR");
+            // an abort mid-body surfaces as a closed socket, not an InterruptedIOException
+            return new Exchange(null, null, false, expired.get() ? "TIMEOUT" : "CONNECTION_ERROR");
+        } finally {
+            if (abort != null) {
+                abort.cancel(false);
+            }
         }
     }
 

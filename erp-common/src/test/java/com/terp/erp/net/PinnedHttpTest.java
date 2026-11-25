@@ -1,9 +1,15 @@
 package com.terp.erp.net;
 
+import com.sun.net.httpserver.HttpServer;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,5 +46,48 @@ class PinnedHttpTest {
         assertThat(x.status()).isNull();
         assertThat(x.failure()).isEqualTo("CONNECTION_ERROR");
         assertThat(lookups.get()).isEqualTo(2);
+    }
+
+    @Test
+    void aServerDrippingBytesIsCutOffAtTheOverallDeadline() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/slow", ex -> {
+            ex.sendResponseHeaders(200, 0);
+            try (OutputStream out = ex.getResponseBody()) {
+                for (int i = 0; i < 50; i++) { // 10 s in total, each byte well inside the 1 s read timeout
+                    out.write('x');
+                    out.flush();
+                    Thread.sleep(200);
+                }
+            } catch (IOException | InterruptedException ignored) {
+                // the client hung up — expected
+            }
+        });
+        server.start();
+        try {
+            DnsResolver loopback = new DnsResolver() {
+                @Override
+                public InetAddress[] resolve(String host) {
+                    return new InetAddress[]{InetAddress.getLoopbackAddress()};
+                }
+
+                @Override
+                public String resolveCanonicalHostname(String host) {
+                    return host;
+                }
+            };
+            PinnedHttp http = new PinnedHttp(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofMillis(1500),
+                    "test", loopback);
+            long t0 = System.nanoTime();
+            PinnedHttp.Exchange x = http.execute(
+                    new HttpGet("http://slow.example.test:" + server.getAddress().getPort() + "/slow"), 1024);
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+
+            assertThat(x.status()).isNull();
+            assertThat(x.failure()).isEqualTo("TIMEOUT");
+            assertThat(ms).isLessThan(4000);
+        } finally {
+            server.stop(0);
+        }
     }
 }
