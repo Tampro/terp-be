@@ -97,7 +97,11 @@ jobs:
         run: mvn -B -ntp -DskipTests package
 
       - name: Start ERP Stack
-        run: docker compose -p erp up -d --build --quiet-pull
+        run: |
+          # git does not record the executable bit for these here; without it the MySQL entrypoint sources the
+          # script instead of running it, and its `set -u` then breaks the entrypoint (MYSQL_ONETIME_PASSWORD)
+          chmod +x deploy/mysql/init/*.sh
+          docker compose -p erp up -d --build --quiet-pull
 
       - name: Wait For Services
         run: |
