@@ -94,6 +94,13 @@ r = await c('GET', '/portal/client/tickets/' + tAd?.id, null, C1.t); ck("C1 read
 r = await c('POST', '/portal/client/tickets/' + tkId + '/replies', { description: '<p>More info</p>' }, C1.t); ck('C1 replies', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
 await c('PUT', '/support/tickets/' + tkId + '/status', { status: 'CLOSED' }, t);
 r = await c('POST', '/portal/client/tickets/' + tkId + '/replies', { description: '<p>Again</p>' }, C1.t); ck('reply on a closed ticket → SUP_006', r.code === 'SUP_006', r.s + ' ' + r.code);
+// a required custom field: the client reads it from the portal and can still raise a ticket
+const tf = (await c('POST', '/support/ticket-fields', { label: 'Severity', type: 'SELECT', options: ['Low', 'High'], required: true, width: 6, order: 1, active: true }, t)).data;
+r = await c('GET', '/portal/client/tickets/fields', null, C1.t); ck('C1 lists the active ticket fields', r.s === 200 && r.data?.some(z => z.id === tf?.id && z.required && z.options?.includes('High')), r.s + ' ' + r.code + ' ' + show(r.data));
+r = await c('GET', '/portal/client/tickets/fields', null, V1.t); ck('vendor lists client ticket fields → 403', r.s === 403, r.s + ' ' + r.code);
+r = await c('POST', '/portal/client/tickets', { categoryId: Number(tcat.id), subject: 'No field', description: '<p>x</p>' }, C1.t); ck('raise without the required field → SUP_037', r.code === 'SUP_037', r.s + ' ' + r.code);
+r = await c('POST', '/portal/client/tickets', { categoryId: Number(tcat.id), subject: 'With field', description: '<p>x</p>', customFields: [{ fieldId: Number(tf?.id), value: 'High' }] }, C1.t); ck('raise with the required field', r.s === 200 && r.data?.customFields?.some(z => z.value === 'High'), r.s + ' ' + r.code + ' ' + r.msg + ' ' + show(r.data?.customFields));
+await c('PUT', '/support/ticket-fields/' + tf?.id, { label: 'Severity', type: 'SELECT', options: ['Low', 'High'], required: true, width: 6, order: 1, active: false }, t);
 r = await c('GET', '/support/tickets/' + tAd?.id, null, S1.t); ck("S1 reads a ticket that isn't mine → 404", r.s === 404, r.s + ' ' + r.code);
 // isolation
 r = await c('GET', '/portal/client/quotations', null, B.t); ck('company B admin on the client portal → 403 or 404', r.s === 403 || r.s === 404, r.s + ' ' + r.code);
