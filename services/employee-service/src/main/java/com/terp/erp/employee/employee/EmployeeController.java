@@ -29,6 +29,7 @@ import com.terp.erp.employee.employee.EmployeeDtos.DocumentForm;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeCreateForm;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeDetail;
 import com.terp.erp.employee.employee.EmployeeDtos.EmployeeListItem;
+import com.terp.erp.employee.employee.EmployeeDtos.MyEmployeeRef;
 import com.terp.erp.employee.employee.EmployeeDtos.Filter;
 import com.terp.erp.employee.employee.EmployeeDtos.LoginForm;
 import com.terp.erp.employee.employee.EmployeeDtos.OrgChart;
@@ -148,6 +149,19 @@ public class EmployeeController {
     @GetMapping("/org-chart")
     public ApiMessageDto<OrgChart> orgChart(@Parameter(description = COMPANY) @RequestParam(required = false) Long companyId) {
         return ApiMessageDto.ok(chart.chart(companyId));
+    }
+
+    @Operation(summary = "My employee id (identity only)",
+            description = "For every company user with a linked profile; no permission needed, like the other "
+                    + "\"my\" endpoints. Returns only id, company and name — the full profile is GET /employees/me "
+                    + "(EMPLOYEE_SELF). Used by other services, e.g. recruitment's /interviews/my.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "No company in the token, e.g. super admin (EMP_041)"),
+            @ApiResponse(responseCode = "404", description = "No employee profile linked to you (EMP_001)")})
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/me/ref")
+    public ApiMessageDto<MyEmployeeRef> myRef() {
+        return ApiMessageDto.ok(service.myRef());
     }
 
     @Operation(summary = "My own employee profile (same shape as GET /employees/{id})",

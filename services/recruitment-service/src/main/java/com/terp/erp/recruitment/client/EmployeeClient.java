@@ -44,9 +44,12 @@ public class EmployeeClient {
         return mapper.convertValue(data, Employee.class);
     }
 
-    /** The caller's own employee profile (GET /api/v1/employees/me, any company user); null when none is linked. */
+    /**
+     * The caller's own employee id (GET /api/v1/employees/me/ref): needs no permission, so a MANAGER without
+     * EMPLOYEE_SELF still finds their profile. Only id, companyId and fullName are filled; null when none is linked.
+     */
     public Employee me() {
-        JsonNode data = http.call(c -> c.get().uri("/api/v1/employees/me")).path("data");
+        JsonNode data = http.call(c -> c.get().uri("/api/v1/employees/me/ref")).path("data");
         return data.isMissingNode() || data.isNull() ? null : mapper.convertValue(data, Employee.class);
     }
 

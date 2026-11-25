@@ -9,7 +9,8 @@ const apply = async (slug, jobId, app) => { const fd = new FormData(); fd.append
 const br = (await c('POST', '/org/branches', { name: 'Rec Branch ' + x, city: 'Test City', status: 'ACTIVE' }, t)).data;
 const dep = (await c('POST', '/org/departments', { name: 'Rec Dept', branchId: num(br.id), status: 'ACTIVE' }, t)).data;
 const des = (await c('POST', '/org/designations', { name: 'Rec Dev', departmentId: num(dep.id), status: 'ACTIVE' }, t)).data;
-const emp = (await c('POST', '/employees', { email: 'rc.boss.' + x.toLowerCase() + '@example.com', password: pw(), profile: { fullName: 'Test Boss ' + x, gender: 'MALE', branchId: num(br.id), departmentId: num(dep.id), designationId: num(des.id), dateOfJoining: today, employmentType: 'FULL_TIME', status: 'ACTIVE' } }, t)).data;
+const bossEmail = 'rc.boss.' + x.toLowerCase() + '@example.com', bossPw = pw();
+const emp = (await c('POST', '/employees', { email: bossEmail, password: bossPw, profile: { fullName: 'Test Boss ' + x, gender: 'MALE', branchId: num(br.id), departmentId: num(dep.id), designationId: num(des.id), dateOfJoining: today, employmentType: 'FULL_TIME', status: 'ACTIVE' } }, t)).data;
 const eid = num(emp?.id ?? emp?.employee?.id); ck('interviewer employee', eid > 0, show(emp));
 // config
 const slug = 'rc-' + x.toLowerCase();
@@ -80,5 +81,15 @@ const eu = await c('POST', '/iam/users', { username: eun, email: eun + '@example
 await c('POST', '/auth/initial-password', { username: eun, currentPassword: eu.data?.temporaryPassword || ep, newPassword: ep2 });
 const et = (await c('POST', '/auth/login', { username: eun, password: ep2 })).data?.accessToken;
 r = await c('PUT', R + '/offers/' + off.id + '/approval', { approvalStatus: 'APPROVED' }, et); ck('employee approves offer → 403', r.s === 403, r.s + ' ' + r.code);
+// "my interviews" for a MANAGER (no EMPLOYEE_SELF): the profile lookup must not need that permission
+const mgrRole = roles.find(z => z.code === 'MANAGER'); const bossUser = (await c('GET', '/employees/' + eid, null, t)).data?.userId;
+r = await c('PUT', '/iam/users/' + bossUser + '/roles', { roleIds: [Number(mgrRole.id)] }, t); ck('interviewer → MANAGER only', r.s === 200, r.s + ' ' + r.code + ' ' + r.msg);
+let bl = await c('POST', '/auth/login', { username: bossEmail, password: bossPw });
+if (!bl.data?.accessToken) { const np = pw(); await c('POST', '/auth/initial-password', { username: bossEmail, currentPassword: bossPw, newPassword: np }); bl = await c('POST', '/auth/login', { username: bossEmail, password: np }); }
+const mt = bl.data?.accessToken; ck('MANAGER interviewer logs in', !!mt, bl.s + ' ' + bl.code + ' ' + bl.msg);
+r = await c('GET', '/employees/me', null, mt); ck('MANAGER full profile still needs EMPLOYEE_SELF → 403', r.s === 403, r.s + ' ' + r.code);
+r = await c('GET', '/employees/me/ref', null, mt); ck('MANAGER /employees/me/ref → own id only', r.s === 200 && r.data?.id === String(eid) && !('phone' in (r.data || {})), r.s + ' ' + r.code + ' ' + show(r.data));
+r = await c('GET', R + '/interviews/my?from=' + today, null, mt); ck('MANAGER /interviews/my lists the panel interview', r.s === 200 && r.data?.content?.some(z => z.id === iv.id), r.s + ' ' + r.code + ' ' + r.msg + ' ' + show(r.data));
+r = await c('GET', '/employees/me/ref', null, sa); ck('super admin /employees/me/ref → 403 EMP_041', r.s === 403 && r.code === 'EMP_041', r.s + ' ' + r.code);
 r = await c('GET', R + '/offers'); ck('no token → 401', r.s === 401, r.s);
 console.log(`\n${n - f}/${n} passed`);

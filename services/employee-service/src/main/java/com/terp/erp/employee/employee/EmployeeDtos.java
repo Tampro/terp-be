@@ -21,6 +21,10 @@ public final class EmployeeDtos {
 
     // ------------------------------------------------------------------ responses
 
+    /** Who the caller is as an employee: identity only, no profile data (that needs EMPLOYEE_SELF). */
+    public record MyEmployeeRef(String id, String companyId, String fullName) {
+    }
+
     public record Ref(String id, String name) {
     }
 
