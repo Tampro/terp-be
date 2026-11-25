@@ -15,6 +15,9 @@ mocked HTTP passed in each case:
 - The ERP stack is running: `docker compose -p erp up -d` (see the root `README.md` for the env vars).
 - The super admin's credentials are in `~/.terp-e2e/erp-superadmin.txt`, three lines: a label, the username and the
   password. This file stays **outside the repo**; the suites never contain a secret.
+  On a fresh stack (`down -v`, CI) `node e2e/bootstrap.mjs` creates it: it sets a random superadmin password in
+  place of the temporary one and saves it there. CI (`.github/workflows/ci.yml`, job `e2e`) boots the stack with
+  throwaway secrets and runs `hrm sales purchase acc sup seat` on every PR.
 - Node 20+ (uses `fetch`).
 
 ## Run
