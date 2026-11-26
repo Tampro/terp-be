@@ -168,5 +168,10 @@
     "prefix": "SEAT",
     "standalone": false,
     "description": "plan downgrade locks accounts over the user limit"
+  },
+  "store-items": {
+    "prefix": "SI",
+    "standalone": false,
+    "description": "store items: price and status per store"
   }
 }

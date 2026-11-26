@@ -32,7 +32,11 @@ public enum EInventoryError implements ErrorCode {
     INV_022("The source and destination warehouses must be different."),
     INV_023("The stock transfer does not exist."),
     INV_024("File {0} is not an image in your company media library."),
-    INV_025("The media service is unavailable. Please try again later.");
+    INV_025("The media service is unavailable. Please try again later."),
+    INV_026("This item is already set up for this store."),
+    INV_027("The store item does not exist."),
+    INV_028("Bulk row {0}: {1}"),
+    INV_029("At most {0} rows can be sent at once.");
 
     private final String message;
 }
