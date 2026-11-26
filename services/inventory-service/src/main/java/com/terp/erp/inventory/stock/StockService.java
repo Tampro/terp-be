@@ -8,6 +8,8 @@ import com.terp.erp.inventory.item.ItemRepository;
 import com.terp.erp.inventory.warehouse.Warehouse;
 import com.terp.erp.inventory.warehouse.WarehouseRepository;
 import com.terp.erp.inventory.warehouse.WarehouseService;
+import com.terp.erp.security.CurrentUser;
+import com.terp.erp.security.ErpPrincipal;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -150,15 +152,12 @@ public class StockService {
         }
         Map<Key, WarehouseStock> rows = new TreeMap<>(order);
         Map<Key, BigDecimal> next = new HashMap<>();
+        String by = CurrentUser.find().map(ErpPrincipal::keycloakId).orElse("system");
         for (Map.Entry<Key, BigDecimal> e : deltas.entrySet()) {
             Key k = e.getKey();
-            WarehouseStock s = stocks.lock(companyId, k.itemId(), k.warehouseId()).orElseGet(() -> {
-                WarehouseStock n = new WarehouseStock();
-                n.setCompanyId(companyId);
-                n.setItemId(k.itemId());
-                n.setWarehouseId(k.warehouseId());
-                return n;
-            });
+            // Row first, then lock it: never a locking read of a missing row (see WarehouseStockRepository.ensure).
+            stocks.ensure(companyId, k.itemId(), k.warehouseId(), by);
+            WarehouseStock s = stocks.lock(companyId, k.itemId(), k.warehouseId()).orElseThrow();
             BigDecimal qty = s.getQuantity().add(e.getValue());
             if (qty.signum() < 0) {
                 throw ApiException.badRequest(EInventoryError.INV_017, byId.get(k.itemId()).getSku(),
@@ -167,12 +166,7 @@ public class StockService {
             rows.put(k, s);
             next.put(k, qty);
         }
-        rows.forEach((k, s) -> {
-            s.setQuantity(next.get(k));
-            if (s.getId() == null) {
-                stocks.save(s);
-            }
-        });
+        rows.forEach((k, s) -> s.setQuantity(next.get(k)));
         movements.saveAll(changes.stream().map(c -> new StockMovement(companyId, c.item().getId(),
                 c.warehouse().getId(), c.quantity(), sourceType, sourceId)).toList());
     }

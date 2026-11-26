@@ -13,6 +13,7 @@ import com.terp.erp.inventory.warehouse.WarehouseService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
@@ -23,6 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,6 +77,19 @@ class StockServiceTest {
         assertThat(service.moves(null, form).applied()).isFalse();
         assertThat(mouseStock.getQuantity()).isEqualByComparingTo("3");
         verify(movements).saveAll(anyList()); // still the single first call
+    }
+
+    @Test
+    void rowIsEnsuredBeforeItIsLockedInKeyOrder() {
+        // A locking read of a missing row gap-locks and deadlocks parallel inserts: ensure must precede every lock.
+        when(movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(10L, "SALES_INVOICE", 42L)).thenReturn(List.of());
+        service.moves(null, form(new MoveLine(2L, 7L, BigDecimal.ONE), new MoveLine(1L, 7L, BigDecimal.ONE)));
+        InOrder o = inOrder(stocks);
+        o.verify(stocks).ensure(eq(10L), eq(1L), eq(7L), anyString());
+        o.verify(stocks).lock(10L, 1L, 7L);
+        o.verify(stocks).ensure(eq(10L), eq(2L), eq(7L), anyString());
+        o.verify(stocks).lock(10L, 2L, 7L);
+        verify(stocks, never()).save(any());
     }
 
     @Test
