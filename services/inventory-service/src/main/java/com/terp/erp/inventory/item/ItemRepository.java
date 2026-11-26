@@ -17,6 +17,9 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     Optional<Item> findByIdAndDeletedFalse(Long id);
 
+    /** Live items of the company with these SKUs (store-item bulk upsert). */
+    java.util.List<Item> findByCompanyIdAndSkuInAndDeletedFalse(Long companyId, java.util.Collection<String> skus);
+
     boolean existsByCompanyIdAndSkuIgnoreCaseAndDeletedFalseAndIdNot(Long companyId, String sku, Long id);
 
     boolean existsByCategoryIdAndDeletedFalse(Long categoryId);

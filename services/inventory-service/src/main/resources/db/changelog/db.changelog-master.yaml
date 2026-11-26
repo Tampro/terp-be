@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261122100000_item_image_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261123400000_outbox_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261127100000_store_item_changelog.mysql.sql
