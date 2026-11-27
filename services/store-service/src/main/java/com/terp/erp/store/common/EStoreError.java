@@ -14,7 +14,10 @@ public enum EStoreError implements ErrorCode {
     STO_004("The chosen warehouse does not exist in the company or is inactive."),
     STO_005("The order hours are invalid: the start must be before the end, in a valid time zone."),
     STO_006("The inventory service is unavailable. Please try again later."),
-    STO_007("Choose the company to act on.");
+    STO_007("Choose the company to act on."),
+    STO_008("The zone does not exist for this store."),
+    STO_009("The zone area is invalid: a GeoJSON Polygon with one ring of 3 to 500 points, without self-intersection."),
+    STO_010("No store delivers to this location.");
 
     private final String message;
 }

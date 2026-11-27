@@ -6,6 +6,7 @@ import com.terp.erp.store.client.InventoryClient;
 import com.terp.erp.store.common.EStoreError;
 import com.terp.erp.store.store.StoreService.OrderableDto;
 import com.terp.erp.store.store.StoreService.StoreForm;
+import com.terp.erp.store.zone.StoreZoneRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,8 @@ import static org.mockito.Mockito.when;
 class StoreServiceTest {
     private final StoreRepository stores = mock(StoreRepository.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
-    private final StoreService service = new StoreService(stores, inventory,
+    private final StoreZoneRepository zones = mock(StoreZoneRepository.class);
+    private final StoreService service = new StoreService(stores, inventory, zones,
             Clock.fixed(Instant.parse("2026-11-27T03:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach
@@ -143,6 +145,30 @@ class StoreServiceTest {
         assertThat(service.orderable(7L, null).orderableNow()).isTrue();
         s.setActive(false);
         assertThat(service.orderable(7L, Instant.parse("2026-11-27T03:00:00Z"))).isEqualTo(new OrderableDto(false, null));
+    }
+
+    @Test
+    void resolveWithoutZoneAnswersStoNotFound() {
+        when(zones.resolve(eq(10L), any(), any())).thenReturn(Optional.empty());
+        assertCode(() -> service.resolve(null, new BigDecimal("37.48"), new BigDecimal("126.89")), EStoreError.STO_010);
+    }
+
+    @Test
+    void resolveReturnsTheStoreEvenWhenClosed() {
+        Store s = store(7L, 10L);
+        s.setOrderStart(LocalTime.of(20, 0));
+        s.setOrderEnd(LocalTime.of(22, 0));
+        when(stores.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(s));
+        StoreZoneRepository.Hit hit = mock(StoreZoneRepository.Hit.class);
+        when(hit.getStoreId()).thenReturn(7L);
+        when(hit.getZoneId()).thenReturn(3L);
+        when(zones.resolve(eq(10L), any(), any())).thenReturn(Optional.of(hit));
+        // fixed clock 03:00Z = 12:00 KST → closed, opens 20:00 KST = 11:00Z
+        StoreService.ResolveDto r = service.resolve(null, new BigDecimal("37.48"), new BigDecimal("126.89"));
+        assertThat(r.store().id()).isEqualTo("7");
+        assertThat(r.zoneId()).isEqualTo("3");
+        assertThat(r.orderableNow()).isFalse();
+        assertThat(r.opensAt()).isEqualTo(Instant.parse("2026-11-27T11:00:00Z"));
     }
 
     private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, EStoreError code) {
