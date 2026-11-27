@@ -119,7 +119,7 @@ jobs:
         run: node e2e/bootstrap.mjs
 
       - name: E2E Suites
-        run: node e2e/run.mjs hrm sales purchase acc sup seat
+        run: node e2e/run.mjs hrm sales purchase acc sup seat stores
 
       - name: Stack Logs On Failure
         if: failure()
