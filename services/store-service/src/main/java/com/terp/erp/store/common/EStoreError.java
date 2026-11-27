@@ -17,7 +17,10 @@ public enum EStoreError implements ErrorCode {
     STO_007("Choose the company to act on."),
     STO_008("The zone does not exist for this store."),
     STO_009("The zone area is invalid: a GeoJSON Polygon with one ring of 3 to 500 points, without self-intersection."),
-    STO_010("No store delivers to this location.");
+    STO_010("No store delivers to this location."),
+    STO_011("This date is already a day-off of the store."),
+    STO_012("A day-off cannot be in the past."),
+    STO_013("The day-off does not exist for this store.");
 
     private final String message;
 }

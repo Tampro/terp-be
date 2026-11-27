@@ -7,6 +7,10 @@ import com.terp.erp.store.common.EStoreError;
 import com.terp.erp.store.store.StoreService.OrderableDto;
 import com.terp.erp.store.store.StoreService.StoreForm;
 import com.terp.erp.store.zone.StoreZoneRepository;
+import com.terp.erp.store.dayoff.StoreDayOffRepository;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +39,8 @@ class StoreServiceTest {
     private final StoreRepository stores = mock(StoreRepository.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
     private final StoreZoneRepository zones = mock(StoreZoneRepository.class);
-    private final StoreService service = new StoreService(stores, inventory, zones,
+    private final StoreDayOffRepository dayOffs = mock(StoreDayOffRepository.class);
+    private final StoreService service = new StoreService(stores, inventory, zones, dayOffs,
             Clock.fixed(Instant.parse("2026-11-27T03:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach
@@ -169,6 +174,57 @@ class StoreServiceTest {
         assertThat(r.zoneId()).isEqualTo("3");
         assertThat(r.orderableNow()).isFalse();
         assertThat(r.opensAt()).isEqualTo(Instant.parse("2026-11-27T11:00:00Z"));
+    }
+
+    @Test
+    void dayOffsCloseTheStoreAndOpensAtSkipsThem() {
+        Store s = store(7L, 10L); // 10:00–22:00 KST
+        when(stores.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(s));
+        LocalDate d28 = LocalDate.of(2026, 11, 28), d29 = d28.plusDays(1);
+        when(dayOffs.findOffDates(eq(7L), any(), any())).thenReturn(List.of(d28));
+        // 12:00 KST on a day-off → opens 10:00 KST on the 29th
+        assertThat(service.orderable(7L, Instant.parse("2026-11-28T03:00:00Z")))
+                .isEqualTo(new OrderableDto(false, Instant.parse("2026-11-29T01:00:00Z")));
+        // 23:00 KST on the 27th, the 28th off → the 29th
+        assertThat(service.orderable(7L, Instant.parse("2026-11-27T14:00:00Z")))
+                .isEqualTo(new OrderableDto(false, Instant.parse("2026-11-29T01:00:00Z")));
+        // 00:00 KST on the 28th (15:00Z on the 27th) is already the day-off
+        assertThat(service.orderable(7L, Instant.parse("2026-11-27T15:00:00Z")).opensAt())
+                .isEqualTo(Instant.parse("2026-11-29T01:00:00Z"));
+        // two consecutive day-offs
+        when(dayOffs.findOffDates(eq(7L), any(), any())).thenReturn(List.of(d28, d29));
+        assertThat(service.orderable(7L, Instant.parse("2026-11-28T03:00:00Z")).opensAt())
+                .isEqualTo(Instant.parse("2026-11-30T01:00:00Z"));
+        // the day before, inside the window, still open
+        assertThat(service.orderable(7L, Instant.parse("2026-11-27T03:00:00Z")).orderableNow()).isTrue();
+    }
+
+    @Test
+    void noOpeningWithinTheCapGivesNull() {
+        LocalDate today = LocalDate.of(2026, 11, 28);
+        Set<LocalDate> all = new java.util.HashSet<>();
+        for (int i = 0; i <= StoreService.SEARCH_DAYS; i++) {
+            all.add(today.plusDays(i));
+        }
+        assertThat(StoreService.nextOpening(today, LocalTime.NOON, LocalTime.of(10, 0), LocalTime.of(22, 0), all)).isEmpty();
+        all.remove(today.plusDays(StoreService.SEARCH_DAYS));
+        assertThat(StoreService.nextOpening(today, LocalTime.NOON, LocalTime.of(10, 0), LocalTime.of(22, 0), all))
+                .contains(today.plusDays(StoreService.SEARCH_DAYS));
+    }
+
+    @Test
+    void resolveOnADayOffStillReturnsTheStore() {
+        Store s = store(7L, 10L);
+        when(stores.findByIdAndDeletedFalse(7L)).thenReturn(Optional.of(s));
+        StoreZoneRepository.Hit hit = mock(StoreZoneRepository.Hit.class);
+        when(hit.getStoreId()).thenReturn(7L);
+        when(zones.resolve(eq(10L), any(), any())).thenReturn(Optional.of(hit));
+        // fixed clock 2026-11-27T03:00Z = 12:00 KST, the 27th is off
+        when(dayOffs.findOffDates(eq(7L), any(), any())).thenReturn(List.of(LocalDate.of(2026, 11, 27)));
+        StoreService.ResolveDto r = service.resolve(null, new BigDecimal("37.48"), new BigDecimal("126.89"));
+        assertThat(r.store().id()).isEqualTo("7");
+        assertThat(r.orderableNow()).isFalse();
+        assertThat(r.opensAt()).isEqualTo(Instant.parse("2026-11-28T01:00:00Z"));
     }
 
     private static void assertCode(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, EStoreError code) {

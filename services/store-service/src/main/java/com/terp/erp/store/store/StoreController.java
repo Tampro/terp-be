@@ -68,7 +68,7 @@ public class StoreController {
 
     @Operation(summary = "Can the store take an order at this instant?", description = "Window [orderStart, orderEnd) "
             + "in the store's time zone; at = UTC instant, default now. opensAt = next opening (UTC) when closed by the "
-            + "hour, null when open or inactive. Day-offs are not applied yet.")
+            + "hour or day-offs (skipping day-offs, up to 366 days), null when open, inactive or none found.")
     @ApiResponses(@ApiResponse(responseCode = "404", description = NOT_FOUND))
     @PreAuthorize("@PermissionChecker.has('STORE_VIEW')")
     @GetMapping("/{id}/orderable")
