@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.store.common.EStoreError;
 import com.terp.erp.store.config.StoreProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ public class InventoryClient {
     private final CallerHttp http;
     private final ObjectMapper mapper;
 
+    @Autowired
     public InventoryClient(StoreProperties props, ObjectMapper mapper) {
         this(new CallerHttp(props.inventoryServiceUrl(), mapper, EStoreError.STO_006, "inventory-service"), mapper);
     }

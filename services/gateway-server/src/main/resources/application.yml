@@ -108,6 +108,10 @@ spring:
               uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8097}
               predicates:
                 - Path=/api/v1/notifications/**
+            - id: store-service
+              uri: ${STORE_SERVICE_URL:http://localhost:8098}
+              predicates:
+                - Path=/api/v1/store/**
 
 springdoc:
   api-docs:
@@ -133,6 +137,7 @@ springdoc:
       - { name: project-service, url: /docs/project/v3/api-docs }
       - { name: support-service, url: /docs/support/v3/api-docs }
       - { name: notification-service, url: /docs/notification/v3/api-docs }
+      - { name: store-service, url: /docs/store/v3/api-docs }
 
 management:
   endpoints:

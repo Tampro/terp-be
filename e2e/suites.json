@@ -173,5 +173,10 @@
     "prefix": "SI",
     "standalone": false,
     "description": "store items: price and status per store"
+  },
+  "stores": {
+    "prefix": "ST",
+    "standalone": false,
+    "description": "stores: warehouse link, order hours, delivery fees"
   }
 }
