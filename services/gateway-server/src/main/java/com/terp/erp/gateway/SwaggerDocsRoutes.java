@@ -39,7 +39,8 @@ public class SwaggerDocsRoutes {
             new Docs("crm", "CRM_SERVICE_URL", 8094),
             new Docs("project", "PROJECT_SERVICE_URL", 8095),
             new Docs("support", "SUPPORT_SERVICE_URL", 8096),
-            new Docs("notification", "NOTIFICATION_SERVICE_URL", 8097));
+            new Docs("notification", "NOTIFICATION_SERVICE_URL", 8097),
+            new Docs("store", "STORE_SERVICE_URL", 8098));
 
     @Bean
     RouteLocator swaggerDocsRouteLocator(RouteLocatorBuilder builder, Environment env) {

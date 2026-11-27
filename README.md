@@ -135,6 +135,8 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   DOCUMENT_SERVICE_CLIENT_SECRET        (secret of client erp-document-service; realm import and document-service)
 #   NOTIFICATION_DB_PASSWORD             (notification-service, database erp_notification / user erp_notification;
 #                                          same note for an existing MySQL volume)
+#   STORE_DB_PASSWORD                    (store-service, database erp_store / user erp_store; an existing MySQL
+#                                          volume needs the database and user created by hand)
 #   NOTIFICATION_SERVICE_CLIENT_SECRET    (secret of client erp-notification-service; realm import and
 #                                          notification-service — an existing realm needs the client added by hand)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers

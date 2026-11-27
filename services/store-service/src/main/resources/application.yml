@@ -1,0 +1,53 @@
+# Every secret comes from the environment with no default; non-secret values have local defaults.
+server:
+  port: ${STORE_PORT:8098}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
+  application:
+    name: store-service
+  datasource:
+    url: ${STORE_DB_URL:jdbc:mysql://localhost:3306/erp_store?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${STORE_DB_USERNAME}
+    password: ${STORE_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+# No RabbitMQ: no outbox, no retention queue (a store holds no personal data) — erp-common skips those beans.
+erp:
+  store:
+    iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

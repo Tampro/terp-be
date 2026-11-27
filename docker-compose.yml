@@ -44,6 +44,8 @@ services:
       SUPPORT_DB_PASSWORD: ${SUPPORT_DB_PASSWORD:?set in .env}
       NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:-erp_notification}
       NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set in .env}
+      STORE_DB_USERNAME: ${STORE_DB_USERNAME:-erp_store}
+      STORE_DB_PASSWORD: ${STORE_DB_PASSWORD:?set in .env}
     ports:
       - "13316:3306"
     volumes:
@@ -637,6 +639,27 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # Stores of a chain: the warehouse each store sells from, order hours, delivery fees.
+  store-service:
+    build: ./services/store-service
+    mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
+    environment:
+      STORE_DB_URL: jdbc:mysql://mysql:3306/erp_store?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      STORE_DB_USERNAME: ${STORE_DB_USERNAME:-erp_store}
+      STORE_DB_PASSWORD: ${STORE_DB_PASSWORD:?set in .env}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
+      IAM_SERVICE_URL: http://iam-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8091
+    ports:
+      - "18098:8098"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
   gateway-server:
     build: ./services/gateway-server
     mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
@@ -660,6 +683,7 @@ services:
       PROJECT_SERVICE_URL: http://project-service:8095
       SUPPORT_SERVICE_URL: http://support-service:8096
       NOTIFICATION_SERVICE_URL: http://notification-service:8097
+      STORE_SERVICE_URL: http://store-service:8098
     ports:
       - "18080:8080"
     depends_on:
