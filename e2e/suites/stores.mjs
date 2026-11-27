@@ -36,4 +36,44 @@ await c('POST', '/auth/initial-password', { username: eun, currentPassword: eu.d
 const et = (await c('POST', '/auth/login', { username: eun, password: ep2 })).data?.accessToken;
 r = await c('POST', '/store/stores', form('S9', w2.id), et); ck('employee create → 403', r.s === 403, r.s + ' ' + r.code);
 r = await c('GET', '/store/stores'); ck('no token → 401', r.s === 401, r.s);
+// ---- zones + resolve (store-zones spec)
+const sq = (lon0, lat0, lon1, lat1, close = true) => ({ type: 'Polygon', coordinates: [[[lon0, lat0], [lon1, lat0], [lon1, lat1], [lon0, lat1], ...(close ? [[lon0, lat0]] : [])]] });
+const zw1 = await mkWh('Zone WH One', t), zw2 = await mkWh('Zone WH Two', t), zwB = await mkWh('Zone WH B', B.t);
+const z1 = (await c('POST', '/store/stores', form('Z1', zw1.id, { lat: 37.48, lon: 126.89, orderStart: '00:00', orderEnd: '00:01' }), t)).data;
+const z2 = (await c('POST', '/store/stores', form('Z2', zw2.id, { lat: 37.48, lon: 126.905 }), t)).data;
+const zB = (await c('POST', '/store/stores', form('ZB', zwB.id, { lat: 37.70, lon: 126.89 }), B.t)).data;
+ck('zone setup', z1?.id && z2?.id && zB?.id, [z1?.id, z2?.id, zB?.id].join(','));
+r = await c('POST', `/store/stores/${z1.id}/zones`, { name: 'Z1 area', area: sq(126.88, 37.47, 126.90, 37.49, false) }, t);
+const za = r.data; ck('zone created, open ring closed', r.s === 200 && za.active === true && za.area.coordinates[0].length === 5 && JSON.stringify(za.area.coordinates[0][4]) === JSON.stringify(za.area.coordinates[0][0]), r.s + ' ' + r.code + ' ' + JSON.stringify(za?.area));
+const zb = (await c('POST', `/store/stores/${z2.id}/zones`, { name: 'Z2 area', area: sq(126.89, 37.47, 126.91, 37.49) }, t)).data;
+await c('POST', `/store/stores/${zB.id}/zones`, { name: 'B area', area: sq(126.88, 37.69, 126.90, 37.71) }, B.t);
+for (const [label, area] of [['bow-tie', { type: 'Polygon', coordinates: [[[126.88, 37.47], [126.90, 37.49], [126.90, 37.47], [126.88, 37.49], [126.88, 37.47]]] }],
+  ['2 vertices', { type: 'Polygon', coordinates: [[[126.88, 37.47], [126.90, 37.49]]] }],
+  ['hole', { type: 'Polygon', coordinates: [sq(126.88, 37.47, 126.90, 37.49).coordinates[0], sq(126.885, 37.475, 126.895, 37.485).coordinates[0]] }],
+  ['lat 91', sq(126.88, 37.47, 126.90, 91)]]) {
+  r = await c('POST', `/store/stores/${z1.id}/zones`, { name: 'bad', area }, t); ck(`${label} → STO_009`, r.s === 400 && r.code === 'STO_009', r.s + ' ' + r.code);
+}
+r = await c('POST', `/store/stores/${z1.id}/zones`, { name: '', area: sq(126.88, 37.47, 126.90, 37.49) }, t); ck('blank name → COMMON_001', r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
+r = await c('GET', `/store/stores/${z1.id}/zones`, null, t); ck('list zones', r.s === 200 && r.data.length === 1 && r.data[0].id === za.id, r.s + ' ' + r.data?.length);
+r = await c('PUT', `/store/stores/${z1.id}/zones/${zb.id}`, { name: 'x', area: sq(126.88, 37.47, 126.90, 37.49) }, t); ck('zone of another store → STO_008', r.s === 404 && r.code === 'STO_008', r.s + ' ' + r.code);
+r = await c('GET', `/store/stores/${z1.id}/zones`, null, B.t); ck('company B lists A zones → STO_001', r.s === 404 && r.code === 'STO_001', r.s + ' ' + r.code);
+r = await c('DELETE', `/store/stores/${zB.id}/zones/${za.id}`, null, B.t); ck('company B deletes A zone under its store → STO_008', r.s === 404 && r.code === 'STO_008', r.s + ' ' + r.code);
+r = await c('POST', `/store/stores/${z1.id}/zones`, { name: 'emp', area: sq(126.88, 37.47, 126.90, 37.49) }, et); ck('employee add zone → 403', r.s === 403, r.s + ' ' + r.code);
+
+const res = (lat, lon, tok = t) => c('GET', `/store/resolve?lat=${lat}&lon=${lon}`, null, tok);
+r = await res(37.475, 126.885); ck('resolve inside → Z1, closed hour still returned', r.s === 200 && r.data.store.id === z1.id && r.data.zoneId === za.id && r.data.orderableNow === false && !!r.data.opensAt, r.s + ' ' + r.code + ' ' + JSON.stringify(r.data && { s: r.data.store?.id, o: r.data.orderableNow, a: r.data.opensAt }));
+r = await res(37.48, 126.88); ck('resolve on the (meridian) edge → Z1', r.s === 200 && r.data.store.id === z1.id, r.s + ' ' + r.code + ' ' + r.data?.store?.id);
+r = await res(37.48, 126.895); ck('overlap → nearest Z1', r.s === 200 && r.data.store.id === z1.id, r.s + ' ' + r.data?.store?.id);
+r = await res(37.48, 126.905); ck('overlap → nearest Z2', r.s === 200 && r.data.store.id === z2.id, r.s + ' ' + r.data?.store?.id);
+r = await res(37.60, 126.89); ck('outside → STO_010', r.s === 404 && r.code === 'STO_010', r.s + ' ' + r.code);
+r = await res(37.70, 126.89); ck('company B zone never returned to A', r.s === 404 && r.code === 'STO_010', r.s + ' ' + r.code);
+r = await res(37.70, 126.89, B.t); ck('company B resolves its own store', r.s === 200 && r.data.store.id === zB.id, r.s + ' ' + r.data?.store?.id);
+r = await res(91, 126.89); ck('lat 91 → COMMON_001', r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
+r = await c('PUT', `/store/stores/${z1.id}/zones/${za.id}`, { name: 'Z1 off', area: sq(126.88, 37.47, 126.90, 37.49), active: false }, t);
+ck('PUT zone (full replacement, inactive)', r.s === 200 && r.data.name === 'Z1 off' && r.data.active === false, r.s + ' ' + r.code);
+r = await res(37.48, 126.895); ck('inactive zone ignored → Z2', r.s === 200 && r.data.store.id === z2.id, r.s + ' ' + r.data?.store?.id);
+await c('PUT', '/store/stores/' + z2.id, form('Z2', zw2.id, { lat: 37.48, lon: 126.905, active: false }), t);
+r = await res(37.48, 126.895); ck('inactive store ignored → STO_010', r.s === 404 && r.code === 'STO_010', r.s + ' ' + r.code);
+r = await c('DELETE', `/store/stores/${z1.id}/zones/${za.id}`, null, t); ck('delete zone', r.s === 200, r.s + ' ' + r.code);
+r = await c('GET', `/store/stores/${z1.id}/zones`, null, t); ck('deleted zone gone (hard)', r.s === 200 && r.data.length === 0, r.s + ' ' + r.data?.length);
 console.log(`\n${n - f}/${n} passed`);

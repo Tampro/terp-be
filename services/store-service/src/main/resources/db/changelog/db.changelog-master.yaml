@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/changes/20261127200000_store_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261127210000_store_zone_changelog.mysql.sql

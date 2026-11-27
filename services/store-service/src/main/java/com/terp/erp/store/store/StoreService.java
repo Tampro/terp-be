@@ -5,6 +5,7 @@ import com.terp.erp.security.TenantGuard;
 import com.terp.erp.store.client.InventoryClient;
 import com.terp.erp.store.common.EStoreError;
 import com.terp.erp.store.common.Texts;
+import com.terp.erp.store.zone.StoreZoneRepository;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -37,6 +38,7 @@ public class StoreService {
 
     private final StoreRepository stores;
     private final InventoryClient inventory;
+    private final StoreZoneRepository zones;
     private final Clock clock;
 
     public record StoreForm(
@@ -71,6 +73,10 @@ public class StoreService {
                            BigDecimal deliveryFee, BigDecimal freeDeliveryThreshold, BigDecimal minOrderAmount,
                            BigDecimal firstOrderMinAmount, BigDecimal bagFee, boolean active, Instant createdDate,
                            Instant updatedDate) {
+    }
+
+    /** The store delivering to a point, with whether it takes an order now. */
+    public record ResolveDto(StoreDto store, String zoneId, boolean orderableNow, Instant opensAt) {
     }
 
     /** opensAt: the next start of the window (UTC) when closed only because of the hour; null when open or inactive. */
@@ -111,14 +117,17 @@ public class StoreService {
         s.setDeletedKey(s.getId());
     }
 
-    /** [orderStart, orderEnd) in the store's zone; day-offs come with the store-zones spec. */
+    /** [orderStart, orderEnd) in the store's zone; day-offs come with the store-day-offs spec. */
     @Transactional(readOnly = true)
     public OrderableDto orderable(Long id, Instant at) {
-        Store s = require(id);
+        return orderable(require(id), at == null ? Instant.now(clock) : at);
+    }
+
+    private static OrderableDto orderable(Store s, Instant at) {
         if (!s.isActive()) {
             return new OrderableDto(false, null);
         }
-        ZonedDateTime local = (at == null ? Instant.now(clock) : at).atZone(ZoneId.of(s.getTimeZone()));
+        ZonedDateTime local = at.atZone(ZoneId.of(s.getTimeZone()));
         LocalTime t = local.toLocalTime();
         if (!t.isBefore(s.getOrderStart()) && t.isBefore(s.getOrderEnd())) {
             return new OrderableDto(true, null);
@@ -131,6 +140,25 @@ public class StoreService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** For the zone pages: the live store of the caller's company, else 404 STO_001. */
+    public Store requireStore(Long id) {
+        return require(id);
+    }
+
+    /**
+     * The store delivering to (lat, lon): an active zone of a live, active store of the company contains the point;
+     * nearest store wins. Returned also when closed by the hour (orderableNow=false), so the catalogue stays readable.
+     */
+    @Transactional(readOnly = true)
+    public ResolveDto resolve(Long requestedCompanyId, BigDecimal lat, BigDecimal lon) {
+        Long companyId = Texts.company(requestedCompanyId);
+        StoreZoneRepository.Hit hit = zones.resolve(companyId, lat, lon)
+                .orElseThrow(() -> ApiException.notFound(EStoreError.STO_010));
+        Store s = require(hit.getStoreId());
+        OrderableDto o = orderable(s, Instant.now(clock));
+        return new ResolveDto(dto(s), Texts.id(hit.getZoneId()), o.orderableNow(), o.opensAt());
+    }
 
     /** By-id access: another company's store answers 404 STO_001. */
     private Store require(Long id) {
