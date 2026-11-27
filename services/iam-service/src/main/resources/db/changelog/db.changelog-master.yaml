@@ -151,3 +151,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261125300000_company_finance_retention_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261125600000_keycloak_orphan_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261127200100_store_permission_init_data.mysql.sql
