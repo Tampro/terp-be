@@ -35,7 +35,7 @@ public class ResolveController {
     @Operation(summary = "Which store delivers to this point?", description = "Candidates: live, active stores of the "
             + "company with an active zone containing the point (an edge counts as inside). Several: the store nearest "
             + "to the point by its own coordinates (stores without coordinates last, then the smaller id). A store closed "
-            + "by the hour is still returned, with orderableNow=false and opensAt.")
+            + "by the hour or on a day-off is still returned, with orderableNow=false and opensAt.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "lat/lon missing or out of range (COMMON_001), "
             + "super admin without companyId (STO_007)"),
             @ApiResponse(responseCode = "404", description = "No store delivers to this point (STO_010)")})

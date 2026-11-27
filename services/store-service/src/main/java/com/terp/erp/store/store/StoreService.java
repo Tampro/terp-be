@@ -4,6 +4,7 @@ import com.terp.erp.exception.ApiException;
 import com.terp.erp.security.TenantGuard;
 import com.terp.erp.store.client.InventoryClient;
 import com.terp.erp.store.common.EStoreError;
+import com.terp.erp.store.dayoff.StoreDayOffRepository;
 import com.terp.erp.store.common.Texts;
 import com.terp.erp.store.zone.StoreZoneRepository;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -24,10 +25,14 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 /** Stores of a chain: the warehouse each sells from, one daily order window in its own time zone, delivery fees. */
 @Service
@@ -35,10 +40,13 @@ import java.util.Objects;
 public class StoreService {
     // TODO(assumption): the chain's stores are in Korea (Homeplus Express); a store of another country names its zone.
     public static final String DEFAULT_ZONE = "Asia/Seoul";
+    /** How far opensAt looks past day-offs (user decision 2026-11-28). */
+    static final int SEARCH_DAYS = 366;
 
     private final StoreRepository stores;
     private final InventoryClient inventory;
     private final StoreZoneRepository zones;
+    private final StoreDayOffRepository dayOffs;
     private final Clock clock;
 
     public record StoreForm(
@@ -79,7 +87,7 @@ public class StoreService {
     public record ResolveDto(StoreDto store, String zoneId, boolean orderableNow, Instant opensAt) {
     }
 
-    /** opensAt: the next start of the window (UTC) when closed only because of the hour; null when open or inactive. */
+    /** opensAt: the next start of the window (UTC) after the hour and day-offs; null when open, inactive or no opening within 366 days. */
     public record OrderableDto(boolean orderableNow, Instant opensAt) {
     }
 
@@ -117,26 +125,39 @@ public class StoreService {
         s.setDeletedKey(s.getId());
     }
 
-    /** [orderStart, orderEnd) in the store's zone; day-offs come with the store-day-offs spec. */
+    /** Not a day-off and [orderStart, orderEnd) in the store's zone. */
     @Transactional(readOnly = true)
     public OrderableDto orderable(Long id, Instant at) {
         return orderable(require(id), at == null ? Instant.now(clock) : at);
     }
 
-    private static OrderableDto orderable(Store s, Instant at) {
+    private OrderableDto orderable(Store s, Instant at) {
         if (!s.isActive()) {
             return new OrderableDto(false, null);
         }
-        ZonedDateTime local = at.atZone(ZoneId.of(s.getTimeZone()));
-        LocalTime t = local.toLocalTime();
-        if (!t.isBefore(s.getOrderStart()) && t.isBefore(s.getOrderEnd())) {
+        ZoneId zone = ZoneId.of(s.getTimeZone());
+        ZonedDateTime local = at.atZone(zone);
+        LocalDate today = local.toLocalDate();
+        // One query for the whole search (NFR-1): the day-offs from today up to the cap.
+        Set<LocalDate> offs = new HashSet<>(dayOffs.findOffDates(s.getId(), today, today.plusDays(SEARCH_DAYS + 1)));
+        Optional<LocalDate> next = nextOpening(today, local.toLocalTime(), s.getOrderStart(), s.getOrderEnd(), offs);
+        if (next.isPresent() && next.get().equals(today) && !local.toLocalTime().isBefore(s.getOrderStart())) {
             return new OrderableDto(true, null);
         }
-        ZonedDateTime next = local.with(s.getOrderStart()).withNano(0);
-        if (!t.isBefore(s.getOrderStart())) {
-            next = next.plusDays(1);
+        return new OrderableDto(false, next.map(d -> d.atTime(s.getOrderStart()).atZone(zone).toInstant()).orElse(null));
+    }
+
+    /**
+     * The date whose window is open now (today, when inside the window) or opens next, skipping day-offs, at most
+     * SEARCH_DAYS ahead; empty when every date up to the cap is a day-off.
+     */
+    static Optional<LocalDate> nextOpening(LocalDate today, LocalTime now, LocalTime start, LocalTime end,
+                                           Set<LocalDate> offs) {
+        LocalDate d = offs.contains(today) || !now.isBefore(end) ? today.plusDays(1) : today;
+        while (offs.contains(d)) {
+            d = d.plusDays(1);
         }
-        return new OrderableDto(false, next.toInstant());
+        return d.isAfter(today.plusDays(SEARCH_DAYS)) ? Optional.empty() : Optional.of(d);
     }
 
     // ------------------------------------------------------------------ helpers
