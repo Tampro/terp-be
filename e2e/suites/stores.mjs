@@ -105,4 +105,23 @@ r = await c('DELETE', dOff('/' + off2.id), null, t); ck('delete tomorrow', r.s =
 r = await c('DELETE', dOff('/' + off2.id), null, t); ck('deleted again → STO_013 (hard delete)', r.s === 404 && r.code === 'STO_013', r.s + ' ' + r.code);
 r = await c('GET', `/store/stores/${d1.id}/orderable`, null, t);
 ck('without day-offs: open now or opens by tomorrow', r.s === 200 && (r.data.orderableNow === true || r.data.opensAt <= dTomorrow + 'T01:00:00Z'), r.s + ' ' + JSON.stringify(r.data));
+// ---- shop setting (shop-setting spec)
+const shopA = 'sh-a-' + x.toLowerCase(), shopRace = 'sh-race-' + x.toLowerCase();
+r = await c('GET', '/store/shop-setting', null, t); ck('shop default (never saved)', r.s === 200 && r.data.slug === null && r.data.enabled === false && r.data.companyId === String(A.id), r.s + ' ' + JSON.stringify(r.data));
+r = await c('PUT', '/store/shop-setting', { slug: shopA, enabled: true }, t); ck('A saves its shop', r.s === 200 && r.data.slug === shopA && r.data.enabled === true, r.s + ' ' + r.code);
+r = await c('GET', '/store/shop-setting', null, t); ck('GET echoes the saved shop', r.s === 200 && r.data.slug === shopA && r.data.enabled === true, r.s + ' ' + JSON.stringify(r.data));
+r = await c('PUT', '/store/shop-setting', { slug: '  ' + shopA.toUpperCase() + ' ', enabled: false }, t); ck('upper case stored lower, full replacement', r.s === 200 && r.data.slug === shopA && r.data.enabled === false, r.s + ' ' + JSON.stringify(r.data));
+r = await c('PUT', '/store/shop-setting', { slug: shopA, enabled: true }, t); ck('A re-saves its own slug', r.s === 200, r.s + ' ' + r.code);
+r = await c('PUT', '/store/shop-setting', { slug: shopA, enabled: true }, B.t); ck("B takes A's slug → STO_014", r.s === 400 && r.code === 'STO_014', r.s + ' ' + r.code);
+r = await c('PUT', '/store/shop-setting', { slug: 'admin', enabled: true }, t); ck('reserved → STO_015', r.s === 400 && r.code === 'STO_015', r.s + ' ' + r.code);
+for (const bad of ['-bad', 'ab', 'a'.repeat(41), 'a_b']) {
+  r = await c('PUT', '/store/shop-setting', { slug: bad, enabled: true }, t); ck(`slug '${bad.length > 10 ? '41 chars' : bad}' → COMMON_001`, r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
+}
+r = await c('PUT', '/store/shop-setting', { slug: shopA }, t); ck('enabled missing → COMMON_001', r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
+r = await c('PUT', '/store/shop-setting', { slug: 'emp-' + x.toLowerCase(), enabled: true }, et); ck('employee PUT → 403', r.s === 403, r.s + ' ' + r.code);
+r = await c('GET', '/store/shop-setting'); ck('no token → 401', r.s === 401, r.s);
+r = await c('GET', '/store/shop-setting', null, sa); ck('super admin without companyId → STO_007', r.s === 400 && r.code === 'STO_007', r.s + ' ' + r.code);
+r = await c('GET', '/store/shop-setting?companyId=' + A.id, null, sa); ck('super admin with companyId', r.s === 200 && r.data.slug === shopA, r.s + ' ' + r.data?.slug);
+const race = await Promise.all([c('PUT', '/store/shop-setting', { slug: shopRace, enabled: true }, t), c('PUT', '/store/shop-setting', { slug: shopRace, enabled: true }, B.t)]);
+ck('parallel claim of one slug: one 200, one STO_014', race.filter(z => z.s === 200).length === 1 && race.filter(z => z.s === 400 && z.code === 'STO_014').length === 1, race.map(z => z.s + ' ' + (z.code || '')).join(' | '));
 console.log(`\n${n - f}/${n} passed`);
