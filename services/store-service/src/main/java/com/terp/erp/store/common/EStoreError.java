@@ -20,7 +20,9 @@ public enum EStoreError implements ErrorCode {
     STO_010("No store delivers to this location."),
     STO_011("This date is already a day-off of the store."),
     STO_012("A day-off cannot be in the past."),
-    STO_013("The day-off does not exist for this store.");
+    STO_013("The day-off does not exist for this store."),
+    STO_014("This shop address is already used."),
+    STO_015("This shop address is reserved.");
 
     private final String message;
 }
