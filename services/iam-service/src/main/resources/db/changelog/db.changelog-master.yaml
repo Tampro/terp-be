@@ -161,3 +161,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261129180100_coupon_permission_init_data.mysql.sql
   - include:
       file: db/changelog/changes/20261129190100_mileage_permission_init_data.mysql.sql
+  - include:
+      file: db/changelog/changes/20261129200100_order_cancel_permission_init_data.mysql.sql

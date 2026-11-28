@@ -223,5 +223,10 @@
     "prefix": "ML",
     "standalone": false,
     "description": "order-service mileage: earned on delivery, spent FIFO at checkout, released on cancel, Back Office policy and adjustment"
+  },
+  "paid-cancel": {
+    "prefix": "PC",
+    "standalone": false,
+    "description": "Back Office cancel of a paid order before pick-up: delivery cancelled, stock, coupon and points back, reversal journal, refund email"
   }
 }

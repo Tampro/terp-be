@@ -11,6 +11,7 @@ import com.terp.erp.security.CurrentUser;
 import com.terp.erp.security.ErpPrincipal;
 import com.terp.erp.security.TenantGuard;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ import java.util.function.Consumer;
 @Service
 @RequiredArgsConstructor
 public class DeliveryService {
+    static final String ORDER_CANCELLED = "order cancelled";
     private static final Set<EDeliveryStatus> OPEN = Set.of(EDeliveryStatus.READY, EDeliveryStatus.ASSIGNED);
 
     private final DeliveryRepository deliveries;
@@ -74,6 +76,51 @@ public class DeliveryService {
             d.setStatus(EDeliveryStatus.CANCELLED);
             d.setCancelledAt(clock.instant());
             d.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
+            return d;
+        });
+    }
+
+    // ------------------------------------------------------------------ internal (order-service)
+
+    /** What order-service sends so a delivery that does not exist yet can be written as CANCELLED. */
+    public record OrderRef(String orderNo, Long storeId, Long warehouseId) {
+    }
+
+    /**
+     * order-service cancels a paid order: READY / ASSIGNED -> CANCELLED, already CANCELLED -> unchanged (idempotent),
+     * PICKED_UP / DELIVERED -> 409 DLV_007. No delivery yet (order.paid not consumed) -> a CANCELLED row without an
+     * event, so the late order.paid creates nothing (OrderEventIntake skips an existing (company, order)).
+     */
+    @Transactional
+    public DeliveryDto cancelForOrder(long companyId, long orderId, OrderRef ref) {
+        Delivery d = deliveries.findByCompanyIdAndOrderId(companyId, orderId).orElse(null);
+        if (d == null) {
+            Delivery x = new Delivery();
+            x.setCompanyId(companyId);
+            x.setOrderId(orderId);
+            x.setOrderNo(ref.orderNo());
+            x.setStoreId(ref.storeId());
+            x.setWarehouseId(ref.warehouseId());
+            x.setStatus(EDeliveryStatus.CANCELLED);
+            x.setCancelledAt(clock.instant());
+            x.setCancelReason(ORDER_CANCELLED);
+            try {
+                return DeliveryDto.of(deliveries.saveAndFlush(x));
+            } catch (DataIntegrityViolationException race) {
+                // order.paid was consumed meanwhile: 409, the caller's retry takes the branch below
+                throw new ApiException(HttpStatus.CONFLICT, EDeliveryError.DLV_006);
+            }
+        }
+        if (d.getStatus() == EDeliveryStatus.CANCELLED) {
+            return DeliveryDto.of(d);
+        }
+        if (!OPEN.contains(d.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, EDeliveryError.DLV_007, d.getStatus().name());
+        }
+        return change(() -> {
+            d.setStatus(EDeliveryStatus.CANCELLED);
+            d.setCancelledAt(clock.instant());
+            d.setCancelReason(ORDER_CANCELLED);
             return d;
         });
     }

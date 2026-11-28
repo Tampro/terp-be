@@ -25,7 +25,9 @@ public enum EOrderError implements ErrorCode {
     ORD_015("Some items ran out of stock while paying."),
     ORD_016("This order cannot be paid in its state ({0})."),
     ORD_017("A paid order cannot be cancelled."),
-    ORD_018("The order does not exist.");
+    ORD_018("The order does not exist."),
+    ORD_019("The order cannot be cancelled and refunded in its state ({0})."),
+    ORD_020("The rider has already picked the order up; it can no longer be cancelled.");
 
     private final String message;
 }
