@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 public class OrderService {
     // TODO(assumption): the chain's stores are in Korea; the order number uses the Korean date.
     private static final ZoneId ORDER_ZONE = ZoneId.of("Asia/Seoul");
+    public static final String EVENT_PAID = "order.paid";
 
     private final CustomerOrderRepository orders;
     private final CustomerOrderLineRepository orderLines;
@@ -181,6 +182,7 @@ public class OrderService {
             lines.forEach(l -> l.setUnitCost(costs.getOrDefault(l.getItemId(), BigDecimal.ZERO)));
             orderLines.saveAll(lines);
             requestJournal(paid, lines);
+            announcePaid(paid);
             orders.saveAndFlush(paid);
             carts.findByCustomerIdAndStoreId(paid.getCustomerId(), paid.getStoreId()).ifPresent(cart -> {
                 Set<Long> bought = lines.stream().map(CustomerOrderLine::getItemId).collect(Collectors.toSet());
@@ -203,6 +205,24 @@ public class OrderService {
                 "description", "Express order " + o.getOrderNo(), "goodsAmount", a.goods(), "serviceAmount", a.service(),
                 "taxAmount", a.tax(), "costAmount", a.cost(), "actorSub", null));
         o.setJournalStatus(EJournalStatus.PENDING);
+    }
+
+    /** delivery-service creates the delivery from it; ids only — the address is read back on demand (no PII on the broker). */
+    private void announcePaid(CustomerOrder o) {
+        outbox.publish(o.getCompanyId(), EVENT_PAID, "ORDER", o.getId(), Payload.of("orderId", o.getId(),
+                "orderNo", o.getOrderNo(), "storeId", o.getStoreId(), "warehouseId", o.getWarehouseId()));
+    }
+
+    /** Internal read for delivery-service: the order's snapshot with the plain phone; another company's → ORD_018. */
+    @Transactional(readOnly = true)
+    public InternalOrderDto internal(long companyId, long id) {
+        CustomerOrder o = orders.findById(id).filter(x -> x.getCompanyId() != null && x.getCompanyId() == companyId)
+                .orElseThrow(() -> ApiException.notFound(EOrderError.ORD_018));
+        return new InternalOrderDto(String.valueOf(o.getId()), o.getOrderNo(), o.getStatus(), o.getStoreName(),
+                o.getRecipientName(), cipher.decrypt(o.getPhoneEnc()), o.getPostcode(), o.getAddress1(), o.getAddress2(),
+                o.getLat(), o.getLon(), o.getDeliveryNote(), o.getNote(), o.getTotal(),
+                orderLines.findByOrderIdOrderByIdAsc(o.getId()).stream()
+                        .map(l -> new InternalOrderDto.Line(l.getName(), l.getQuantity())).toList());
     }
 
     private OrderDto fail(long orderId, String reason) {

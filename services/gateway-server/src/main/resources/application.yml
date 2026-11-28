@@ -123,6 +123,11 @@ spring:
               uri: ${ORDER_SERVICE_URL:http://localhost:8100}
               predicates:
                 - Path=/api/v1/order/**
+            # Deliveries: Back Office (DELIVERY_VIEW / DELIVERY_MANAGE) and riders (DELIVERY_RIDE), staff realm.
+            - id: delivery-service
+              uri: ${DELIVERY_SERVICE_URL:http://localhost:8101}
+              predicates:
+                - Path=/api/v1/delivery/**
             - id: member-service
               uri: ${MEMBER_SERVICE_URL:http://localhost:8099}
               predicates:

@@ -15,7 +15,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public enum EDefaultRole {
     // TODO(assumption): COMPANY_ADMIN, HR and MANAGER use the AI assistant (AiPermissions) — confirm with PO.
-    COMPANY_ADMIN("Company administrator", union(union(union(AiPermissions.ALL, StorePermissions.ALL), OrderPermissions.ALL),
+    COMPANY_ADMIN("Company administrator", union(union(union(union(AiPermissions.ALL, StorePermissions.ALL), OrderPermissions.ALL), DeliveryPermissions.ALL),
             union(union(union(union(union(union(union(IamPermissions.ALL, SupportPermissions.ALL), SalesPermissions.ALL),
                                     union(OwnPermissions.ALL, PortalPermissions.ALL)),
                             com.terp.erp.iam.helpdesk.HelpdeskPermissions.ALL),
