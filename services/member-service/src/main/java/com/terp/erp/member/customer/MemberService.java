@@ -28,6 +28,7 @@ public class MemberService {
     static final Duration REJOIN_WAIT = Duration.ofDays(5);
 
     private final CustomerRepository customers;
+    private final CustomerAddressRepository addresses;
     private final ShopClient shops;
     private final Clock clock;
 
@@ -89,9 +90,15 @@ public class MemberService {
     public void leave(String slug, String sub) {
         long companyId = shops.companyOf(norm(slug));
         Customer c = active(companyId, sub);
+        addresses.deleteOfCustomer(c.getId()); // personal data goes with the membership (member-addresses REQ-04)
         c.setStatus(ECustomerStatus.LEFT);
         c.setLeftAt(clock.instant());
         c.setLiveKey(c.getId());
+    }
+
+    /** The caller's ACTIVE membership of this shop (address pages), else MEM_001 / MEM_004. */
+    Customer requireActive(String slug, String sub) {
+        return active(shops.companyOf(norm(slug)), sub);
     }
 
     private Customer active(long companyId, String sub) {

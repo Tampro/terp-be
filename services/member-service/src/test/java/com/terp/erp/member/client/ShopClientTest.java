@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import com.terp.erp.exception.ApiException;
 import com.terp.erp.member.common.EMemberError;
+import com.terp.erp.member.common.FieldCipherTest;
 import com.terp.erp.member.config.MemberProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +43,7 @@ class ShopClientTest {
         ServiceTokenProvider tokens = mock(ServiceTokenProvider.class);
         when(tokens.token()).thenReturn("svc");
         String url = "http://127.0.0.1:" + server.getAddress().getPort();
-        client = new ShopClient(new MemberProperties("http://unused", url, "http://unused", "http://unused"), tokens,
+        client = new ShopClient(new MemberProperties("http://unused", url, "http://unused", "http://unused", FieldCipherTest.KEY), tokens,
                 new ObjectMapper());
     }
 

@@ -27,7 +27,8 @@ class MemberServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-28T03:00:00Z");
     private final CustomerRepository customers = mock(CustomerRepository.class);
     private final ShopClient shops = mock(ShopClient.class);
-    private final MemberService service = new MemberService(customers, shops, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final CustomerAddressRepository addresses = mock(CustomerAddressRepository.class);
+    private final MemberService service = new MemberService(customers, addresses, shops, Clock.fixed(NOW, ZoneOffset.UTC));
     private final JoinForm ok = new JoinForm(true, true, false, "2026-11", "2026-11");
 
     @BeforeEach
@@ -103,6 +104,7 @@ class MemberServiceTest {
         assertThat(mine.getStatus()).isEqualTo(ECustomerStatus.LEFT);
         assertThat(mine.getLeftAt()).isEqualTo(NOW);
         assertThat(mine.getLiveKey()).isEqualTo(5L);
+        verify(addresses).deleteOfCustomer(5L);
         assertCode(() -> service.leave("express", "sub-9"), EMemberError.MEM_004);
     }
 
