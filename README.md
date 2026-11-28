@@ -143,6 +143,9 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #                                          an existing realm needs the client added by hand)
 #                                          An ERP stack created before store-service: add both STORE_* values to
 #                                          .env, then run scripts/upgrade-store-service.sh (DB, Keycloak client, services).
+#   MEMBER_DB_PASSWORD                   (member-service, database erp_member / user erp_member)
+#   MEMBER_SERVICE_CLIENT_SECRET          (secret of client erp-member-service; realm import and member-service).
+#                                          A stack created before member-service: run scripts/upgrade-member-service.sh.
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
 #                                          commerce, accounting, support, recruitment, crm)
 #   SEAWEEDFS_S3_ACCESS_KEY, SEAWEEDFS_S3_SECRET_KEY (local SeaweedFS, the S3 storage of media-service; random —

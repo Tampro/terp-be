@@ -183,5 +183,10 @@
     "prefix": "CU",
     "standalone": true,
     "description": "customer realm erp-customer; customer tokens refused by ERP APIs"
+  },
+  "member": {
+    "prefix": "ME",
+    "standalone": false,
+    "description": "member-service: a customer joins / leaves a shop; customer tokens only on /shop/**"
   }
 }

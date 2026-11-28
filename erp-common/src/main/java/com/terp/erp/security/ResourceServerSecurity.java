@@ -48,7 +48,7 @@ public final class ResourceServerSecurity {
 
     // Filter-level errors are written before any MessageSource lookup, so they carry the English text; the FE keys
     // on `code`, and 401 is the only status that triggers its token refresh.
-    private static void write(HttpServletResponse res, ObjectMapper mapper, HttpStatus status, ErrorCode error)
+    static void write(HttpServletResponse res, ObjectMapper mapper, HttpStatus status, ErrorCode error)
             throws IOException {
         res.setStatus(status.value());
         res.setContentType(MediaType.APPLICATION_JSON_VALUE);
