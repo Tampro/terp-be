@@ -37,7 +37,7 @@ public class EmailNotificationController {
     }
 
     @Operation(summary = "My company's notification switches, grouped by module (all on unless switched off)",
-            description = "Groups GENERAL, CRM, SUPPORT, RECRUITMENT, SUBSCRIPTION (empty groups left out). "
+            description = "Groups GENERAL, CRM, SUPPORT, RECRUITMENT, SUBSCRIPTION, ORDER (empty groups left out). "
                     + "dispatched=false: the switch is kept, but no email is sent for it yet.")
     @ApiResponses(@ApiResponse(responseCode = "400", description = "Super admin without companyId (IAM_003)"))
     @PreAuthorize("@PermissionChecker.has('NOTIFICATION_SETTINGS_UPDATE')")

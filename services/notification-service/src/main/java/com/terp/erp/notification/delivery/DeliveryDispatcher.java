@@ -62,6 +62,13 @@ public class DeliveryDispatcher {
     private final NotificationProperties props;
     private final ObjectMapper mapper;
     private final Clock clock;
+    // Setter-injected so the existing wiring stays as is; only customer-order emails need it.
+    private com.terp.erp.notification.client.OrderInternalClient orders;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setOrders(com.terp.erp.notification.client.OrderInternalClient orders) {
+        this.orders = orders;
+    }
 
     public void dispatch(List<Long> ids) {
         Map<String, Optional<Context>> contexts = new HashMap<>();
@@ -170,7 +177,7 @@ public class DeliveryDispatcher {
         } catch (JsonProcessingException e) {
             return Optional.empty();
         }
-        NotificationConfig cfg = iam.config(d.getCompanyId(), d.getEventType(), route.get().emailCode,
+        NotificationConfig cfg = iam.config(d.getCompanyId(), d.getEventType(), route.get().emailCode(env.data()),
                 route.get().webhookCode);
         return Optional.of(new Context(env, route.get(), cfg));
     }
@@ -187,7 +194,15 @@ public class DeliveryDispatcher {
                 if (cfg.smtp() == null) {
                     yield skipped("NO_SMTP");
                 }
-                String to = address(d, data);
+                String to;
+                if (d.getRecipientRef() != null && d.getRecipientRef().startsWith(EventIntake.ORDER_RECIPIENT)) {
+                    Optional<com.terp.erp.notification.client.OrderInternalClient.Facts> facts = orderFacts(d);
+                    to = facts.map(com.terp.erp.notification.client.OrderInternalClient.Facts::email)
+                            .filter(x -> !x.isBlank()).map(String::trim).orElse(null);
+                    data = withFacts(data, facts.orElse(null));
+                } else {
+                    to = address(d, data);
+                }
                 if (to == null) {
                     yield skipped("NO_RECIPIENT");
                 }
@@ -197,7 +212,7 @@ public class DeliveryDispatcher {
                     MessageTemplates.Message m = MessageTemplates.customEmail(own.subject(), own.body(), data);
                     yield email.send(cfg.smtp(), to, m.subject(), m.body(), true);
                 }
-                MessageTemplates.Message m = MessageTemplates.email(c.route().emailCode, lang, data);
+                MessageTemplates.Message m = MessageTemplates.email(c.route().emailCode(c.envelope().data()), lang, data);
                 yield email.send(cfg.smtp(), to, m.subject(), m.body());
             }
             case SLACK -> cfg.slack() == null ? skipped("INTEGRATION_DISABLED")
@@ -235,6 +250,26 @@ public class DeliveryDispatcher {
     static String chatText(String own, Context c, String lang, JsonNode data) {
         return own != null && !own.isBlank() ? MessageTemplates.customChat(own, data)
                 : MessageTemplates.chat(c.route(), lang, data);
+    }
+
+    private Optional<com.terp.erp.notification.client.OrderInternalClient.Facts> orderFacts(Delivery d) {
+        if (orders == null) {
+            return Optional.empty();
+        }
+        return orders.facts(d.getCompanyId(), Long.valueOf(d.getRecipientRef().substring(EventIntake.ORDER_RECIPIENT.length())));
+    }
+
+    /** The order's facts as template keys ({orderNo} {storeName} {recipientName} {total}), over the event's ids. */
+    static JsonNode withFacts(JsonNode data, com.terp.erp.notification.client.OrderInternalClient.Facts f) {
+        com.fasterxml.jackson.databind.node.ObjectNode n = data instanceof com.fasterxml.jackson.databind.node.ObjectNode o
+                ? o.deepCopy() : com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        if (f != null) {
+            n.put("orderNo", f.orderNo());
+            n.put("storeName", f.storeName());
+            n.put("recipientName", f.recipientName());
+            n.put("total", f.total() == null ? "" : f.total().stripTrailingZeros().toPlainString());
+        }
+        return n;
     }
 
     /** The recipient's address now: the event's own, or the IAM user's (an inactive or unknown user gets none). */

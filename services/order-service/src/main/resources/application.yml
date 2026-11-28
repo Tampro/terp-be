@@ -69,9 +69,10 @@ erp:
     max-backoff: ${ERP_OUTBOX_MAX_BACKOFF:10m}
     confirm-timeout: ${ERP_OUTBOX_CONFIRM_TIMEOUT:5s}
   order:
-    # Service accounts allowed on /api/v1/internal/** (delivery-service: the order behind a delivery).
+    # Service accounts allowed on /api/v1/internal/** (delivery-service: the order behind a delivery;
+    # notification-service: who to email about an order).
     internal:
-      client-ids: ${ORDER_INTERNAL_CLIENT_IDS:erp-delivery-service}
+      client-ids: ${ORDER_INTERNAL_CLIENT_IDS:erp-delivery-service,erp-notification-service}
     accounting-queue: ${ORDER_ACCOUNTING_QUEUE:erp.order.accounting}
     accounting-dead-letter-queue: ${ORDER_ACCOUNTING_DLQ:erp.order.accounting.dlq}
     delivery-queue: ${ORDER_DELIVERY_QUEUE:erp.order.delivery}

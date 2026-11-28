@@ -208,5 +208,10 @@
     "prefix": "DL",
     "standalone": false,
     "description": "delivery-service: paid order → READY delivery → assigned rider → picked up → delivered"
+  },
+  "customer-notification": {
+    "prefix": "CN",
+    "standalone": false,
+    "description": "customer emails: order paid, picked up, delivered, delivery cancelled (address from the order, never in the event)"
   }
 }

@@ -45,7 +45,7 @@ public class CustomerOrderController {
     @PostMapping("/api/v1/shop/{slug}/stores/{storeId}/orders")
     public ApiMessageDto<OrderDto> place(@PathVariable String slug, @PathVariable long storeId,
                                          @AuthenticationPrincipal CustomerPrincipal me, @Valid @RequestBody PlaceForm form) {
-        return ApiMessageDto.ok(service.place(slug, me.sub(), storeId, form));
+        return ApiMessageDto.ok(service.place(slug, me.sub(), me.email(), storeId, form));
     }
 
     @Operation(summary = "My orders in this shop", description = "Newest first.")

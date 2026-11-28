@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Service-to-service only (SecurityConfig internalChain, erp.order.internal.client-ids: delivery-service). */
+/** Service-to-service only (SecurityConfig internalChain, erp.order.internal.client-ids: delivery, notification). */
 @Tag(name = "Internal")
 @RestController
 @RequiredArgsConstructor
@@ -30,5 +30,15 @@ public class InternalOrderController {
     @GetMapping("/{id}")
     public ApiMessageDto<InternalOrderDto> get(@PathVariable long id, @RequestParam long companyId) {
         return ApiMessageDto.ok(service.internal(companyId, id));
+    }
+
+    @Operation(summary = "Who to email about an order and what to say (notification-service)",
+            description = "Plain email (null when the customer's account had none).")
+    @ApiResponses({@ApiResponse(responseCode = "401", description = "No or invalid token (COMMON_003)"),
+            @ApiResponse(responseCode = "403", description = "Token not of an allowed service account (COMMON_004)"),
+            @ApiResponse(responseCode = "404", description = "No such order in the company (ORD_018)")})
+    @GetMapping("/{id}/notification")
+    public ApiMessageDto<NotificationFactsDto> notification(@PathVariable long id, @RequestParam long companyId) {
+        return ApiMessageDto.ok(service.notificationFacts(companyId, id));
     }
 }

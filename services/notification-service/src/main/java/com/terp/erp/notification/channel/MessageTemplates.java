@@ -101,7 +101,26 @@ public final class MessageTemplates {
                     "Công việc CRM mới: {title}",
                     "Công việc CRM {title} đã được giao cho bạn.\nHạn: {date}")),
             Map.entry("LEAD_EMAIL", new Text("{subject}", "{body}", "{subject}", "{body}")),
-            Map.entry("DEAL_EMAIL", new Text("{subject}", "{body}", "{subject}", "{body}")));
+            Map.entry("DEAL_EMAIL", new Text("{subject}", "{body}", "{subject}", "{body}")),
+            // Express customer emails. TODO(assumption): no Korean built-in text yet (the table is en + vi); a company
+            // writes its own ko template on the template screen.
+            Map.entry("ORDER_PAID", new Text("Order {orderNo} confirmed",
+                    "Hello {recipientName},\nthank you for your order {orderNo} at {storeName}.\nTotal: {total}",
+                    "Đã xác nhận đơn {orderNo}",
+                    "Xin chào {recipientName},\ncảm ơn bạn đã đặt đơn {orderNo} tại {storeName}.\nTổng tiền: {total}")),
+            Map.entry("ORDER_PICKED_UP", new Text("Order {orderNo} is on its way",
+                    "Hello {recipientName},\nyour order {orderNo} has left {storeName} and is on its way.",
+                    "Đơn {orderNo} đang được giao",
+                    "Xin chào {recipientName},\nđơn {orderNo} đã rời {storeName} và đang trên đường giao.")),
+            Map.entry("ORDER_DELIVERED", new Text("Order {orderNo} delivered",
+                    "Hello {recipientName},\nyour order {orderNo} from {storeName} has been delivered.",
+                    "Đơn {orderNo} đã giao",
+                    "Xin chào {recipientName},\nđơn {orderNo} từ {storeName} đã được giao.")),
+            Map.entry("ORDER_DELIVERY_CANCELLED", new Text("Delivery of order {orderNo} cancelled",
+                    "Hello {recipientName},\nthe delivery of your order {orderNo} from {storeName} has been cancelled. "
+                            + "The store will contact you.",
+                    "Đã huỷ giao đơn {orderNo}",
+                    "Xin chào {recipientName},\nviệc giao đơn {orderNo} từ {storeName} đã bị huỷ. Cửa hàng sẽ liên hệ với bạn.")));
 
     private MessageTemplates() {
     }

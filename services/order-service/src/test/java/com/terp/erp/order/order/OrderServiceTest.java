@@ -177,6 +177,22 @@ class OrderServiceTest {
     }
 
     @Test
+    void theEmailIsKeptEncryptedPlainForTheCustomerMaskedForStaff() {
+        line(1L, 2);
+        OrderDtos.OrderDto d = service.place("express", "sub-1", " hong@example.com ", 7L, form());
+        assertThat(d.email()).isEqualTo("hong@example.com");
+        CustomerOrder o = saved.get(0);
+        assertThat(o.getEmailEnc()).doesNotContain("hong");
+        assertThat(OrderService.maskEmail("hong@example.com")).isEqualTo("h***@example.com");
+        assertThat(service.notificationFacts(10L, 100L).email()).isEqualTo("hong@example.com");
+        assertCode(() -> service.notificationFacts(11L, 100L), EOrderError.ORD_018);
+        saved.clear();
+        lines.clear();
+        line(1L, 2);
+        assertThat(service.place("express", "sub-1", null, 7L, form()).email()).isNull();
+    }
+
+    @Test
     void internalReadGivesThePlainPhoneOnlyToTheOrdersCompany() {
         CustomerOrder o = placed();
         assertThat(service.internal(10L, 100L).phone()).isEqualTo("01012345678");

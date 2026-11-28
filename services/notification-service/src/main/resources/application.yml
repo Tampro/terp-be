@@ -60,6 +60,9 @@ erp:
       enabled: ${ERP_JOBS_LOCK_ENABLED:true}
   notification:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    # order-service: the customer address and facts of order / delivery emails (internal, service account).
+    order:
+      service-url: ${ORDER_SERVICE_URL:http://localhost:8100}
     exchange: ${NOTIFICATION_EXCHANGE:erp.events}
     queue: ${NOTIFICATION_QUEUE:erp.notification.events}
     dead-letter-queue: ${NOTIFICATION_DLQ:erp.events.dlq}

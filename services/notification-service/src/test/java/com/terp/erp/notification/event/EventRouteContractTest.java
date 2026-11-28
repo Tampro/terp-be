@@ -64,7 +64,10 @@ class EventRouteContractTest {
             row("crm.deal.moved", "DEAL_MOVED", "DEAL_MOVED"),
             // feat/google-calendar: Google Calendar only
             row("employee.holiday.updated", "-", "-"),
-            row("employee.holiday.deleted", "-", "-"));
+            row("employee.holiday.deleted", "-", "-"),
+            // customer-delivery-notification: Express customer emails (delivery: code chosen by data.status)
+            row("order.paid", "-", "ORDER_PAID"),
+            row("delivery.status.changed", "-", "ORDER_DELIVERED"));
 
     private static String[] row(String type, String webhook, String email) {
         return new String[]{type, webhook, email};

@@ -47,7 +47,7 @@ class EmailNotificationServiceTest {
 
         assertThat(groups).extracting(EmailNotificationService.NotificationGroup::module)
                 .containsExactly(ENotificationModule.GENERAL, ENotificationModule.CRM, ENotificationModule.SUPPORT,
-                        ENotificationModule.RECRUITMENT, ENotificationModule.SUBSCRIPTION);
+                        ENotificationModule.RECRUITMENT, ENotificationModule.SUBSCRIPTION, ENotificationModule.ORDER);
         var general = groups.get(0).notifications();
         assertThat(general.get(0).code()).isEqualTo("USER_CREATE");
         assertThat(general.get(0).dispatched()).isTrue();

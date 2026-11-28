@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261129100000_order_journal_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261129160000_order_delivery_status_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261129170000_order_email_changelog.mysql.sql
