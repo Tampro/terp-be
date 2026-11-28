@@ -284,7 +284,7 @@ public class OrderService {
                 masked ? mask(phone) : phone, o.getPostcode(), o.getAddress1(), o.getAddress2(), o.getLat(), o.getLon(),
                 o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
                 masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
-                masked ? o.getJournalError() : null);
+                masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt());
     }
 
     /** 01012345678 → 010-****-5678 (staff never sees the full number). */

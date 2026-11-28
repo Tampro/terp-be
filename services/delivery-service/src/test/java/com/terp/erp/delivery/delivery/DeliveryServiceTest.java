@@ -31,7 +31,9 @@ class DeliveryServiceTest {
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
     private final OrderClient orders = mock(OrderClient.class);
     private final IamClient iam = mock(IamClient.class);
-    private final DeliveryService service = new DeliveryService(deliveries, orders, iam, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final DeliveryEvents events = new DeliveryEvents(outbox, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final DeliveryService service = new DeliveryService(deliveries, orders, iam, events, Clock.fixed(NOW, ZoneOffset.UTC));
     private final Delivery d = new Delivery();
 
     @BeforeEach
@@ -76,6 +78,14 @@ class DeliveryServiceTest {
         TestLogin.as(10L, "DELIVERY_MANAGE");
         assertCode(() -> service.cancel(1L, "late"), EDeliveryError.DLV_005);
         assertCode(() -> service.assign(1L, 42L), EDeliveryError.DLV_005);
+        // one event per successful change, none for the refused ones
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> c = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        org.mockito.Mockito.verify(outbox, org.mockito.Mockito.times(3)).publish(org.mockito.ArgumentMatchers.eq(10L),
+                org.mockito.ArgumentMatchers.eq("delivery.status.changed"), org.mockito.ArgumentMatchers.eq("DELIVERY"),
+                org.mockito.ArgumentMatchers.eq(1L), c.capture());
+        assertThat(c.getAllValues()).extracting(m -> m.get("status")).containsExactly("ASSIGNED", "PICKED_UP", "DELIVERED");
+        assertThat(c.getAllValues().get(0).keySet()).containsExactlyInAnyOrder("orderId", "deliveryId", "status", "at");
+        assertThat(c.getAllValues().get(0).get("at")).isEqualTo(NOW.toString());
     }
 
     @Test

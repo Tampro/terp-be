@@ -42,12 +42,22 @@ const o = (await c('POST', `/shop/${slug}/stores/${store.id}/orders`, { addressI
 r = await c('POST', `/shop/${slug}/orders/${o.orderNo}/pay`, { outcome: 'APPROVED' }, ct);
 ck('order paid', r.s === 200 && r.data.status === 'PAID', r.s + ' ' + r.code);
 
+const waitStatus = async (no, want) => {
+  let st;
+  for (let i = 0; i < 20; i++) {
+    st = (await c('GET', `/shop/${slug}/orders/${no}`, null, ct)).data?.deliveryStatus;
+    if (st === want) break;
+    await new Promise(res => setTimeout(res, 1000));
+  }
+  return st;
+};
 let d;
 for (let i = 0; i < 30 && !d; i++) {
   d = ((await c('GET', `/delivery/deliveries?storeId=${store.id}`, null, t)).data?.content || []).find(z => z.orderId === o.id);
   if (!d) await new Promise(res => setTimeout(res, 1000));
 }
 ck('a READY delivery for the paid order', d?.status === 'READY' && d.orderNo === o.orderNo, JSON.stringify(d && [d.status, d.orderNo]));
+ck('customer order shows READY', (await waitStatus(o.orderNo, 'READY')) === 'READY', 'timeout');
 r = await c('GET', '/delivery/deliveries/' + d?.id, null, t);
 ck('Back Office detail: destination, phone masked', r.s === 200 && r.data.destination.phone === '010-****-5678' && r.data.destination.lines[0].quantity === 2,
   r.s + ' ' + r.code + ' ' + r.data?.destination?.phone);
@@ -58,6 +68,7 @@ r = await c('POST', `/delivery/deliveries/${d.id}/assign`, { riderUserId: Number
 ck('assign to another company\'s user → DLV_004', r.s === 400 && r.code === 'DLV_004', r.s + ' ' + r.code);
 r = await c('POST', `/delivery/deliveries/${d.id}/assign`, { riderUserId: Number(rider.id) }, t);
 ck('assigned to the rider', r.s === 200 && r.data.status === 'ASSIGNED' && r.data.riderName === 'Delivery rider', r.s + ' ' + r.code + ' ' + r.data?.riderName);
+ck('customer order shows ASSIGNED', (await waitStatus(o.orderNo, 'ASSIGNED')) === 'ASSIGNED', 'timeout');
 
 r = await c('GET', '/delivery/my-deliveries', null, rider.token);
 ck('rider sees it in my deliveries', r.s === 200 && r.data.content.some(z => z.id === d.id), r.s + ' ' + r.code);
@@ -69,10 +80,31 @@ r = await c('POST', `/delivery/my-deliveries/${d.id}/deliver`, null, rider.token
 ck('deliver before pick-up → DLV_005', r.s === 400 && r.code === 'DLV_005', r.s + ' ' + r.code);
 r = await c('POST', `/delivery/my-deliveries/${d.id}/pick-up`, null, rider.token);
 ck('picked up', r.s === 200 && r.data.status === 'PICKED_UP' && !!r.data.pickedUpAt, r.s + ' ' + r.code);
+ck('customer order shows PICKED_UP', (await waitStatus(o.orderNo, 'PICKED_UP')) === 'PICKED_UP', 'timeout');
 r = await c('POST', `/delivery/deliveries/${d.id}/cancel`, { reason: 'too late' }, t);
 ck('cancel after pick-up → DLV_005', r.s === 400 && r.code === 'DLV_005', r.s + ' ' + r.code);
 r = await c('POST', `/delivery/my-deliveries/${d.id}/deliver`, null, rider.token);
 ck('delivered', r.s === 200 && r.data.status === 'DELIVERED' && !!r.data.deliveredAt, r.s + ' ' + r.code);
+r = await c('GET', `/shop/${slug}/orders/${o.orderNo}`, null, ct);
+ck('customer order shows DELIVERED with its time', (await waitStatus(o.orderNo, 'DELIVERED')) === 'DELIVERED', 'timeout');
+r = await c('GET', '/order/orders/' + o.id, null, t);
+ck('Back Office order shows DELIVERED', r.s === 200 && r.data.deliveryStatus === 'DELIVERED' && !!r.data.deliveryStatusAt, r.s + ' ' + r.data?.deliveryStatus);
+r = await c('GET', `/shop/${slug}/orders`, null, ct);
+ck('customer list carries the status', r.s === 200 && r.data.content.find(z => z.orderNo === o.orderNo)?.deliveryStatus === 'DELIVERED', String(r.s));
+
+// a second order whose delivery is cancelled before pick-up
+await c('PUT', `/shop/${slug}/stores/${store.id}/cart/items/${egg.id}`, { quantity: 2 }, ct);
+const o2 = (await c('POST', `/shop/${slug}/stores/${store.id}/orders`, { addressId: Number(home.id), substitution: 'ALLOW' }, ct)).data;
+ck('unpaid order has no delivery status', o2?.deliveryStatus === null, String(o2?.deliveryStatus));
+await c('POST', `/shop/${slug}/orders/${o2.orderNo}/pay`, { outcome: 'APPROVED' }, ct);
+let d2;
+for (let i = 0; i < 30 && !d2; i++) {
+  d2 = ((await c('GET', `/delivery/deliveries?storeId=${store.id}`, null, t)).data?.content || []).find(z => z.orderId === o2.id);
+  if (!d2) await new Promise(res => setTimeout(res, 1000));
+}
+r = await c('POST', `/delivery/deliveries/${d2?.id}/cancel`, { reason: 'Customer unreachable' }, t);
+ck('second delivery cancelled', r.s === 200 && r.data.status === 'CANCELLED', r.s + ' ' + r.code);
+ck('customer order shows CANCELLED', (await waitStatus(o2.orderNo, 'CANCELLED')) === 'CANCELLED', 'timeout');
 
 r = await c('GET', '/delivery/deliveries/' + d.id, null, B.t); ck('another company → DLV_001 404', r.s === 404 && r.code === 'DLV_001', r.s + ' ' + r.code);
 r = await c('GET', '/delivery/deliveries', null, clerk.token); ck('employee without DELIVERY_VIEW → 403', r.s === 403, r.s + ' ' + r.code);

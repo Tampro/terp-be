@@ -44,6 +44,9 @@ public final class OrderDtos {
                            @Schema(description = "Back Office only: accounting journal entry number once POSTED",
                                    example = "JE-2026-000042") String journalEntryNo,
                            @Schema(description = "Back Office only: accounting error code when FAILED (e.g. ACC_070)")
-                           String journalError) {
+                           String journalError,
+                           @Schema(description = "Latest delivery status (READY, ASSIGNED, PICKED_UP, DELIVERED, CANCELLED); "
+                                   + "null before payment", example = "PICKED_UP") String deliveryStatus,
+                           @Schema(description = "When the delivery reached that status (UTC)") Instant deliveryStatusAt) {
     }
 }

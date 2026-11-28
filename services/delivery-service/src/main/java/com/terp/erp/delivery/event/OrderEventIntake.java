@@ -2,6 +2,7 @@ package com.terp.erp.delivery.event;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.terp.erp.delivery.delivery.Delivery;
+import com.terp.erp.delivery.delivery.DeliveryEvents;
 import com.terp.erp.delivery.delivery.DeliveryRepository;
 import com.terp.erp.delivery.delivery.EDeliveryStatus;
 import com.terp.erp.outbox.EventEnvelope;
@@ -24,6 +25,7 @@ public class OrderEventIntake {
 
     private final ProcessedEventRepository processed;
     private final DeliveryRepository deliveries;
+    private final DeliveryEvents events;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -69,7 +71,7 @@ public class OrderEventIntake {
         x.setStoreId(storeId);
         x.setWarehouseId(warehouseId);
         x.setStatus(EDeliveryStatus.READY);
-        deliveries.saveAndFlush(x);
+        events.changed(deliveries.saveAndFlush(x));
     }
 
     private static Long id(JsonNode n) {
