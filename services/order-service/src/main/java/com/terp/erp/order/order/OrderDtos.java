@@ -18,7 +18,12 @@ public final class OrderDtos {
                     requiredMode = Schema.RequiredMode.REQUIRED) @NotNull Long addressId,
             @Schema(description = "May the store substitute a missing item", requiredMode = Schema.RequiredMode.REQUIRED)
             @NotNull ESubstitution substitution,
-            @Schema(example = "Ring twice") @Size(max = 200) String note) {
+            @Schema(example = "Ring twice") @Size(max = 200) String note,
+            @Schema(description = "Coupon code of the company (case-insensitive)", example = "WELCOME10")
+            @Size(max = 30) String couponCode) {
+        public PlaceForm(Long addressId, ESubstitution substitution, String note) {
+            this(addressId, substitution, note, null);
+        }
     }
 
     public enum EPayOutcome {
@@ -49,6 +54,9 @@ public final class OrderDtos {
                                    + "null before payment", example = "PICKED_UP") String deliveryStatus,
                            @Schema(description = "When the delivery reached that status (UTC)") Instant deliveryStatusAt,
                            @Schema(description = "Email for order and delivery messages, from the sign-in account at "
-                                   + "checkout; masked for Back Office (h***@example.com)") String email) {
+                                   + "checkout; masked for Back Office (h***@example.com)") String email,
+                           @Schema(description = "Coupon applied, null without one") String couponCode,
+                           @Schema(description = "Coupon discount off the goods; total = subtotal - discount + fees")
+                           BigDecimal discount) {
     }
 }

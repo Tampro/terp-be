@@ -62,6 +62,7 @@ public class OrderService {
     private final OrderProperties props;
     private final PlatformTransactionManager txManager;
     private final OutboxPublisher outbox;
+    private final com.terp.erp.order.coupon.CouponLedger coupons;
     private final Clock clock;
 
     // ------------------------------------------------------------------ checkout
@@ -97,7 +98,10 @@ public class OrderService {
             }
             priced.add(new CartRules.Priced(i.salePrice().multiply(BigDecimal.valueOf(l.getQuantity())), true));
         }
-        CartRules.Summary s = CartRules.summary(store, priced, cart.isBagRequested());
+        com.terp.erp.order.coupon.CouponLedger.Applied coupon = f.couponCode() == null || f.couponCode().isBlank() ? null
+                : coupons.lockAndCheck(m.companyId(), m.customerId(), f.couponCode(), CartRules.subtotal(priced));
+        CartRules.Summary s = CartRules.summary(store, priced, cart.isBagRequested(),
+                coupon == null ? BigDecimal.ZERO : coupon.discount());
         if (!s.minimumReached()) {
             throw ApiException.badRequest(EOrderError.ORD_010, s.minOrderAmount().stripTrailingZeros().toPlainString());
         }
@@ -120,6 +124,11 @@ public class OrderService {
         o.setDeliveryFee(s.deliveryFee());
         o.setBagFee(s.bagFee());
         o.setTotal(s.total());
+        o.setDiscount(s.discount());
+        if (coupon != null) {
+            o.setCouponId(coupon.coupon().getId());
+            o.setCouponCode(coupon.coupon().getCode());
+        }
         o.setStoreName(store.name());
         o.setRecipientName(a.recipientName());
         o.setPhoneEnc(cipher.encrypt(a.phone()));
@@ -132,6 +141,9 @@ public class OrderService {
         o.setDeliveryNote(a.deliveryNote());
         o.setNote(f.note() == null || f.note().isBlank() ? null : f.note().trim());
         CustomerOrder saved = orders.saveAndFlush(o);
+        if (coupon != null) {
+            coupons.reserve(coupon.coupon(), m.customerId(), saved.getId());
+        }
         List<CustomerOrderLine> snapshot = new ArrayList<>();
         for (CartLine l : lines) {
             ShelfItem i = live.get(String.valueOf(l.getItemId()));
@@ -262,6 +274,7 @@ public class OrderService {
         if (o.getStatus() == EOrderStatus.PENDING_PAYMENT || o.getStatus() == EOrderStatus.PAYMENT_FAILED) {
             o.setStatus(EOrderStatus.CANCELLED);
             o.setCancelledAt(clock.instant());
+            coupons.release(o.getId());
             orders.saveAndFlush(o);
         }
         return dto(o, orderLines.findByOrderIdOrderByIdAsc(o.getId()), false);
@@ -302,7 +315,7 @@ public class OrderService {
                 o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
                 masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
                 masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt(),
-                email(o, masked));
+                email(o, masked), o.getCouponCode(), o.getDiscount());
     }
 
     private String email(CustomerOrder o, boolean masked) {

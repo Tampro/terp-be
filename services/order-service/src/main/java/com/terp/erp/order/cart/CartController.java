@@ -36,12 +36,15 @@ public class CartController {
 
     @Operation(summary = "My cart at this store", description = "Prices, limits and sold-out are read live; a line no longer "
             + "on sale is available=false and left out of the totals. Delivery is free from freeDeliveryThreshold; bagFee "
-            + "applies when bagRequested; minimumReached compares the subtotal with minOrderAmount.")
+            + "applies when bagRequested; minimumReached compares the subtotal (after a coupon) with minOrderAmount.")
     @ApiResponses({@ApiResponse(responseCode = "404", description = CTX), @ApiResponse(responseCode = "503", description = DOWN)})
     @GetMapping
     public ApiMessageDto<CartDto> view(@PathVariable String slug, @PathVariable long storeId,
-                                       @AuthenticationPrincipal CustomerPrincipal me) {
-        return ApiMessageDto.ok(service.view(slug, me.sub(), storeId));
+                                       @AuthenticationPrincipal CustomerPrincipal me,
+                                       @io.swagger.v3.oas.annotations.Parameter(description = "Preview a coupon: discount "
+                                               + "and totals after it, or couponError CPN_007-CPN_011")
+                                       @org.springframework.web.bind.annotation.RequestParam(required = false) String couponCode) {
+        return ApiMessageDto.ok(service.view(slug, me.sub(), storeId, couponCode));
     }
 
     @Operation(summary = "Put an item with this quantity", description = "Creates the line or replaces its quantity (1-99, "

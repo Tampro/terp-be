@@ -15,6 +15,7 @@ import com.terp.erp.order.common.EOrderError;
 import com.terp.erp.order.common.FieldCipher;
 import com.terp.erp.order.common.FieldCipherTest;
 import com.terp.erp.order.config.OrderProperties;
+import com.terp.erp.order.coupon.Coupon;
 import com.terp.erp.order.order.OrderDtos.EPayOutcome;
 import com.terp.erp.order.order.OrderDtos.PlaceForm;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -55,6 +56,7 @@ class OrderServiceTest {
     private final FieldCipher cipher = FieldCipherTest.cipher();
     private final PlatformTransactionManager tx = mock(PlatformTransactionManager.class);
     private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
+    private final com.terp.erp.order.coupon.CouponLedger coupons = mock(com.terp.erp.order.coupon.CouponLedger.class);
     private OrderService service;
     private final List<CartLine> lines = new ArrayList<>();
     private final List<CustomerOrder> saved = new ArrayList<>();
@@ -94,7 +96,7 @@ class OrderServiceTest {
 
     private OrderService service(boolean sandbox) {
         OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null, null, null);
-        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox,
+        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox, coupons,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -227,9 +229,60 @@ class OrderServiceTest {
 
     @Test
     void expiryJobUsesTheFifteenMinuteWindow() {
-        OrderExpiryJob job = new OrderExpiryJob(orders, Clock.fixed(NOW, ZoneOffset.UTC));
-        when(orders.expire(NOW.minus(OrderExpiryJob.PAYMENT_WINDOW))).thenReturn(2);
-        assertThat(job.run()).isEqualTo(2);
+        OrderExpiryJob job = new OrderExpiryJob(orders, coupons, tx, Clock.fixed(NOW, ZoneOffset.UTC));
+        CustomerOrder pending = new CustomerOrder();
+        pending.setId(1L);
+        pending.setStatus(EOrderStatus.PENDING_PAYMENT);
+        CustomerOrder paidMeanwhile = new CustomerOrder();
+        paidMeanwhile.setId(2L);
+        paidMeanwhile.setStatus(EOrderStatus.PAID);
+        when(orders.idsToExpire(NOW.minus(OrderExpiryJob.PAYMENT_WINDOW))).thenReturn(List.of(1L, 2L));
+        when(orders.findById(1L)).thenReturn(Optional.of(pending));
+        when(orders.findById(2L)).thenReturn(Optional.of(paidMeanwhile));
+        assertThat(job.run()).isEqualTo(1);
+        assertThat(pending.getStatus()).isEqualTo(EOrderStatus.EXPIRED);
+        assertThat(paidMeanwhile.getStatus()).isEqualTo(EOrderStatus.PAID);
+        verify(coupons).release(1L);
+        verify(coupons, never()).release(2L);
+    }
+
+    @Test
+    void aCouponIsCheckedReservedSnapshottedAndGivenBackOnCancel() {
+        line(1L, 4);                                                            // 24,000 of goods
+        Coupon c = new Coupon();
+        c.setId(9L);
+        c.setCode("SAVE");
+        when(coupons.lockAndCheck(10L, 5L, "save", BigDecimal.valueOf(24000)))
+                .thenReturn(new com.terp.erp.order.coupon.CouponLedger.Applied(c, BigDecimal.valueOf(3000)));
+        OrderDtos.OrderDto d = service.place("express", "sub-1", 7L, new PlaceForm(12L, ESubstitution.ALLOW, null, "save"));
+        assertThat(d.couponCode()).isEqualTo("SAVE");
+        assertThat(d.discount()).isEqualByComparingTo("3000");
+        assertThat(d.subtotal()).isEqualByComparingTo("24000");
+        assertThat(d.total()).isEqualByComparingTo("24000");                     // 21,000 + delivery 3,000
+        verify(coupons).reserve(c, 5L, 100L);
+        CustomerOrder o = saved.get(0);
+        OrderJournal.Amounts j = OrderJournal.amounts(o, placedLinesOf(o));
+        assertThat(j.goods()).isEqualByComparingTo("19091");                     // 21,000 net of the discount, less VAT 1,909
+        assertThat(j.goods().add(j.service()).add(j.tax())).isEqualByComparingTo("24000");
+        when(orders.findByCompanyIdAndOrderNoAndCustomerId(10L, o.getOrderNo(), 5L)).thenReturn(Optional.of(o));
+        service.cancel("express", "sub-1", o.getOrderNo());
+        verify(coupons).release(100L);
+    }
+
+    @Test
+    void aRefusedCouponStopsThePlacement() {
+        line(1L, 4);
+        when(coupons.lockAndCheck(10L, 5L, "late", BigDecimal.valueOf(24000)))
+                .thenThrow(ApiException.badRequest(com.terp.erp.order.common.ECouponError.CPN_008));
+        assertCode(() -> service.place("express", "sub-1", 7L, new PlaceForm(12L, ESubstitution.ALLOW, null, "late")),
+                com.terp.erp.order.common.ECouponError.CPN_008);
+        verify(orders, never()).saveAndFlush(any());
+    }
+
+    private List<CustomerOrderLine> placedLinesOf(CustomerOrder o) {
+        org.mockito.ArgumentCaptor<List<CustomerOrderLine>> c = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(orderLines, org.mockito.Mockito.atLeastOnce()).saveAll(c.capture());
+        return c.getValue();
     }
 
     private CustomerOrder placed() {

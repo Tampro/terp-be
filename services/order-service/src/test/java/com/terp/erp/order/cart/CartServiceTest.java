@@ -34,7 +34,8 @@ class CartServiceTest {
     private final CartRepository carts = mock(CartRepository.class);
     private final CartLineRepository lines = mock(CartLineRepository.class);
     private final CartSourcesClient sources = mock(CartSourcesClient.class);
-    private final CartService service = new CartService(carts, lines, sources);
+    private final com.terp.erp.order.coupon.CouponLedger coupons = mock(com.terp.erp.order.coupon.CouponLedger.class);
+    private final CartService service = new CartService(carts, lines, sources, coupons);
     private final List<CartLine> rows = new ArrayList<>();
     private final Cart cart = new Cart();
 
@@ -124,5 +125,28 @@ class CartServiceTest {
 
     private static void assertCode(ThrowingCallable call, ErrorCode code) {
         assertThatThrownBy(call).satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
+    }
+
+    @Test
+    void aCouponPreviewDiscountsOrExplainsItsRefusal() {
+        CartLine l = new CartLine();
+        l.setCartId(1L);
+        l.setItemId(1L);
+        l.setQuantity(4);
+        rows.add(l);
+        when(sources.shelf(eq(10L), eq(245L), anyCollection())).thenReturn(List.of(new CartSourcesClient.ShelfItem("1", "Egg",
+                "S1", BigDecimal.valueOf(6000), 10, false)));
+        when(coupons.preview(10L, 5L, "SAVE", BigDecimal.valueOf(24000)))
+                .thenReturn(new com.terp.erp.order.coupon.CouponRules.Result(BigDecimal.valueOf(5000), null, null));
+        CartService.CartDto d = service.view("express", "sub-1", 7L, " save ");
+        assertThat(d.couponCode()).isEqualTo("SAVE");
+        assertThat(d.discount()).isEqualByComparingTo("5000");
+        assertThat(d.minimumReached()).isTrue();                                 // 19,000 after the discount >= first-order 10,000
+        assertThat(d.total()).isEqualByComparingTo("22000");                     // 19,000 + delivery 3,000
+        when(coupons.preview(10L, 5L, "GONE", BigDecimal.valueOf(24000))).thenReturn(new com.terp.erp.order.coupon.CouponRules.Result(
+                BigDecimal.ZERO, com.terp.erp.order.common.ECouponError.CPN_007, null));
+        CartService.CartDto bad = service.view("express", "sub-1", 7L, "gone");
+        assertThat(bad.couponError()).isEqualTo("CPN_007");
+        assertThat(bad.discount()).isEqualByComparingTo("0");
     }
 }

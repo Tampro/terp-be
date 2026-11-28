@@ -18,21 +18,33 @@ public final class CartRules {
     }
 
     public record Summary(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal bagFee, BigDecimal total, BigDecimal minOrderAmount,
-                   boolean minimumReached) {
+                   boolean minimumReached, BigDecimal discount) {
     }
 
     public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested) {
-        BigDecimal subtotal = lines.stream().filter(Priced::available).map(Priced::lineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return summary(store, lines, bagRequested, BigDecimal.ZERO);
+    }
+
+    /** The goods subtotal of the available lines (what a coupon discounts). */
+    public static BigDecimal subtotal(List<Priced> lines) {
+        return lines.stream().filter(Priced::available).map(Priced::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * discount: a coupon's, off the goods only. Free delivery and the minimum order compare the goods subtotal after
+     * the discount (plan P2 "minimum after discounts").
+     */
+    public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested, BigDecimal discount) {
+        BigDecimal subtotal = subtotal(lines);
+        BigDecimal off = discount == null ? BigDecimal.ZERO : discount.min(subtotal);
+        BigDecimal net = subtotal.subtract(off);
         BigDecimal free = nz(store.freeDeliveryThreshold());
-        BigDecimal delivery = free.signum() > 0 && subtotal.compareTo(free) >= 0 ? BigDecimal.ZERO : nz(store.deliveryFee());
+        BigDecimal delivery = free.signum() > 0 && net.compareTo(free) >= 0 ? BigDecimal.ZERO : nz(store.deliveryFee());
         BigDecimal bag = bagRequested ? nz(store.bagFee()) : BigDecimal.ZERO;
-        // TODO(assumption): no orders exist yet, so every customer is on their first order (FR-ORD-002: 10,000 then
-        // 20,000), and "after discounts" is the subtotal until coupons exist.
+        // TODO(assumption): every customer is treated as on their first order (FR-ORD-002: 10,000 then 20,000).
         BigDecimal minimum = nz(store.firstOrderMinAmount()).signum() > 0 ? nz(store.firstOrderMinAmount())
                 : nz(store.minOrderAmount());
-        return new Summary(subtotal, delivery, bag, subtotal.add(delivery).add(bag), minimum,
-                subtotal.compareTo(minimum) >= 0);
+        return new Summary(subtotal, delivery, bag, net.add(delivery).add(bag), minimum, net.compareTo(minimum) >= 0, off);
     }
 
     private static BigDecimal nz(BigDecimal v) {
