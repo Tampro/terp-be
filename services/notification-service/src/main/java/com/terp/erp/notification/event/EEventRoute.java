@@ -79,7 +79,9 @@ public enum EEventRoute {
     // The email code depends on data.status (see emailCode(JsonNode)); READY / ASSIGNED send nothing.
     DELIVERY_STATUS_CHANGED("delivery.status.changed", "ORDER_DELIVERED", null, null, null),
     // Back Office cancelled a paid order and refunded it (paid-order-cancel); the reason is never in the email.
-    ORDER_REFUNDED("order.refunded", "ORDER_REFUNDED", null, null, null);
+    ORDER_REFUNDED("order.refunded", "ORDER_REFUNDED", null, null, null),
+    // Back Office completed a customer return (order-return); the event carries the refund amount.
+    ORDER_RETURNED("order.returned", "ORDER_RETURNED", null, null, null);
 
     public final String eventType;
     public final String emailCode;
@@ -137,7 +139,8 @@ public enum EEventRoute {
 
     /** Emails to a shop customer about their order: never to the company's chat channels, SMS or webhooks. */
     public boolean customerOrder() {
-        return this == ORDER_PAID || this == DELIVERY_STATUS_CHANGED || this == ORDER_REFUNDED;
+        return this == ORDER_PAID || this == DELIVERY_STATUS_CHANGED || this == ORDER_REFUNDED
+                || this == ORDER_RETURNED;
     }
 
     /** Routed for the calendar only: the chat channels and SMS stay quiet. */

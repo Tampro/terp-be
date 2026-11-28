@@ -31,7 +31,7 @@ public class DocumentPostingController {
     @Operation(summary = "Journal a commerce document", description = "Called by commerce-service when a sales / "
             + "purchase invoice is posted or a return completed. Amounts come by role (goods, service, tax, cost); the "
             + "accounts come from the system account mapping. SALES_* needs SALES_POST, PURCHASE_* PURCHASE_POST; "
-            + "SHOP_ORDER / SHOP_ORDER_REFUND (Express orders) come only from order-service events and are refused here (COMMON_004). "
+            + "SHOP_ORDER / SHOP_ORDER_REFUND / SHOP_ORDER_RETURN (Express orders) come only from order-service events and are refused here (COMMON_004). "
             + "Idempotent per (company, sourceType, sourceId): a repeat returns the first entry. validateOnly = true "
             + "checks mapping, closed year and balance and writes nothing (commerce calls it before moving stock).")
     @ApiResponses({

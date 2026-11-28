@@ -228,5 +228,10 @@
     "prefix": "PC",
     "standalone": false,
     "description": "Back Office cancel of a paid order before pick-up: delivery cancelled, stock, coupon and points back, reversal journal, refund email"
+  },
+  "order-return": {
+    "prefix": "RT",
+    "standalone": false,
+    "description": "customer return of delivered items: request, Back Office reject / approve / complete, refund less pick-up fee, stock and points, reversal journal, email"
   }
 }

@@ -131,6 +131,45 @@ public class MileageLedger {
         entry(companyId, customerId, EMileageEntryType.ADJUST, points, null, null, reason);
     }
 
+    /** Points the order earned when delivered (its EARN lot), 0 when none. */
+    @Transactional(readOnly = true)
+    public int earnedFor(long orderId) {
+        return lots.findByEarnOrderId(orderId).map(MileageLot::getPoints).orElse(0);
+    }
+
+    /** A return gives back the points spent on the returned goods: a new lot with the policy's expiry. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void giveBack(CustomerOrder o, int points) {
+        if (points <= 0) {
+            return;
+        }
+        MileageLot l = lots.save(lot(o.getCompanyId(), o.getCustomerId(), "ADJUST", points,
+                MileageRules.expiresAt(clock.instant(), policy(o.getCompanyId()).getExpiryMonths())));
+        entry(o.getCompanyId(), o.getCustomerId(), EMileageEntryType.RETURN, points, o, l.getId(), null);
+    }
+
+    /**
+     * A return takes back the points earned on the returned goods, FIFO, at most the balance (points already spent
+     * are not chased — TODO(assumption) confirm with the business). @return points actually taken
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int clawBack(CustomerOrder o, int points) {
+        if (points <= 0) {
+            return 0;
+        }
+        List<MileageLot> open = lots.lockOpen(o.getCompanyId(), o.getCustomerId(), clock.instant());
+        int take = (int) Math.min(points, open.stream().mapToLong(MileageLot::getRemaining).sum());
+        if (take <= 0) {
+            return 0;
+        }
+        for (MileageRules.Take t : MileageRules.split(open, take)) {
+            t.lot().setRemaining(t.lot().getRemaining() - t.points());
+            lots.save(t.lot());
+        }
+        entry(o.getCompanyId(), o.getCustomerId(), EMileageEntryType.CLAWBACK, -take, o, null, null);
+        return take;
+    }
+
     /** One overdue lot: what is left of it expires. */
     @Transactional(propagation = Propagation.MANDATORY)
     public int expire(long lotId) {

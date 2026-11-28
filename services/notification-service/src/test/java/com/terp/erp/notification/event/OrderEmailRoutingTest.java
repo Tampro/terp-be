@@ -34,6 +34,7 @@ class OrderEmailRoutingTest {
         EEventRoute refunded = EEventRoute.of("order.refunded").orElseThrow();
         assertThat(refunded.emailCode(data(Map.of("orderId", "1")))).isEqualTo("ORDER_REFUNDED");
         assertThat(refunded.customerOrder()).isTrue();
+        assertThat(EEventRoute.of("order.returned").orElseThrow().customerOrder()).isTrue();
         assertThat(EEventRoute.of("support.ticket.created").orElseThrow().customerOrder()).isFalse();
     }
 
@@ -54,8 +55,12 @@ class OrderEmailRoutingTest {
         assertThat(en.body()).contains("Hong").contains("Gangseo Store").contains("13000");
         assertThat(MessageTemplates.email("ORDER_DELIVERED", "vi", merged).subject()).isEqualTo("Đơn HE-20261128-000001 đã giao");
         assertThat(MessageTemplates.email("ORDER_REFUNDED", "en", merged).body()).contains("Refunded: 13000");
+        JsonNode returned = DeliveryDispatcherFacts.merge(data(Map.of("orderId", "100", "refundAmount", "5500.0000")),
+                new OrderInternalClient.Facts("HE-20261128-000001", "Gangseo Store", "Hong", "hong@example.com",
+                        new BigDecimal("13000.0000"), "PAID", "DELIVERED"));
+        assertThat(MessageTemplates.email("ORDER_RETURNED", "en", returned).body()).contains("Refunded: 5500");
         for (String code : new String[]{"ORDER_PAID", "ORDER_PICKED_UP", "ORDER_DELIVERED", "ORDER_DELIVERY_CANCELLED",
-                "ORDER_REFUNDED"}) {
+                "ORDER_REFUNDED", "ORDER_RETURNED"}) {
             assertThat(MessageTemplates.hasTemplate(code)).as(code).isTrue();
         }
     }

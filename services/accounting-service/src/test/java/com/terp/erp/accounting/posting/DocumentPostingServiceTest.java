@@ -206,6 +206,24 @@ class DocumentPostingServiceTest {
     }
 
     @Test
+    void shopOrderReturnRefundsTheShareLessTheFeeAndNetsTheVat() {
+        // share 8,500 (7,727 + 773), fee 3,000 (2,727 + 273) → tax 500, refund 5,500; cost 1,000
+        service.postFor(10L, form(ESource.SHOP_ORDER_RETURN, "7727", "2727", "500", "1000", false));
+        List<JournalService.Line> l = posted("SHOP_ORDER_RETURN");
+        assertThat(l).hasSize(6);
+        line(l.get(0), ESystemAccount.SALES_REVENUE, "7727", null);
+        line(l.get(1), ESystemAccount.OUTPUT_VAT, "500", null);
+        line(l.get(2), ESystemAccount.SERVICE_REVENUE, null, "2727");
+        line(l.get(3), ESystemAccount.PG_CLEARING, null, "5500");
+        line(l.get(4), ESystemAccount.INVENTORY, "1000", null);
+        line(l.get(5), ESystemAccount.COGS, null, "1000");
+
+        TestLogin.as(10L, "SALES_POST", "PURCHASE_POST");
+        assertThatThrownBy(() -> service.post(null, form(ESource.SHOP_ORDER_RETURN, "1", null, null, null, false)))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommonError.COMMON_004);
+    }
+
+    @Test
     void eachSourceNeedsItsOwnPermissionAndSomeAmount() {
         TestLogin.as(10L, "SALES_POST");
         assertThatThrownBy(() -> service.post(null, form(ESource.PURCHASE_INVOICE, "1", null, null, null, false)))

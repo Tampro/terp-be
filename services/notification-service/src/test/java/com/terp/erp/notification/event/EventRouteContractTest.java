@@ -69,7 +69,9 @@ class EventRouteContractTest {
             row("order.paid", "-", "ORDER_PAID"),
             row("delivery.status.changed", "-", "ORDER_DELIVERED"),
             // paid-order-cancel
-            row("order.refunded", "-", "ORDER_REFUNDED"));
+            row("order.refunded", "-", "ORDER_REFUNDED"),
+            // order-return
+            row("order.returned", "-", "ORDER_RETURNED"));
 
     private static String[] row(String type, String webhook, String email) {
         return new String[]{type, webhook, email};
