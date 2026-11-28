@@ -111,7 +111,7 @@ spring:
             - id: store-service
               uri: ${STORE_SERVICE_URL:http://localhost:8098}
               predicates:
-                - Path=/api/v1/store/**
+                - Path=/api/v1/store/**,/api/v1/public/shop/**
 
 springdoc:
   api-docs:
@@ -173,3 +173,7 @@ erp:
       read-burst: ${GATEWAY_SUPPORT_READ_BURST:40}
       write-per-minute: ${GATEWAY_SUPPORT_WRITE_PER_MINUTE:10}
       write-burst: ${GATEWAY_SUPPORT_WRITE_BURST:5}
+    # Public storefront (no token, reads only): per client IP; a customer browsing a catalogue reads more than a portal.
+    shop-rate-limit:
+      read-per-minute: ${GATEWAY_SHOP_READ_PER_MINUTE:240}
+      read-burst: ${GATEWAY_SHOP_READ_BURST:60}

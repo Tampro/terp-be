@@ -14,8 +14,10 @@ import java.time.Duration;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
-    // No public business endpoint yet: the storefront (/api/v1/public/shop/**) is a later, separately approved change.
+    // Public storefront (approved 2026-11-28): reads only, rate limited at the gateway; PublicShopService checks the
+    // slug, that the shop is enabled and the company active, and scopes every read to that company.
     private static final String[] PUBLIC = {
+            "/api/v1/public/shop/**",
             "/actuator/health/**",
             "/v3/api-docs/**",
             "/swagger-ui/**",

@@ -8,4 +8,6 @@ public interface ShopSettingRepository extends JpaRepository<ShopSetting, Long> 
     Optional<ShopSetting> findByCompanyId(Long companyId);
 
     boolean existsBySlugAndCompanyIdNot(String slug, Long companyId);
+
+    Optional<ShopSetting> findBySlug(String slug);
 }

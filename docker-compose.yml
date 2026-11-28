@@ -653,6 +653,8 @@ services:
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
       INVENTORY_SERVICE_URL: http://inventory-service:8091
+      # Secret of Keycloak client erp-store-service (public storefront: inventory and IAM internal reads).
+      STORE_SERVICE_CLIENT_SECRET: ${STORE_SERVICE_CLIENT_SECRET:?set in .env}
     ports:
       - "18098:8098"
     depends_on:

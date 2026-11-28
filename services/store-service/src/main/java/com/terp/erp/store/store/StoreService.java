@@ -181,6 +181,42 @@ public class StoreService {
         return new ResolveDto(dto(s), Texts.id(hit.getZoneId()), o.orderableNow(), o.opensAt());
     }
 
+    // ------------------------------------------------------------------ public storefront (no user, company from the slug)
+
+    /** As resolve, for the company of a shop slug; the store comes back as a public view. */
+    @Transactional(readOnly = true)
+    public PublicResolveDto resolveIn(long companyId, BigDecimal lat, BigDecimal lon) {
+        StoreZoneRepository.Hit hit = zones.resolve(companyId, lat, lon)
+                .orElseThrow(() -> ApiException.notFound(EStoreError.STO_010));
+        Store s = requireActiveIn(companyId, hit.getStoreId());
+        OrderableDto o = orderable(s, Instant.now(clock));
+        return new PublicResolveDto(publicDto(s), o.orderableNow(), o.opensAt());
+    }
+
+    /** A live, active store of this company, else 404 STO_001 (another company's store looks missing). */
+    @Transactional(readOnly = true)
+    public Store requireActiveIn(long companyId, long storeId) {
+        return stores.findByIdAndDeletedFalse(storeId)
+                .filter(s -> Objects.equals(s.getCompanyId(), companyId) && s.isActive())
+                .orElseThrow(() -> ApiException.notFound(EStoreError.STO_001));
+    }
+
+    /** What a customer may see of a store: no warehouse id, no audit fields. */
+    public record PublicStoreDto(String id, String code, String name, String address, BigDecimal lat, BigDecimal lon,
+                                 String phone, String timeZone, LocalTime orderStart, LocalTime orderEnd,
+                                 BigDecimal deliveryFee, BigDecimal freeDeliveryThreshold, BigDecimal minOrderAmount,
+                                 BigDecimal firstOrderMinAmount, BigDecimal bagFee) {
+    }
+
+    public record PublicResolveDto(PublicStoreDto store, boolean orderableNow, Instant opensAt) {
+    }
+
+    private static PublicStoreDto publicDto(Store s) {
+        return new PublicStoreDto(Texts.id(s.getId()), s.getCode(), s.getName(), s.getAddress(), s.getLat(), s.getLon(),
+                s.getPhone(), s.getTimeZone(), s.getOrderStart(), s.getOrderEnd(), s.getDeliveryFee(),
+                s.getFreeDeliveryThreshold(), s.getMinOrderAmount(), s.getFirstOrderMinAmount(), s.getBagFee());
+    }
+
     /** By-id access: another company's store answers 404 STO_001. */
     private Store require(Long id) {
         Store s = stores.findByIdAndDeletedFalse(id).orElseThrow(() -> ApiException.notFound(EStoreError.STO_001));

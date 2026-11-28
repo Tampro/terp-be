@@ -37,6 +37,12 @@ erp:
   store:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    # Keycloak service account of store-service (client credentials): the public storefront has no user token, so it
+    # reads inventory's and IAM's /api/v1/internal/** with this one.
+    service-account:
+      token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token
+      client-id: ${STORE_SERVICE_CLIENT_ID:erp-store-service}
+      client-secret: ${STORE_SERVICE_CLIENT_SECRET}
 
 management:
   endpoints:
