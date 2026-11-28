@@ -39,6 +39,7 @@ public class CartService {
     private final CartLineRepository lines;
     private final CartSourcesClient sources;
     private final com.terp.erp.order.coupon.CouponLedger coupons;
+    private final com.terp.erp.order.mileage.MileageLedger mileage;
 
     public record QuantityForm(@Schema(example = "2", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull @Min(1) @Max(99) Integer quantity) {
     }
@@ -59,7 +60,10 @@ public class CartService {
                           @Schema(description = "The coupon code previewed (upper-case), null without one") String couponCode,
                           @Schema(description = "Coupon discount off the goods (0 without / with a refused coupon)") BigDecimal discount,
                           @Schema(description = "Why the coupon does not apply (CPN_007-CPN_011), null when it does")
-                          String couponError) {
+                          String couponError,
+                          @Schema(description = "Points previewed (0 without / when refused)") BigDecimal pointsUsed,
+                          @Schema(description = "Why the points cannot be used (MIL_003-MIL_006), null when they can")
+                          String pointsError) {
     }
 
     private record Context(Membership member, StoreView store, Cart cart) {
@@ -73,8 +77,14 @@ public class CartService {
     /** The cart with a coupon previewed: the refusal comes back as couponError, the read never fails for it. */
     @Transactional
     public CartDto view(String slug, String sub, long storeId, String couponCode) {
+        return view(slug, sub, storeId, couponCode, null);
+    }
+
+    /** With a coupon and / or points previewed: refusals come back as couponError / pointsError, the read never fails. */
+    @Transactional
+    public CartDto view(String slug, String sub, long storeId, String couponCode, Integer usePoints) {
         Context ctx = context(slug, sub, storeId);
-        return couponCode == null || couponCode.isBlank() ? dto(ctx) : dto(ctx, couponCode);
+        return dto(ctx, couponCode == null || couponCode.isBlank() ? null : couponCode, usePoints);
     }
 
     /** Creates the line or replaces its quantity. */
@@ -158,10 +168,10 @@ public class CartService {
     }
 
     private CartDto dto(Context ctx) {
-        return dto(ctx, null);
+        return dto(ctx, null, null);
     }
 
-    private CartDto dto(Context ctx, String couponCode) {
+    private CartDto dto(Context ctx, String couponCode, Integer usePoints) {
         List<CartLine> rows = lines.findByCartIdOrderByIdAsc(ctx.cart().getId());
         Map<String, ShelfItem> live = sources.shelf(ctx.member().companyId(), ctx.store().warehouseId(),
                         rows.stream().map(CartLine::getItemId).toList()).stream()
@@ -186,9 +196,20 @@ public class CartService {
                 error = r.error().getCode();
             }
         }
-        Summary s = CartRules.summary(ctx.store(), priced, ctx.cart().isBagRequested(), discount);
+        BigDecimal points = BigDecimal.ZERO;
+        String pointsError = null;
+        if (usePoints != null && usePoints > 0) {
+            var refusal = mileage.preview(ctx.member().companyId(), ctx.member().customerId(), usePoints,
+                    CartRules.subtotal(priced).subtract(discount));
+            if (refusal == null) {
+                points = BigDecimal.valueOf(usePoints);
+            } else {
+                pointsError = refusal.error().getCode();
+            }
+        }
+        Summary s = CartRules.summary(ctx.store(), priced, ctx.cart().isBagRequested(), discount, points);
         return new CartDto(ctx.store().id(), out, s.subtotal(), s.deliveryFee(), s.bagFee(), ctx.cart().isBagRequested(),
                 s.total(), s.minOrderAmount(), s.minimumReached(), ctx.store().freeDeliveryThreshold(),
-                ctx.store().orderableNow(), ctx.store().opensAt(), code, s.discount(), error);
+                ctx.store().orderableNow(), ctx.store().opensAt(), code, s.discount(), error, s.pointsUsed(), pointsError);
     }
 }

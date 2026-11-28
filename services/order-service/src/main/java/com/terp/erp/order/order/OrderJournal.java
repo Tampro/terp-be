@@ -24,7 +24,7 @@ public final class OrderJournal {
     public static Amounts amounts(CustomerOrder o, List<CustomerOrderLine> lines) {
         // A coupon reduces the goods revenue itself (no discount account). TODO(assumption): chief accountant.
         BigDecimal g = lines.stream().map(CustomerOrderLine::getLineTotal).reduce(BigDecimal.ZERO, BigDecimal::add)
-                .subtract(nz(o.getDiscount()));
+                .subtract(nz(o.getDiscount())).subtract(BigDecimal.valueOf(o.getPointsUsed()));
         BigDecimal f = nz(o.getDeliveryFee()).add(nz(o.getBagFee()));
         BigDecimal vatG = vat(g);
         BigDecimal vatF = vat(f);

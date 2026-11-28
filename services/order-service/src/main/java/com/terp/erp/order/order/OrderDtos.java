@@ -20,9 +20,15 @@ public final class OrderDtos {
             @NotNull ESubstitution substitution,
             @Schema(example = "Ring twice") @Size(max = 200) String note,
             @Schema(description = "Coupon code of the company (case-insensitive)", example = "WELCOME10")
-            @Size(max = 30) String couponCode) {
+            @Size(max = 30) String couponCode,
+            @Schema(description = "Points to spend (after the coupon): at least the policy minimum, steps of 10",
+                    example = "1000") @jakarta.validation.constraints.Min(0) Integer usePoints) {
         public PlaceForm(Long addressId, ESubstitution substitution, String note) {
-            this(addressId, substitution, note, null);
+            this(addressId, substitution, note, null, null);
+        }
+
+        public PlaceForm(Long addressId, ESubstitution substitution, String note, String couponCode) {
+            this(addressId, substitution, note, couponCode, null);
         }
     }
 
@@ -56,7 +62,8 @@ public final class OrderDtos {
                            @Schema(description = "Email for order and delivery messages, from the sign-in account at "
                                    + "checkout; masked for Back Office (h***@example.com)") String email,
                            @Schema(description = "Coupon applied, null without one") String couponCode,
-                           @Schema(description = "Coupon discount off the goods; total = subtotal - discount + fees")
-                           BigDecimal discount) {
+                           @Schema(description = "Coupon discount off the goods; total = subtotal - discount - pointsUsed + fees")
+                           BigDecimal discount,
+                           @Schema(description = "Mileage points spent on the order (1 point = 1 won)") int pointsUsed) {
     }
 }

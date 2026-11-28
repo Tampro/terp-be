@@ -117,7 +117,7 @@ spring:
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:8100}
               predicates:
-                - Path=/api/v1/shop/*/stores/*/cart,/api/v1/shop/*/stores/*/cart/**,/api/v1/shop/*/stores/*/orders,/api/v1/shop/*/orders,/api/v1/shop/*/orders/**
+                - Path=/api/v1/shop/*/stores/*/cart,/api/v1/shop/*/stores/*/cart/**,/api/v1/shop/*/stores/*/orders,/api/v1/shop/*/orders,/api/v1/shop/*/orders/**,/api/v1/shop/*/mileage
             # Back Office orders (staff realm, ORDER_VIEW).
             - id: order-staff
               uri: ${ORDER_SERVICE_URL:http://localhost:8100}

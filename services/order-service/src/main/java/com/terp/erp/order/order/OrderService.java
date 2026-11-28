@@ -63,6 +63,7 @@ public class OrderService {
     private final PlatformTransactionManager txManager;
     private final OutboxPublisher outbox;
     private final com.terp.erp.order.coupon.CouponLedger coupons;
+    private final com.terp.erp.order.mileage.MileageLedger mileage;
     private final Clock clock;
 
     // ------------------------------------------------------------------ checkout
@@ -100,8 +101,11 @@ public class OrderService {
         }
         com.terp.erp.order.coupon.CouponLedger.Applied coupon = f.couponCode() == null || f.couponCode().isBlank() ? null
                 : coupons.lockAndCheck(m.companyId(), m.customerId(), f.couponCode(), CartRules.subtotal(priced));
-        CartRules.Summary s = CartRules.summary(store, priced, cart.isBagRequested(),
-                coupon == null ? BigDecimal.ZERO : coupon.discount());
+        BigDecimal off = coupon == null ? BigDecimal.ZERO : coupon.discount();
+        int points = f.usePoints() == null ? 0 : f.usePoints();
+        java.util.List<com.terp.erp.order.mileage.MileageLot> lots = points == 0 ? null
+                : mileage.lockAndCheck(m.companyId(), m.customerId(), points, CartRules.subtotal(priced).subtract(off));
+        CartRules.Summary s = CartRules.summary(store, priced, cart.isBagRequested(), off, BigDecimal.valueOf(points));
         if (!s.minimumReached()) {
             throw ApiException.badRequest(EOrderError.ORD_010, s.minOrderAmount().stripTrailingZeros().toPlainString());
         }
@@ -125,6 +129,7 @@ public class OrderService {
         o.setBagFee(s.bagFee());
         o.setTotal(s.total());
         o.setDiscount(s.discount());
+        o.setPointsUsed(points);
         if (coupon != null) {
             o.setCouponId(coupon.coupon().getId());
             o.setCouponCode(coupon.coupon().getCode());
@@ -143,6 +148,9 @@ public class OrderService {
         CustomerOrder saved = orders.saveAndFlush(o);
         if (coupon != null) {
             coupons.reserve(coupon.coupon(), m.customerId(), saved.getId());
+        }
+        if (lots != null) {
+            mileage.reserve(lots, saved, points);
         }
         List<CustomerOrderLine> snapshot = new ArrayList<>();
         for (CartLine l : lines) {
@@ -275,6 +283,7 @@ public class OrderService {
             o.setStatus(EOrderStatus.CANCELLED);
             o.setCancelledAt(clock.instant());
             coupons.release(o.getId());
+            mileage.release(o);
             orders.saveAndFlush(o);
         }
         return dto(o, orderLines.findByOrderIdOrderByIdAsc(o.getId()), false);
@@ -315,7 +324,7 @@ public class OrderService {
                 o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
                 masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
                 masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt(),
-                email(o, masked), o.getCouponCode(), o.getDiscount());
+                email(o, masked), o.getCouponCode(), o.getDiscount(), o.getPointsUsed());
     }
 
     private String email(CustomerOrder o, boolean masked) {

@@ -27,6 +27,7 @@ public class DeliveryEventIntake {
     private final ProcessedEventRepository processed;
     private final CustomerOrderRepository orders;
     private final Clock clock;
+    private final com.terp.erp.order.mileage.MileageLedger mileage;
 
     @Transactional(readOnly = true)
     public boolean isProcessed(String eventId) {
@@ -64,6 +65,10 @@ public class DeliveryEventIntake {
         o.setDeliveryStatus(status);
         o.setDeliveryStatusAt(at);
         orders.save(o);
+        if ("DELIVERED".equals(status)) {
+            // Points are earned once the goods reached the customer (once per order: unique earn lot).
+            mileage.earn(o, at);
+        }
     }
 
     private static Long id(JsonNode n) {

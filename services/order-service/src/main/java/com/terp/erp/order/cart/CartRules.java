@@ -18,7 +18,7 @@ public final class CartRules {
     }
 
     public record Summary(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal bagFee, BigDecimal total, BigDecimal minOrderAmount,
-                   boolean minimumReached, BigDecimal discount) {
+                   boolean minimumReached, BigDecimal discount, BigDecimal pointsUsed) {
     }
 
     public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested) {
@@ -35,16 +35,24 @@ public final class CartRules {
      * the discount (plan P2 "minimum after discounts").
      */
     public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested, BigDecimal discount) {
+        return summary(store, lines, bagRequested, discount, BigDecimal.ZERO);
+    }
+
+    /** points: mileage spent after the coupon, off the goods only; the minimum and free delivery are on what is left. */
+    public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested, BigDecimal discount,
+                                  BigDecimal points) {
         BigDecimal subtotal = subtotal(lines);
         BigDecimal off = discount == null ? BigDecimal.ZERO : discount.min(subtotal);
-        BigDecimal net = subtotal.subtract(off);
+        BigDecimal used = points == null ? BigDecimal.ZERO : points.min(subtotal.subtract(off));
+        BigDecimal net = subtotal.subtract(off).subtract(used);
         BigDecimal free = nz(store.freeDeliveryThreshold());
         BigDecimal delivery = free.signum() > 0 && net.compareTo(free) >= 0 ? BigDecimal.ZERO : nz(store.deliveryFee());
         BigDecimal bag = bagRequested ? nz(store.bagFee()) : BigDecimal.ZERO;
         // TODO(assumption): every customer is treated as on their first order (FR-ORD-002: 10,000 then 20,000).
         BigDecimal minimum = nz(store.firstOrderMinAmount()).signum() > 0 ? nz(store.firstOrderMinAmount())
                 : nz(store.minOrderAmount());
-        return new Summary(subtotal, delivery, bag, net.add(delivery).add(bag), minimum, net.compareTo(minimum) >= 0, off);
+        return new Summary(subtotal, delivery, bag, net.add(delivery).add(bag), minimum, net.compareTo(minimum) >= 0, off,
+                used);
     }
 
     private static BigDecimal nz(BigDecimal v) {

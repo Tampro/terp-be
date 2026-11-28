@@ -52,4 +52,5 @@ public class CustomerOrder extends BaseAuditableEntity {
     @Column(name = "coupon_id") private Long couponId;
     @Column(name = "coupon_code", length = 30) private String couponCode;
     @Column(name = "discount", nullable = false, precision = 19, scale = 4) private BigDecimal discount = BigDecimal.ZERO;
+    @Column(name = "points_used", nullable = false) private int pointsUsed;
 }
