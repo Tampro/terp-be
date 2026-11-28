@@ -18,8 +18,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/internal/member/shops/{slug}/members")
 public class InternalMemberController {
     private final MemberService members;
+    private final CustomerAddressRepository addresses;
+    private final com.terp.erp.member.common.FieldCipher cipher;
 
     public record MembershipDto(String customerId, String companyId) {
+    }
+
+    /** The delivery address an order is placed to, with the plain phone (service accounts only; the order encrypts it again). */
+    public record AddressDto(String recipientName, String phone, String postcode, String address1, String address2,
+                             java.math.BigDecimal lat, java.math.BigDecimal lon, String deliveryNote) {
+    }
+
+    @GetMapping("/{sub}/addresses/{id}")
+    public ApiMessageDto<AddressDto> address(@PathVariable String slug, @PathVariable String sub, @PathVariable Long id) {
+        Customer c = members.requireActive(slug, sub);
+        CustomerAddress a = addresses.findByIdAndCustomerId(id, c.getId())
+                .orElseThrow(() -> com.terp.erp.exception.ApiException.notFound(com.terp.erp.member.common.EMemberError.MEM_007));
+        return ApiMessageDto.ok(new AddressDto(a.getRecipientName(), cipher.decrypt(a.getPhoneEnc()), a.getPostcode(),
+                a.getAddress1(), a.getAddress2(), a.getLat(), a.getLon(), a.getDeliveryNote()));
     }
 
     @GetMapping("/{sub}")

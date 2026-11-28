@@ -34,4 +34,10 @@ public interface StoreZoneRepository extends JpaRepository<StoreZone, Long> {
             + "ST_Distance_Sphere(POINT(:lon, :lat), POINT(COALESCE(s.lon, 0), COALESCE(s.lat, 0))), s.id, z.id LIMIT 1",
             nativeQuery = true)
     Optional<Hit> resolve(Long company, BigDecimal lat, BigDecimal lon);
+
+    /** 1 when an active zone of this store touches the point (same geometry rule as resolve), else 0. */
+    @Query(value = "SELECT COUNT(*) FROM store_zone z WHERE z.store_id = :storeId AND z.active = 1 "
+            + "AND ST_Intersects(z.area, ST_GeomFromGeoJSON(CONCAT('{\"type\":\"Point\",\"coordinates\":[', :lon, ',', :lat, ']}'), 1, 4326))",
+            nativeQuery = true)
+    long countServing(Long storeId, BigDecimal lat, BigDecimal lon);
 }

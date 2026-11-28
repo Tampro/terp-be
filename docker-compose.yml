@@ -720,6 +720,8 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:8091
       # Secret of Keycloak client erp-order-service (member / store / inventory internal reads).
       ORDER_SERVICE_CLIENT_SECRET: ${ORDER_SERVICE_CLIENT_SECRET:?set in .env}
+      # AES-256-GCM key of the delivery phone on orders (base64 of 32 bytes).
+      ORDER_ENC_KEY: ${ORDER_ENC_KEY:?set in .env}
     ports:
       - "18100:8100"
     depends_on:

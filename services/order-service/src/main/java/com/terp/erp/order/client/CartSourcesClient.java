@@ -98,6 +98,59 @@ public class CartSourcesClient {
         }
     }
 
+    public record Address(String recipientName, String phone, String postcode, String address1, String address2,
+                          BigDecimal lat, BigDecimal lon, String deliveryNote) {
+    }
+
+    public record StockLine(long itemId, long warehouseId, BigDecimal quantity) {
+    }
+
+    /** The member's own delivery address with the plain phone; 404 (not theirs / unknown) → ORD_012. */
+    public Address address(String slug, String sub, long addressId) {
+        String url = UriComponentsBuilder.fromUriString(props.memberServiceUrl()
+                        + "/api/v1/internal/member/shops/{slug}/members/{sub}/addresses/{id}")
+                .buildAndExpand(slug, sub, addressId).encode().toUriString();
+        return mapper.convertValue(get(url, EOrderError.ORD_012), Address.class);
+    }
+
+    /** Whether an active zone of this store contains the point. */
+    public boolean serves(String slug, long storeId, BigDecimal lat, BigDecimal lon) {
+        String url = UriComponentsBuilder.fromUriString(props.storeServiceUrl() + "/api/v1/internal/store/shops/{slug}/stores/{id}/serves")
+                .queryParam("lat", lat.toPlainString()).queryParam("lon", lon.toPlainString())
+                .buildAndExpand(slug, storeId).encode().toUriString();
+        return get(url, EOrderError.ORD_005).path("serves").asBoolean(false);
+    }
+
+    /**
+     * Moves the order's stock out once (inventory is idempotent on ORDER + order id, so a retry after a timeout is safe).
+     * Not enough stock (400 INV_017) → 400 ORD_015; anything else → 503 ORD_007.
+     */
+    public void moveStock(long companyId, long orderId, List<StockLine> lines) {
+        String url = UriComponentsBuilder.fromUriString(props.inventoryServiceUrl() + "/api/v1/internal/inventory/stock/moves")
+                .queryParam("companyId", companyId).toUriString();
+        java.util.Map<String, Object> body = java.util.Map.of("sourceType", "ORDER", "sourceId", orderId, "lines", lines);
+        for (int attempt = 0; ; attempt++) {
+            try {
+                client.post().uri(Nulls.nonNull(java.net.URI.create(url)))
+                        .header("Authorization", "Bearer " + tokens.token())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .body(mapper.writeValueAsString(body)).retrieve().toBodilessEntity();
+                return;
+            } catch (HttpClientErrorException e) {
+                if (e.getStatusCode().value() == 400) {
+                    throw ApiException.badRequest(EOrderError.ORD_015);
+                }
+                log.error("stock move refused: {}", e.getStatusCode().value());
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007);
+            } catch (RestClientException | com.fasterxml.jackson.core.JsonProcessingException e) {
+                if (attempt >= 1) {
+                    log.error("stock move failed: {}", e.getClass().getSimpleName());
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007);
+                }
+            }
+        }
+    }
+
     private JsonNode get(String url, EOrderError notFound) {
         for (int attempt = 0; ; attempt++) {
             try {

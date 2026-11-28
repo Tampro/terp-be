@@ -50,7 +50,7 @@ public enum EPlanModule {
     // PORTAL (client / vendor portal) is always on: each portal endpoint only shows rows of a service the company
     // has, and the rows themselves stay behind their own plan module's service.
     public static final Set<String> ALWAYS_ON = Set.of("IAM", "SAAS", "MEDIA", "HELPDESK", "NOTIFICATION",
-            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR", "MESSENGER", "PORTAL", "STORE");
+            "INVENTORY", "SALES", "CUSTOMER", "PURCHASE", "VENDOR", "MESSENGER", "PORTAL", "STORE", "ORDER");
 
     private final String displayName;
     private final Set<String> permissionModules;
