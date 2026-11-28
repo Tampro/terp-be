@@ -39,6 +39,7 @@ public class EventIntake {
     static final Duration FIRST_SEND_GRACE = Duration.ofMinutes(1);
     public static final String PAYLOAD_RECIPIENT = "payload";
     public static final String USER_RECIPIENT = "user:";
+    public static final String ORDER_RECIPIENT = "order:";
     public static final String PLATFORM_RECIPIENT = "platform:";
     public static final String CHANNEL_EVENT_DISABLED = "CHANNEL_EVENT_DISABLED";
 
@@ -85,7 +86,8 @@ public class EventIntake {
             feed.write(e, null);
             return List.of();
         }
-        NotificationConfig cfg = iam.config(e.companyId(), e.eventType(), route.get().emailCode, route.get().webhookCode);
+        NotificationConfig cfg = iam.config(e.companyId(), e.eventType(), route.get().emailCode(e.data()),
+                route.get().webhookCode);
         List<Delivery> rows = plan(e, route.get(), cfg, now);
         processed.saveAndFlush(pe);
         feed.write(e, cfg.defaultLanguage());
@@ -95,8 +97,8 @@ public class EventIntake {
 
     List<Delivery> plan(EventEnvelope e, EEventRoute route, NotificationConfig cfg, Instant now) {
         List<Delivery> rows = new ArrayList<>();
-        if (route.emailCode != null) {
-            List<String> refs = recipients(e.data());
+        if (route.emailCode(e.data()) != null) {
+            List<String> refs = route.customerOrder() ? orderRecipient(e.data()) : recipients(e.data());
             if (!cfg.emailEnabled()) {
                 rows.add(row(e, EChannel.EMAIL, null, EStatus.SKIPPED, "EMAIL_DISABLED", now));
             } else if (refs.isEmpty()) {
@@ -113,7 +115,7 @@ public class EventIntake {
                 }
             }
         }
-        if (!route.calendarOnly()) {
+        if (!route.calendarOnly() && !route.customerOrder()) {
             if (cfg.slack() != null) {
                 rows.add(chatRow(e, EChannel.SLACK, "hooks.slack.com", cfg.slackOn(), now));
             }
@@ -195,6 +197,12 @@ public class EventIntake {
     public static String phone(JsonNode data) {
         String v = data == null ? "" : data.path("recipientPhone").asText("").trim();
         return v.matches("\\+[1-9][0-9]{6,14}") ? v : null;
+    }
+
+    /** "order:&lt;orderId&gt;": the customer's address is read from order-service at send time (never in the event). */
+    static List<String> orderRecipient(JsonNode data) {
+        String id = data == null ? "" : data.path("orderId").asText("");
+        return id.matches("[0-9]{1,19}") ? List.of(ORDER_RECIPIENT + id) : List.of();
     }
 
     /** "payload" for data.recipientEmail, "user:&lt;id&gt;" per data.recipientUserIds (distinct, in order). */

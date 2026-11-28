@@ -73,7 +73,11 @@ public enum EEventRoute {
     CONTRACT_CREATED("crm.contract.created", null, "NEW_CONTRACT", "New Contract", "CONTRACT"),
     CRM_TASK_CREATED("crm.task.created", "CRM_TASK_CREATED", null, null, null),
     LEAD_EMAILED("crm.lead.emailed", "LEAD_EMAIL", null, null, null),
-    DEAL_EMAILED("crm.deal.emailed", "DEAL_EMAIL", null, null, null);
+    DEAL_EMAILED("crm.deal.emailed", "DEAL_EMAIL", null, null, null),
+    // Express orders → the customer (recipient order:<orderId>, read from order-service). No chat, SMS or webhook.
+    ORDER_PAID("order.paid", "ORDER_PAID", null, null, null),
+    // The email code depends on data.status (see emailCode(JsonNode)); READY / ASSIGNED send nothing.
+    DELIVERY_STATUS_CHANGED("delivery.status.changed", "ORDER_DELIVERED", null, null, null);
 
     public final String eventType;
     public final String emailCode;
@@ -110,6 +114,28 @@ public enum EEventRoute {
         this.webhookName = webhookName;
         this.webhookModule = webhookModule;
         this.calendar = calendar;
+    }
+
+    /**
+     * The email code for this event: {@link #emailCode} except for a delivery status, where the status chooses it
+     * (PICKED_UP / DELIVERED / CANCELLED) and any other status has none.
+     */
+    public String emailCode(com.fasterxml.jackson.databind.JsonNode data) {
+        if (this != DELIVERY_STATUS_CHANGED) {
+            return emailCode;
+        }
+        String status = data == null ? "" : data.path("status").asText("");
+        return switch (status) {
+            case "PICKED_UP" -> "ORDER_PICKED_UP";
+            case "DELIVERED" -> "ORDER_DELIVERED";
+            case "CANCELLED" -> "ORDER_DELIVERY_CANCELLED";
+            default -> null;
+        };
+    }
+
+    /** Emails to a shop customer about their order: never to the company's chat channels, SMS or webhooks. */
+    public boolean customerOrder() {
+        return this == ORDER_PAID || this == DELIVERY_STATUS_CHANGED;
     }
 
     /** Routed for the calendar only: the chat channels and SMS stay quiet. */

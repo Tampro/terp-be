@@ -42,7 +42,12 @@ public final class TemplateVariables {
             Map.entry(ENotificationEvent.OFFER_LETTER, List.of("title", "letterText")),
             Map.entry(ENotificationEvent.CRM_TASK_CREATED, List.of("title", "date")),
             Map.entry(ENotificationEvent.LEAD_EMAIL, List.of("subject", "body")),
-            Map.entry(ENotificationEvent.DEAL_EMAIL, List.of("subject", "body")));
+            Map.entry(ENotificationEvent.DEAL_EMAIL, List.of("subject", "body")),
+            Map.entry(ENotificationEvent.ORDER_PAID, List.of("orderNo", "storeName", "recipientName", "total")),
+            Map.entry(ENotificationEvent.ORDER_PICKED_UP, List.of("orderNo", "storeName", "recipientName")),
+            Map.entry(ENotificationEvent.ORDER_DELIVERED, List.of("orderNo", "storeName", "recipientName")),
+            Map.entry(ENotificationEvent.ORDER_DELIVERY_CANCELLED, List.of("orderNo", "storeName", "recipientName")));
+    // ORDER_* are not in EVENT_EMAIL: customer emails never go to the company's chat channels.
 
     /** Routing key to email code (notification-service EEventRoute.emailCode), for the chat variables. */
     private static final Map<String, ENotificationEvent> EVENT_EMAIL = Map.ofEntries(

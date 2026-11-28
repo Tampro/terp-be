@@ -635,6 +635,8 @@ services:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
       IAM_SERVICE_URL: http://iam-service:8081
+      # order-service internal API: customer address and facts of order / delivery emails.
+      ORDER_SERVICE_URL: http://order-service:8100
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: "5672"
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}

@@ -47,6 +47,8 @@ public final class OrderDtos {
                            String journalError,
                            @Schema(description = "Latest delivery status (READY, ASSIGNED, PICKED_UP, DELIVERED, CANCELLED); "
                                    + "null before payment", example = "PICKED_UP") String deliveryStatus,
-                           @Schema(description = "When the delivery reached that status (UTC)") Instant deliveryStatusAt) {
+                           @Schema(description = "When the delivery reached that status (UTC)") Instant deliveryStatusAt,
+                           @Schema(description = "Email for order and delivery messages, from the sign-in account at "
+                                   + "checkout; masked for Back Office (h***@example.com)") String email) {
     }
 }

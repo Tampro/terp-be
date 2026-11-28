@@ -68,6 +68,12 @@ public class OrderService {
 
     @Transactional
     public OrderDto place(String slug, String sub, long storeId, PlaceForm f) {
+        return place(slug, sub, null, storeId, f);
+    }
+
+    /** @param email the customer's email from the token (may be null): kept encrypted for order / delivery emails. */
+    @Transactional
+    public OrderDto place(String slug, String sub, String email, long storeId, PlaceForm f) {
         String shop = norm(slug);
         Membership m = sources.membership(shop, sub);
         StoreView store = sources.store(shop, storeId);
@@ -117,6 +123,7 @@ public class OrderService {
         o.setStoreName(store.name());
         o.setRecipientName(a.recipientName());
         o.setPhoneEnc(cipher.encrypt(a.phone()));
+        o.setEmailEnc(email == null || email.isBlank() ? null : cipher.encrypt(email.trim()));
         o.setPostcode(a.postcode());
         o.setAddress1(a.address1());
         o.setAddress2(a.address2());
@@ -213,6 +220,16 @@ public class OrderService {
                 "orderNo", o.getOrderNo(), "storeId", o.getStoreId(), "warehouseId", o.getWarehouseId()));
     }
 
+    /** Internal read for notification-service: who to email and what to say; another company's → ORD_018. */
+    @Transactional(readOnly = true)
+    public NotificationFactsDto notificationFacts(long companyId, long id) {
+        CustomerOrder o = orders.findById(id).filter(x -> x.getCompanyId() != null && x.getCompanyId() == companyId)
+                .orElseThrow(() -> ApiException.notFound(EOrderError.ORD_018));
+        return new NotificationFactsDto(o.getOrderNo(), o.getStoreName(), o.getRecipientName(),
+                o.getEmailEnc() == null ? null : cipher.decrypt(o.getEmailEnc()), o.getTotal(), o.getStatus(),
+                o.getDeliveryStatus());
+    }
+
     /** Internal read for delivery-service: the order's snapshot with the plain phone; another company's → ORD_018. */
     @Transactional(readOnly = true)
     public InternalOrderDto internal(long companyId, long id) {
@@ -284,7 +301,22 @@ public class OrderService {
                 masked ? mask(phone) : phone, o.getPostcode(), o.getAddress1(), o.getAddress2(), o.getLat(), o.getLon(),
                 o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
                 masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
-                masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt());
+                masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt(),
+                email(o, masked));
+    }
+
+    private String email(CustomerOrder o, boolean masked) {
+        String e = o.getEmailEnc() == null ? null : cipher.decrypt(o.getEmailEnc());
+        return masked ? maskEmail(e) : e;
+    }
+
+    /** hong@example.com → h***@example.com (staff never sees the full address). */
+    static String maskEmail(String e) {
+        if (e == null) {
+            return null;
+        }
+        int at = e.indexOf('@');
+        return at < 1 ? "***" : e.charAt(0) + "***" + e.substring(at);
     }
 
     /** 01012345678 → 010-****-5678 (staff never sees the full number). */
