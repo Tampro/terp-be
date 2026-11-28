@@ -23,6 +23,10 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
     Page<CustomerOrder> search(Long companyId, Long storeId, EOrderStatus status, Instant from, Instant to, Pageable pageable);
 
     /** PENDING_PAYMENT orders created before {@code before} become EXPIRED. */
+    @Query("select o.id from CustomerOrder o where o.status = com.terp.erp.order.order.EOrderStatus.PENDING_PAYMENT "
+            + "and o.createdDate < :before order by o.id")
+    java.util.List<Long> idsToExpire(Instant before);
+
     @Modifying
     @Query("update CustomerOrder o set o.status = com.terp.erp.order.order.EOrderStatus.EXPIRED "
             + "where o.status = com.terp.erp.order.order.EOrderStatus.PENDING_PAYMENT and o.createdDate < :before")

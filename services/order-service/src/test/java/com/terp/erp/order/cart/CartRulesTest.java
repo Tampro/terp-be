@@ -48,4 +48,13 @@ class CartRulesTest {
     private static BigDecimal bd(int v) {
         return BigDecimal.valueOf(v);
     }
+
+    @Test
+    void freeDeliveryAndTheMinimumCompareTheGoodsAfterTheDiscount() {
+        var s = CartRules.summary(store(10000), List.of(new Priced(bd(32000), true)), false, bd(3000));
+        assertThat(s.deliveryFee()).isEqualByComparingTo("3000");               // 29,000 < 30,000 free threshold
+        assertThat(s.total()).isEqualByComparingTo("32000");                     // 29,000 + 3,000
+        assertThat(CartRules.summary(store(10000), List.of(new Priced(bd(11000), true)), false, bd(2000)).minimumReached())
+                .isFalse();                                                     // 9,000 < 10,000
+    }
 }

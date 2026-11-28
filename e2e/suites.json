@@ -213,5 +213,10 @@
     "prefix": "CN",
     "standalone": false,
     "description": "customer emails: order paid, picked up, delivered, delivery cancelled (address from the order, never in the event)"
+  },
+  "coupon": {
+    "prefix": "CP",
+    "standalone": false,
+    "description": "order-service coupons: Back Office CRUD, cart preview, use reserved at placement and given back on cancel, revenue net of the discount"
   }
 }

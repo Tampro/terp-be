@@ -38,6 +38,7 @@ public class CartService {
     private final CartRepository carts;
     private final CartLineRepository lines;
     private final CartSourcesClient sources;
+    private final com.terp.erp.order.coupon.CouponLedger coupons;
 
     public record QuantityForm(@Schema(example = "2", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull @Min(1) @Max(99) Integer quantity) {
     }
@@ -54,7 +55,11 @@ public class CartService {
 
     public record CartDto(String storeId, List<LineDto> lines, BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal bagFee,
                           boolean bagRequested, BigDecimal total, BigDecimal minOrderAmount, boolean minimumReached,
-                          BigDecimal freeDeliveryThreshold, boolean orderableNow, Instant opensAt) {
+                          BigDecimal freeDeliveryThreshold, boolean orderableNow, Instant opensAt,
+                          @Schema(description = "The coupon code previewed (upper-case), null without one") String couponCode,
+                          @Schema(description = "Coupon discount off the goods (0 without / with a refused coupon)") BigDecimal discount,
+                          @Schema(description = "Why the coupon does not apply (CPN_007-CPN_011), null when it does")
+                          String couponError) {
     }
 
     private record Context(Membership member, StoreView store, Cart cart) {
@@ -63,6 +68,13 @@ public class CartService {
     @Transactional
     public CartDto view(String slug, String sub, long storeId) {
         return dto(context(slug, sub, storeId));
+    }
+
+    /** The cart with a coupon previewed: the refusal comes back as couponError, the read never fails for it. */
+    @Transactional
+    public CartDto view(String slug, String sub, long storeId, String couponCode) {
+        Context ctx = context(slug, sub, storeId);
+        return couponCode == null || couponCode.isBlank() ? dto(ctx) : dto(ctx, couponCode);
     }
 
     /** Creates the line or replaces its quantity. */
@@ -146,6 +158,10 @@ public class CartService {
     }
 
     private CartDto dto(Context ctx) {
+        return dto(ctx, null);
+    }
+
+    private CartDto dto(Context ctx, String couponCode) {
         List<CartLine> rows = lines.findByCartIdOrderByIdAsc(ctx.cart().getId());
         Map<String, ShelfItem> live = sources.shelf(ctx.member().companyId(), ctx.store().warehouseId(),
                         rows.stream().map(CartLine::getItemId).toList()).stream()
@@ -157,10 +173,22 @@ public class CartService {
             return new LineDto(String.valueOf(r.getItemId()), i == null ? null : i.name(), price, r.getQuantity(), total,
                     i == null ? null : i.purchaseLimitQty(), i != null && i.soldOut(), i != null, r.isKeep(), r.getCreatedDate());
         }).toList();
-        Summary s = CartRules.summary(ctx.store(), out.stream().map(l -> new Priced(l.lineTotal(), l.available())).toList(),
-                ctx.cart().isBagRequested());
+        List<Priced> priced = out.stream().map(l -> new Priced(l.lineTotal(), l.available())).toList();
+        BigDecimal discount = BigDecimal.ZERO;
+        String code = null;
+        String error = null;
+        if (couponCode != null) {
+            code = com.terp.erp.order.coupon.CouponRules.normalize(couponCode);
+            var r = coupons.preview(ctx.member().companyId(), ctx.member().customerId(), code, CartRules.subtotal(priced));
+            if (r.ok()) {
+                discount = r.discount();
+            } else {
+                error = r.error().getCode();
+            }
+        }
+        Summary s = CartRules.summary(ctx.store(), priced, ctx.cart().isBagRequested(), discount);
         return new CartDto(ctx.store().id(), out, s.subtotal(), s.deliveryFee(), s.bagFee(), ctx.cart().isBagRequested(),
                 s.total(), s.minOrderAmount(), s.minimumReached(), ctx.store().freeDeliveryThreshold(),
-                ctx.store().orderableNow(), ctx.store().opensAt());
+                ctx.store().orderableNow(), ctx.store().opensAt(), code, s.discount(), error);
     }
 }
