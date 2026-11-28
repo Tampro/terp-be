@@ -118,8 +118,11 @@ jobs:
       - name: Bootstrap Superadmin
         run: node e2e/bootstrap.mjs
 
+      - name: Customer Realm Test Client
+        run: node e2e/customer-client.mjs
+
       - name: E2E Suites
-        run: node e2e/run.mjs hrm sales purchase acc sup seat stores
+        run: node e2e/run.mjs hrm sales purchase acc sup seat stores customer
 
       - name: Stack Logs On Failure
         if: failure()

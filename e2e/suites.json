@@ -178,5 +178,10 @@
     "prefix": "ST",
     "standalone": false,
     "description": "stores: warehouse link, order hours, delivery fees"
+  },
+  "customer": {
+    "prefix": "CU",
+    "standalone": true,
+    "description": "customer realm erp-customer; customer tokens refused by ERP APIs"
   }
 }
