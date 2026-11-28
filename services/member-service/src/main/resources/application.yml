@@ -9,6 +9,24 @@ spring:
     timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
   application:
     name: member-service
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    connection-timeout: 5s
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # Retention events (erp-common RetentionConsumerConfig): retried in-process, then dead-lettered.
+        default-requeue-rejected: false
+        prefetch: 1
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
   datasource:
     url: ${MEMBER_DB_URL:jdbc:mysql://localhost:3306/erp_member?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${MEMBER_DB_USERNAME}
@@ -32,10 +50,13 @@ spring:
           jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
-# No RabbitMQ yet: no outbox, no retention queue — erp-common skips those beans.
-# TODO(assumption): customer rows are personal data; the retention / anonymise handler (needs RabbitMQ) comes with the next member spec.
+# RabbitMQ only to consume retention events (MemberAnonymizer); no outbox (erp.outbox.enabled unset = off).
 erp:
+  retention:
+    queue: ${ERP_RETENTION_QUEUE:erp.member.retention}
   member:
+    # AES-256-GCM key of the delivery address phone (base64 of 32 bytes, FieldCipher). No default.
+    enc-key: ${MEMBER_ENC_KEY}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     store-service-url: ${STORE_SERVICE_URL:http://localhost:8098}
     customer-jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/erp-customer/protocol/openid-connect/certs

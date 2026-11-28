@@ -683,12 +683,20 @@ services:
       STORE_SERVICE_URL: http://store-service:8098
       # Secret of Keycloak client erp-member-service (store-service internal shop lookup).
       MEMBER_SERVICE_CLIENT_SECRET: ${MEMBER_SERVICE_CLIENT_SECRET:?set in .env}
+      # AES-256-GCM key of the address phone (base64 of 32 bytes).
+      MEMBER_ENC_KEY: ${MEMBER_ENC_KEY:?set in .env}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18099:8099"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   gateway-server:

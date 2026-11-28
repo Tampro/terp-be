@@ -146,6 +146,8 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   MEMBER_DB_PASSWORD                   (member-service, database erp_member / user erp_member)
 #   MEMBER_SERVICE_CLIENT_SECRET          (secret of client erp-member-service; realm import and member-service).
 #                                          A stack created before member-service: run scripts/upgrade-member-service.sh.
+#   MEMBER_ENC_KEY                       (member-service: AES-256-GCM key of the address phone; base64 of 32 bytes,
+#                                          openssl rand -base64 32)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
 #                                          commerce, accounting, support, recruitment, crm)
 #   SEAWEEDFS_S3_ACCESS_KEY, SEAWEEDFS_S3_SECRET_KEY (local SeaweedFS, the S3 storage of media-service; random —
