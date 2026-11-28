@@ -16,6 +16,10 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Duration;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.function.Function;
 
 /**
@@ -65,6 +69,45 @@ public class StorefrontClient {
             b.queryParam("keyword", keyword);
         }
         return get(b.encode().toUriString(), EStoreError.STO_006);
+    }
+
+    /** Signed view URLs by media file id, and the earliest link expiry (epoch millis); empty when none or on failure. */
+    public record ImageLinks(Map<Long, String> urls, Long expiresAt) {
+        static final ImageLinks NONE = new ImageLinks(Map.of(), null);
+    }
+
+    /**
+     * One media call for all the images of a response. Media down or refusing → no images, not an error page: the
+     * catalogue stays readable (TODO(assumption): PO to confirm; inventory / IAM failures still answer 503).
+     */
+    public ImageLinks imageLinks(long companyId, Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return ImageLinks.NONE;
+        }
+        String url = UriComponentsBuilder.fromUriString(props.mediaServiceUrl() + "/api/v1/internal/media/files")
+                .queryParam("ids", ids.stream().map(String::valueOf).collect(Collectors.joining(",")))
+                .queryParam("companyId", companyId).toUriString();
+        try {
+            String body = client.get().uri(Nulls.nonNull(java.net.URI.create(url)))
+                    .header("Authorization", "Bearer " + tokens.token())
+                    .retrieve().body(String.class);
+            Map<Long, String> urls = new HashMap<>();
+            Long expires = null;
+            for (JsonNode f : mapper.readTree(body == null ? "{}" : body).path("data")) {
+                String view = f.path("viewUrl").asText("");
+                if (!view.isEmpty()) {
+                    urls.put(f.path("id").asLong(), view);
+                    long exp = f.path("linkExpiresAt").asLong(0) * 1000; // media signs with epoch seconds
+                    if (exp > 0 && (expires == null || exp < expires)) {
+                        expires = exp;
+                    }
+                }
+            }
+            return new ImageLinks(urls, expires);
+        } catch (RestClientException | ApiException | java.io.IOException e) {
+            log.warn("storefront images unavailable: {}", e.getClass().getSimpleName());
+            return ImageLinks.NONE;
+        }
     }
 
     /** 404 from inventory (not on sale, other company) → 404 STO_017. */

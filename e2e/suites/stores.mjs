@@ -150,7 +150,7 @@ ck('public items: on-sale only, store price, sold-out flag', r.s === 200 && byIt
 ck('public items hide purchase price and stock quantity', shelf.every(z => z.purchasePrice === undefined && z.stockQuantity === undefined), JSON.stringify(shelf[0]));
 r = await pub(`${pubA}/stores/${d1.id}/items?keyword=egg`); ck('public items by keyword', r.s === 200 && r.data.content.length === 1 && r.data.content[0].itemId === pEgg.id, r.s + ' ' + r.data?.content?.length);
 r = await pub(`${pubA}/stores/${d1.id}/items?size=101`); ck('public items size 101 → COMMON_001', r.s === 400 && r.code === 'COMMON_001', r.s + ' ' + r.code);
-r = await pub(`${pubA}/stores/${d1.id}/items/${pEgg.id}`); ck('public item detail', r.s === 200 && r.data.item.itemId === pEgg.id && Array.isArray(r.data.imageIds), r.s + ' ' + r.code);
+r = await pub(`${pubA}/stores/${d1.id}/items/${pEgg.id}`); ck('public item detail', r.s === 200 && r.data.item.itemId === pEgg.id && Array.isArray(r.data.imageUrls), r.s + ' ' + r.code);
 r = await pub(`${pubA}/stores/${d1.id}/items/${pTofu.id}`); ck('suspended item → STO_017', r.s === 404 && r.code === 'STO_017', r.s + ' ' + r.code);
 r = await pub(`${pubA}/stores/${d1.id}/items/${pRice.id}`); ck('item not at this store → STO_017', r.s === 404 && r.code === 'STO_017', r.s + ' ' + r.code);
 r = await pub(`${pubA}/stores/${dB.id}/items`); ck("company B's store through A's shop → STO_001", r.s === 404 && r.code === 'STO_001', r.s + ' ' + r.code);
@@ -160,6 +160,29 @@ await c('PUT', '/store/shop-setting', { slug: pubA, enabled: false }, t);
 r = await pub(`${pubA}/categories`); ck('disabled shop → STO_016', r.s === 404 && r.code === 'STO_016', r.s + ' ' + r.code);
 await c('PUT', '/store/shop-setting', { slug: pubA, enabled: true }, t);
 r = await c('POST', '/public/shop/' + pubA + '/categories', {}); ck('public POST refused', r.s === 401 || r.s === 403 || r.s === 405, r.s + ' ' + r.code);
+// ---- storefront item images (storefront-item-images spec)
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
+const upload = async (name, bytes, type, tok) => {
+  const fd = new FormData();
+  fd.append('files', new Blob([bytes], { type }), name);
+  const res = await fetch(G + '/media/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Accept-Language': 'en' }, body: fd });
+  const j = await res.json().catch(() => ({}));
+  return { s: res.status, code: j.code, data: j.data };
+};
+r = await upload('egg.png', PNG, 'image/png', t);
+const eggImg = r.data?.[0]; ck('upload egg image', r.s === 200 && eggImg?.id, r.s + ' ' + r.code);
+r = await c('PUT', `/inventory/items/${pEgg.id}/images`, { mainImageId: Number(eggImg.id), imageIds: [Number(eggImg.id)] }, t);
+ck('egg main + extra image set', r.s === 200, r.s + ' ' + r.code);
+r = await pub(`${pubA}/stores/${d1.id}/items?categoryId=${pCat.id}&size=50`);
+const imgShelf = Object.fromEntries((r.data?.content || []).map(z => [z.itemId, z]));
+ck('public list: egg has mainImageUrl, milk null, no ids', r.s === 200 && typeof imgShelf[pEgg.id]?.mainImageUrl === 'string' && imgShelf[pMilk.id]?.mainImageUrl === null && (r.data.content || []).every(z => !('mainImageId' in z)), r.s + ' ' + JSON.stringify(imgShelf[pEgg.id]));
+ck('public list: imagesExpireAt in the future', r.data?.imagesExpireAt > Date.now(), String(r.data?.imagesExpireAt));
+const gwRoot = G.replace(/\/api\/v1$/, '');
+const link = new URL(imgShelf[pEgg.id]?.mainImageUrl || 'http://x/none');
+const img = await fetch(gwRoot + link.pathname + link.search);
+ck('signed image link opens without a token', img.status === 200 && (img.headers.get('content-type') || '').startsWith('image/'), img.status + ' ' + img.headers.get('content-type'));
+r = await pub(`${pubA}/stores/${d1.id}/items/${pEgg.id}`);
+ck('public detail: imageUrls once (main = extra), no ids', r.s === 200 && Array.isArray(r.data.imageUrls) && r.data.imageUrls.length === 1 && !('imageIds' in r.data) && !('mainImageId' in r.data.item) && typeof r.data.item.mainImageUrl === 'string', r.s + ' ' + JSON.stringify(r.data && { u: r.data.imageUrls?.length, keys: Object.keys(r.data) }));
 r = await pub(`${pubB}/categories`); ck('B shop works before suspension', r.s === 200, r.s + ' ' + r.code);
 r = await c('PUT', '/iam/companies/' + B.id + '/status', { status: 'SUSPENDED' }, sa); ck('super admin suspends B', r.s === 200, r.s + ' ' + r.code);
 r = await pub(`${pubB}/categories`); ck('suspended company → STO_016', r.s === 404 && r.code === 'STO_016', r.s + ' ' + r.code);
