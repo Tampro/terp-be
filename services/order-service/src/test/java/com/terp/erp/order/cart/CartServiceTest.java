@@ -35,7 +35,8 @@ class CartServiceTest {
     private final CartLineRepository lines = mock(CartLineRepository.class);
     private final CartSourcesClient sources = mock(CartSourcesClient.class);
     private final com.terp.erp.order.coupon.CouponLedger coupons = mock(com.terp.erp.order.coupon.CouponLedger.class);
-    private final CartService service = new CartService(carts, lines, sources, coupons);
+    private final CartService service = new CartService(carts, lines, sources, coupons,
+            mock(com.terp.erp.order.mileage.MileageLedger.class));
     private final List<CartLine> rows = new ArrayList<>();
     private final Cart cart = new Cart();
 

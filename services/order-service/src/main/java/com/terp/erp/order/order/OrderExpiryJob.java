@@ -25,6 +25,7 @@ public class OrderExpiryJob {
 
     private final CustomerOrderRepository orders;
     private final CouponLedger coupons;
+    private final com.terp.erp.order.mileage.MileageLedger mileage;
     private final PlatformTransactionManager txManager;
     private final Clock clock;
 
@@ -40,6 +41,7 @@ public class OrderExpiryJob {
                         o.setStatus(EOrderStatus.EXPIRED);
                         orders.save(o);
                         coupons.release(o.getId());
+                        mileage.release(o);
                         return true;
                     }).orElse(false));
             if (Boolean.TRUE.equals(done)) {

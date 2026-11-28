@@ -218,5 +218,10 @@
     "prefix": "CP",
     "standalone": false,
     "description": "order-service coupons: Back Office CRUD, cart preview, use reserved at placement and given back on cancel, revenue net of the discount"
+  },
+  "mileage": {
+    "prefix": "ML",
+    "standalone": false,
+    "description": "order-service mileage: earned on delivery, spent FIFO at checkout, released on cancel, Back Office policy and adjustment"
   }
 }

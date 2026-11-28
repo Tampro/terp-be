@@ -43,8 +43,11 @@ public class CartController {
                                        @AuthenticationPrincipal CustomerPrincipal me,
                                        @io.swagger.v3.oas.annotations.Parameter(description = "Preview a coupon: discount "
                                                + "and totals after it, or couponError CPN_007-CPN_011")
-                                       @org.springframework.web.bind.annotation.RequestParam(required = false) String couponCode) {
-        return ApiMessageDto.ok(service.view(slug, me.sub(), storeId, couponCode));
+                                       @org.springframework.web.bind.annotation.RequestParam(required = false) String couponCode,
+                                       @io.swagger.v3.oas.annotations.Parameter(description = "Preview points to spend: "
+                                               + "pointsUsed and totals after them, or pointsError MIL_003-MIL_006")
+                                       @org.springframework.web.bind.annotation.RequestParam(required = false) Integer usePoints) {
+        return ApiMessageDto.ok(service.view(slug, me.sub(), storeId, couponCode, usePoints));
     }
 
     @Operation(summary = "Put an item with this quantity", description = "Creates the line or replaces its quantity (1-99, "

@@ -57,6 +57,7 @@ class OrderServiceTest {
     private final PlatformTransactionManager tx = mock(PlatformTransactionManager.class);
     private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private final com.terp.erp.order.coupon.CouponLedger coupons = mock(com.terp.erp.order.coupon.CouponLedger.class);
+    private final com.terp.erp.order.mileage.MileageLedger mileage = mock(com.terp.erp.order.mileage.MileageLedger.class);
     private OrderService service;
     private final List<CartLine> lines = new ArrayList<>();
     private final List<CustomerOrder> saved = new ArrayList<>();
@@ -96,7 +97,7 @@ class OrderServiceTest {
 
     private OrderService service(boolean sandbox) {
         OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null, null, null);
-        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox, coupons,
+        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox, coupons, mileage,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -229,7 +230,7 @@ class OrderServiceTest {
 
     @Test
     void expiryJobUsesTheFifteenMinuteWindow() {
-        OrderExpiryJob job = new OrderExpiryJob(orders, coupons, tx, Clock.fixed(NOW, ZoneOffset.UTC));
+        OrderExpiryJob job = new OrderExpiryJob(orders, coupons, mileage, tx, Clock.fixed(NOW, ZoneOffset.UTC));
         CustomerOrder pending = new CustomerOrder();
         pending.setId(1L);
         pending.setStatus(EOrderStatus.PENDING_PAYMENT);
@@ -267,6 +268,22 @@ class OrderServiceTest {
         when(orders.findByCompanyIdAndOrderNoAndCustomerId(10L, o.getOrderNo(), 5L)).thenReturn(Optional.of(o));
         service.cancel("express", "sub-1", o.getOrderNo());
         verify(coupons).release(100L);
+    }
+
+    @Test
+    void pointsAreReservedAfterTheCouponAndGivenBackOnCancel() {
+        line(1L, 4);                                                            // 24,000 of goods
+        List<com.terp.erp.order.mileage.MileageLot> locked = List.of(new com.terp.erp.order.mileage.MileageLot());
+        when(mileage.lockAndCheck(10L, 5L, 2000, BigDecimal.valueOf(24000))).thenReturn(locked);
+        OrderDtos.OrderDto d = service.place("express", "sub-1", 7L, new PlaceForm(12L, ESubstitution.ALLOW, null, null, 2000));
+        assertThat(d.pointsUsed()).isEqualTo(2000);
+        assertThat(d.total()).isEqualByComparingTo("25000");                     // 22,000 + delivery 3,000
+        CustomerOrder o = saved.get(0);
+        verify(mileage).reserve(locked, o, 2000);
+        assertThat(OrderJournal.amounts(o, placedLinesOf(o)).goods()).isEqualByComparingTo("20000");  // 22,000 less VAT 2,000
+        when(orders.findByCompanyIdAndOrderNoAndCustomerId(10L, o.getOrderNo(), 5L)).thenReturn(Optional.of(o));
+        service.cancel("express", "sub-1", o.getOrderNo());
+        verify(mileage).release(o);
     }
 
     @Test
