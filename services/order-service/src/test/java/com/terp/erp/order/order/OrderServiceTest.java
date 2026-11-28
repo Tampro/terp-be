@@ -54,9 +54,11 @@ class OrderServiceTest {
     private final OrderNumbers numbers = mock(OrderNumbers.class);
     private final FieldCipher cipher = FieldCipherTest.cipher();
     private final PlatformTransactionManager tx = mock(PlatformTransactionManager.class);
+    private final com.terp.erp.outbox.OutboxPublisher outbox = mock(com.terp.erp.outbox.OutboxPublisher.class);
     private OrderService service;
     private final List<CartLine> lines = new ArrayList<>();
     private final List<CustomerOrder> saved = new ArrayList<>();
+    private List<CustomerOrderLine> placedLines = List.of();
     private StoreView store = store(true);
 
     @BeforeEach
@@ -86,11 +88,13 @@ class OrderServiceTest {
             return o;
         });
         when(orders.findById(100L)).thenAnswer(a -> saved.stream().findFirst());
+        when(sources.moveStock(anyLong(), anyLong(), any())).thenReturn(java.util.Map.of(1L, new BigDecimal("4000")));
+        when(orderLines.findByOrderIdOrderByIdAsc(100L)).thenAnswer(a -> placedLines);
     }
 
     private OrderService service(boolean sandbox) {
-        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox);
-        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx,
+        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null);
+        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -145,6 +149,24 @@ class OrderServiceTest {
     }
 
     @Test
+    void payApprovedRequestsTheJournalOnceWithNetAmountsVatAndCost() {
+        CustomerOrder o = placed();
+        service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED);
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> c = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("SHOP_ORDER"), eq(100L), c.capture());
+        java.util.Map<String, Object> p = c.getValue();
+        // goods 12,000 incl. VAT → 10,909 + 1,091; delivery 3,000 → 2,727 + 273; cost 2 × 4,000
+        assertThat((BigDecimal) p.get("goodsAmount")).isEqualByComparingTo("10909");
+        assertThat((BigDecimal) p.get("serviceAmount")).isEqualByComparingTo("2727");
+        assertThat((BigDecimal) p.get("taxAmount")).isEqualByComparingTo("1364");
+        assertThat((BigDecimal) p.get("costAmount")).isEqualByComparingTo("8000");
+        assertThat(p.get("reference")).isEqualTo("HE-20261128-000001");
+        assertThat(p.keySet()).doesNotContain("phone", "recipientName", "address1");
+        assertThat(o.getJournalStatus()).isEqualTo(EJournalStatus.PENDING);
+        assertThat(placedLines.get(0).getUnitCost()).isEqualByComparingTo("4000");
+    }
+
+    @Test
     void outOfStockLeavesTheOrderFailedAndDeclinedToo() {
         CustomerOrder o = placed();
         doThrow(ApiException.badRequest(EOrderError.ORD_015)).when(sources).moveStock(anyLong(), anyLong(), any());
@@ -155,6 +177,7 @@ class OrderServiceTest {
         CustomerOrder p = placed();
         p.setStatus(EOrderStatus.PENDING_PAYMENT);
         assertThat(service.pay("express", "sub-1", p.getOrderNo(), EPayOutcome.DECLINED).failureReason()).isEqualTo("DECLINED");
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -182,6 +205,9 @@ class OrderServiceTest {
         line(1L, 2);
         service.place("express", "sub-1", 7L, form());
         CustomerOrder o = saved.get(0);
+        org.mockito.ArgumentCaptor<List<CustomerOrderLine>> c = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(orderLines, org.mockito.Mockito.atLeastOnce()).saveAll(c.capture());
+        placedLines = c.getValue();
         when(orders.findByCompanyIdAndOrderNoAndCustomerId(10L, o.getOrderNo(), 5L)).thenReturn(Optional.of(o));
         return o;
     }

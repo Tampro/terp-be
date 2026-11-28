@@ -77,8 +77,17 @@ public class StockService {
             List<@Valid @NotNull MoveLine> lines) {
     }
 
-    /** applied = false: the source had already been applied, nothing changed. */
-    public record MovesResult(boolean applied) {
+    /**
+     * applied = false: the source had already been applied, nothing changed. lines = the unit cost of each item moved
+     * (its purchase price, 0 when unset), used by order-service for the cost of goods of a shop order.
+     */
+    public record MovesResult(boolean applied, List<LineCost> lines) {
+        public MovesResult(boolean applied) {
+            this(applied, List.of());
+        }
+    }
+
+    public record LineCost(@Schema(example = "1") String itemId, @Schema(example = "500") BigDecimal unitCost) {
     }
 
     /** A resolved line of a stock change: item and warehouse already checked to belong to the company. */
@@ -126,9 +135,12 @@ public class StockService {
         // rare deadlock gets an error, and its retry answers applied = false.
         if (!movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(companyId, form.sourceType(), form.sourceId())
                 .isEmpty()) {
-            return new MovesResult(false);
+            // TODO(assumption): stock_movement keeps no cost, so a repeat answers today's purchase price.
+            Map<Long, Item> items = new LinkedHashMap<>();
+            form.lines().forEach(l -> items.computeIfAbsent(l.itemId(), id -> stockedItemOf(companyId, id)));
+            return new MovesResult(false, costs(items.values()));
         }
-        Map<Long, Item> itemCache = new HashMap<>();
+        Map<Long, Item> itemCache = new LinkedHashMap<>();
         Map<Long, Warehouse> warehouseCache = new HashMap<>();
         List<Change> changes = new ArrayList<>();
         for (MoveLine l : form.lines()) {
@@ -137,7 +149,12 @@ public class StockService {
                     l.quantity()));
         }
         apply(companyId, changes, form.sourceType(), form.sourceId());
-        return new MovesResult(true);
+        return new MovesResult(true, costs(itemCache.values()));
+    }
+
+    private static List<LineCost> costs(java.util.Collection<Item> items) {
+        return items.stream().map(i -> new LineCost(Texts.id(i.getId()),
+                i.getPurchasePrice() == null ? BigDecimal.ZERO : i.getPurchasePrice())).toList();
     }
 
     /**

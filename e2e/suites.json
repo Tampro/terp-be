@@ -198,5 +198,10 @@
     "prefix": "CO",
     "standalone": false,
     "description": "order-service checkout: order snapshot, sandbox payment, stock out once, cancel, Back Office view"
+  },
+  "order-invoice": {
+    "prefix": "OI",
+    "standalone": false,
+    "description": "paid Express order journalled once in accounting (138/5111/5113/33311, 632/156) through the outbox"
   }
 }

@@ -22,4 +22,5 @@ public class CustomerOrderLine extends BaseAuditableEntity {
     @Column(name = "unit_price", nullable = false, precision = 19, scale = 4) private BigDecimal unitPrice;
     @Column(name = "quantity", nullable = false) private int quantity;
     @Column(name = "line_total", nullable = false, precision = 19, scale = 4) private BigDecimal lineTotal;
+    @Column(name = "unit_cost", precision = 19, scale = 4) private BigDecimal unitCost;
 }

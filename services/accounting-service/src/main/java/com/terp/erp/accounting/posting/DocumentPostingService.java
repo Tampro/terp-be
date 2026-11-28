@@ -48,7 +48,12 @@ public class DocumentPostingService {
         SALES_INVOICE("SALES_POST"),
         SALES_RETURN("SALES_POST"),
         PURCHASE_INVOICE("PURCHASE_POST"),
-        PURCHASE_RETURN("PURCHASE_POST");
+        PURCHASE_RETURN("PURCHASE_POST"),
+        /**
+         * A paid Express order, requested only through order-service's outbox event (the intake skips this check).
+         * ORDER_POST is held by no role, so the REST endpoint refuses it to staff (COMMON_004).
+         */
+        SHOP_ORDER("ORDER_POST");
 
         /** The commerce permission that posts / completes this document; required here too. */
         private final String permission;
@@ -156,6 +161,18 @@ public class DocumentPostingService {
                 dr(l, () -> key(c, ESystemAccount.GENERAL_EXPENSE), service, text);
                 dr(l, () -> key(c, ESystemAccount.INPUT_VAT), tax, text);
                 cr(l, () -> key(c, ESystemAccount.PAYABLE), total, text);
+            }
+            case SHOP_ORDER -> {
+                // TODO(assumption): money paid through the PG waits on PG_CLEARING (138) until the PG settles; fees
+                //  (delivery, bag) are service revenue; prices include 10% VAT — chief accountant to confirm.
+                dr(l, () -> key(c, ESystemAccount.PG_CLEARING), total, text);
+                cr(l, () -> key(c, ESystemAccount.SALES_REVENUE), goods, text);
+                cr(l, () -> serviceRevenue(c), service, text);
+                cr(l, () -> key(c, ESystemAccount.OUTPUT_VAT), tax, text);
+                if (cost.signum() > 0) {
+                    dr(l, () -> key(c, ESystemAccount.COGS), cost, text);
+                    cr(l, () -> key(c, ESystemAccount.INVENTORY), cost, text);
+                }
             }
             case PURCHASE_RETURN -> {
                 dr(l, () -> key(c, ESystemAccount.PAYABLE), total, text);

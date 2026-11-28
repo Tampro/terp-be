@@ -32,7 +32,12 @@ public enum ESystemAccount {
      */
     SERVICE_REVENUE("5113"),
     SALES_RETURNS("5213"),
-    SALARY_EXPENSE("6421");
+    SALARY_EXPENSE("6421"),
+    /**
+     * Express orders paid through the PG (SHOP_ORDER postings), until the PG pays out. Mapped lazily like SALARY_PAYABLE.
+     * TODO(assumption): 138 (the chart has no 1388 sub-account) — chief accountant to confirm.
+     */
+    PG_CLEARING("138");
 
     /** Account code the default chart maps this key to. */
     private final String defaultCode;

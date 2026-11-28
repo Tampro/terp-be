@@ -42,4 +42,7 @@ public class CustomerOrder extends BaseAuditableEntity {
     @Column(name = "note", length = 200) private String note;
     @Column(name = "paid_at") private Instant paidAt;
     @Column(name = "cancelled_at") private Instant cancelledAt;
+    @Enumerated(EnumType.STRING) @Column(name = "journal_status", length = 16) private EJournalStatus journalStatus;
+    @Column(name = "journal_entry_no", length = 40) private String journalEntryNo;
+    @Column(name = "journal_error", length = 40) private String journalError;
 }

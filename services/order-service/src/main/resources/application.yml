@@ -25,6 +25,26 @@ spring:
     basename: language/common,language/messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    connection-timeout: 5s
+    # The outbox relay waits for each confirm (RabbitOutboxSender.waitForConfirmsOrDie).
+    publisher-confirm-type: simple
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # A message whose intake keeps failing is retried in-process, then dead-lettered (erp.order.accounting.dlq).
+        default-requeue-rejected: false
+        prefetch: 10
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 60s
   security:
     oauth2:
       resourceserver:
@@ -37,7 +57,20 @@ erp:
   jobs:
     lock:
       enabled: ${ERP_JOBS_LOCK_ENABLED:true}
+  # Transactional outbox (erp-common com.terp.erp.outbox): the SHOP_ORDER journal request is written with the PAID
+  # status and relayed to the erp.events exchange.
+  outbox:
+    enabled: ${ERP_OUTBOX_ENABLED:true}
+    exchange: ${ERP_OUTBOX_EXCHANGE:erp.events}
+    batch-size: ${ERP_OUTBOX_BATCH_SIZE:20}
+    poll-interval-ms: ${ERP_OUTBOX_POLL_INTERVAL_MS:2000}
+    max-attempts: ${ERP_OUTBOX_MAX_ATTEMPTS:10}
+    initial-backoff: ${ERP_OUTBOX_INITIAL_BACKOFF:5s}
+    max-backoff: ${ERP_OUTBOX_MAX_BACKOFF:10m}
+    confirm-timeout: ${ERP_OUTBOX_CONFIRM_TIMEOUT:5s}
   order:
+    accounting-queue: ${ORDER_ACCOUNTING_QUEUE:erp.order.accounting}
+    accounting-dead-letter-queue: ${ORDER_ACCOUNTING_DLQ:erp.order.accounting.dlq}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     member-service-url: ${MEMBER_SERVICE_URL:http://localhost:8099}
     store-service-url: ${STORE_SERVICE_URL:http://localhost:8098}

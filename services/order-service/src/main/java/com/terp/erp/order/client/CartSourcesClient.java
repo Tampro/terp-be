@@ -125,17 +125,32 @@ public class CartSourcesClient {
      * Moves the order's stock out once (inventory is idempotent on ORDER + order id, so a retry after a timeout is safe).
      * Not enough stock (400 INV_017) → 400 ORD_015; anything else → 503 ORD_007.
      */
-    public void moveStock(long companyId, long orderId, List<StockLine> lines) {
+    /** Unit cost of each item moved, from inventory's answer (purchase price; 0 when unset). */
+    public record MovesResult(boolean applied, List<LineCost> lines) {
+    }
+
+    public record LineCost(String itemId, BigDecimal unitCost) {
+    }
+
+    private record MovesEnvelope(MovesResult data) {
+    }
+
+    /** @return unit cost by item id */
+    public java.util.Map<Long, BigDecimal> moveStock(long companyId, long orderId, List<StockLine> lines) {
         String url = UriComponentsBuilder.fromUriString(props.inventoryServiceUrl() + "/api/v1/internal/inventory/stock/moves")
                 .queryParam("companyId", companyId).toUriString();
         java.util.Map<String, Object> body = java.util.Map.of("sourceType", "ORDER", "sourceId", orderId, "lines", lines);
         for (int attempt = 0; ; attempt++) {
             try {
-                client.post().uri(Nulls.nonNull(java.net.URI.create(url)))
+                MovesEnvelope r = client.post().uri(Nulls.nonNull(java.net.URI.create(url)))
                         .header("Authorization", "Bearer " + tokens.token())
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .body(mapper.writeValueAsString(body)).retrieve().toBodilessEntity();
-                return;
+                        .body(mapper.writeValueAsString(body)).retrieve().body(MovesEnvelope.class);
+                java.util.Map<Long, BigDecimal> costs = new java.util.HashMap<>();
+                if (r != null && r.data() != null && r.data().lines() != null) {
+                    r.data().lines().forEach(c -> costs.put(Long.valueOf(c.itemId()), c.unitCost()));
+                }
+                return costs;
             } catch (HttpClientErrorException e) {
                 if (e.getStatusCode().value() == 400) {
                     throw ApiException.badRequest(EOrderError.ORD_015);

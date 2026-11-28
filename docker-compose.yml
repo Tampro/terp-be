@@ -722,12 +722,19 @@ services:
       ORDER_SERVICE_CLIENT_SECRET: ${ORDER_SERVICE_CLIENT_SECRET:?set in .env}
       # AES-256-GCM key of the delivery phone on orders (base64 of 32 bytes).
       ORDER_ENC_KEY: ${ORDER_ENC_KEY:?set in .env}
+      # Outbox relay (SHOP_ORDER journal requests) and the consumer of accounting's journal results.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "18100:8100"
     depends_on:
       mysql:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   gateway-server:
