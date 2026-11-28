@@ -37,6 +37,13 @@ public final class OrderDtos {
                            String storeName, ESubstitution substitution, List<LineDto> lines, BigDecimal subtotal,
                            BigDecimal deliveryFee, BigDecimal bagFee, BigDecimal total, String recipientName, String phone,
                            String postcode, String address1, String address2, BigDecimal lat, BigDecimal lon,
-                           String deliveryNote, String note, Instant createdDate, Instant paidAt, Instant cancelledAt) {
+                           String deliveryNote, String note, Instant createdDate, Instant paidAt, Instant cancelledAt,
+                           @Schema(description = "Back Office only: journal of a paid order in accounting (PENDING until "
+                                   + "accounting answers, POSTED, FAILED); null for customers and unpaid orders")
+                           EJournalStatus journalStatus,
+                           @Schema(description = "Back Office only: accounting journal entry number once POSTED",
+                                   example = "JE-2026-000042") String journalEntryNo,
+                           @Schema(description = "Back Office only: accounting error code when FAILED (e.g. ACC_070)")
+                           String journalError) {
     }
 }

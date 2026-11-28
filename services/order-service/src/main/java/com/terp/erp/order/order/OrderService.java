@@ -19,6 +19,8 @@ import com.terp.erp.order.order.OrderDtos.EPayOutcome;
 import com.terp.erp.order.order.OrderDtos.LineDto;
 import com.terp.erp.order.order.OrderDtos.OrderDto;
 import com.terp.erp.order.order.OrderDtos.PlaceForm;
+import com.terp.erp.outbox.OutboxPublisher;
+import com.terp.erp.outbox.Payload;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -58,6 +60,7 @@ public class OrderService {
     private final FieldCipher cipher;
     private final OrderProperties props;
     private final PlatformTransactionManager txManager;
+    private final OutboxPublisher outbox;
     private final Clock clock;
 
     // ------------------------------------------------------------------ checkout
@@ -161,8 +164,9 @@ public class OrderService {
             return tx.execute(st -> fail(o.getId(), "DECLINED"));
         }
         List<CustomerOrderLine> lines = orderLines.findByOrderIdOrderByIdAsc(o.getId());
+        Map<Long, BigDecimal> costs;
         try {
-            sources.moveStock(o.getCompanyId(), o.getId(), lines.stream()
+            costs = sources.moveStock(o.getCompanyId(), o.getId(), lines.stream()
                     .map(l -> new StockLine(l.getItemId(), o.getWarehouseId(), BigDecimal.valueOf(-l.getQuantity()))).toList());
         } catch (ApiException e) {
             if (e.getErrorCode() == EOrderError.ORD_015) {
@@ -174,6 +178,9 @@ public class OrderService {
             CustomerOrder paid = orders.findById(o.getId()).orElseThrow();
             paid.setStatus(EOrderStatus.PAID);
             paid.setPaidAt(clock.instant());
+            lines.forEach(l -> l.setUnitCost(costs.getOrDefault(l.getItemId(), BigDecimal.ZERO)));
+            orderLines.saveAll(lines);
+            requestJournal(paid, lines);
             orders.saveAndFlush(paid);
             carts.findByCustomerIdAndStoreId(paid.getCustomerId(), paid.getStoreId()).ifPresent(cart -> {
                 Set<Long> bought = lines.stream().map(CustomerOrderLine::getItemId).collect(Collectors.toSet());
@@ -182,6 +189,20 @@ public class OrderService {
             });
             return dto(paid, lines, false);
         });
+    }
+
+    /**
+     * The journal request is written in the transaction of the PAID status (outbox): published only if the payment
+     * commits, never lost if accounting or the broker is down. No personal data in the payload.
+     */
+    private void requestJournal(CustomerOrder o, List<CustomerOrderLine> lines) {
+        OrderJournal.Amounts a = OrderJournal.amounts(o, lines);
+        outbox.publish(o.getCompanyId(), OrderJournal.EVENT_REQUESTED, OrderJournal.SOURCE_TYPE, o.getId(), Payload.of(
+                "sourceType", OrderJournal.SOURCE_TYPE, "sourceId", o.getId(),
+                "date", LocalDate.ofInstant(o.getPaidAt(), ORDER_ZONE), "reference", o.getOrderNo(),
+                "description", "Express order " + o.getOrderNo(), "goodsAmount", a.goods(), "serviceAmount", a.service(),
+                "taxAmount", a.tax(), "costAmount", a.cost(), "actorSub", null));
+        o.setJournalStatus(EJournalStatus.PENDING);
     }
 
     private OrderDto fail(long orderId, String reason) {
@@ -241,7 +262,9 @@ public class OrderService {
                         l.getQuantity(), l.getLineTotal())).toList(),
                 o.getSubtotal(), o.getDeliveryFee(), o.getBagFee(), o.getTotal(), o.getRecipientName(),
                 masked ? mask(phone) : phone, o.getPostcode(), o.getAddress1(), o.getAddress2(), o.getLat(), o.getLon(),
-                o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt());
+                o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
+                masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
+                masked ? o.getJournalError() : null);
     }
 
     /** 01012345678 → 010-****-5678 (staff never sees the full number). */

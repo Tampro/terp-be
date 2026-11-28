@@ -80,6 +80,22 @@ class StockServiceTest {
     }
 
     @Test
+    void movesAnswerTheUnitCostOfEachItemAlsoOnARepeat() {
+        mouse.setPurchasePrice(new BigDecimal("500"));
+        MovesForm form = form(new MoveLine(1L, 7L, new BigDecimal("-2")), new MoveLine(2L, 7L, new BigDecimal("-1")));
+        when(movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(10L, "SALES_INVOICE", 42L)).thenReturn(List.of());
+        StockService.MovesResult first = service.movesFor(10L, form);
+        assertThat(first.lines()).extracting(StockService.LineCost::itemId).containsExactly("1", "2");
+        assertThat(first.lines().get(0).unitCost()).isEqualByComparingTo("500");
+        assertThat(first.lines().get(1).unitCost()).isEqualByComparingTo("0");
+        when(movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(10L, "SALES_INVOICE", 42L))
+                .thenReturn(List.of(new StockMovement(10L, 1L, 7L, new BigDecimal("-2"), "SALES_INVOICE", 42L)));
+        StockService.MovesResult again = service.movesFor(10L, form);
+        assertThat(again.applied()).isFalse();
+        assertThat(again.lines()).isEqualTo(first.lines());
+    }
+
+    @Test
     void rowIsEnsuredBeforeItIsLockedInKeyOrder() {
         // A locking read of a missing row gap-locks and deadlocks parallel inserts: ensure must precede every lock.
         when(movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(10L, "SALES_INVOICE", 42L)).thenReturn(List.of());

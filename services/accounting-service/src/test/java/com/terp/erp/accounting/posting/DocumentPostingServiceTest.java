@@ -171,6 +171,24 @@ class DocumentPostingServiceTest {
     }
 
     @Test
+    void shopOrderDebitsPgClearingAndIsRefusedToStaffOverRest() {
+        // G = 10,000 incl. VAT → 9,091 + 909; fees F = 3,200 → 2,909 + 291; cost 5,000
+        service.postFor(10L, form(ESource.SHOP_ORDER, "9091", "2909", "1200", "5000", false));
+        List<JournalService.Line> l = posted("SHOP_ORDER");
+        assertThat(l).hasSize(6);
+        line(l.get(0), ESystemAccount.PG_CLEARING, "13200", null);
+        line(l.get(1), ESystemAccount.SALES_REVENUE, null, "9091");
+        line(l.get(2), ESystemAccount.SERVICE_REVENUE, null, "2909");
+        line(l.get(3), ESystemAccount.OUTPUT_VAT, null, "1200");
+        line(l.get(4), ESystemAccount.COGS, "5000", null);
+        line(l.get(5), ESystemAccount.INVENTORY, null, "5000");
+
+        TestLogin.as(10L, "SALES_POST", "PURCHASE_POST");
+        assertThatThrownBy(() -> service.post(null, form(ESource.SHOP_ORDER, "1", null, null, null, false)))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommonError.COMMON_004);
+    }
+
+    @Test
     void eachSourceNeedsItsOwnPermissionAndSomeAmount() {
         TestLogin.as(10L, "SALES_POST");
         assertThatThrownBy(() -> service.post(null, form(ESource.PURCHASE_INVOICE, "1", null, null, null, false)))

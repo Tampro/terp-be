@@ -122,7 +122,7 @@ jobs:
         run: node e2e/customer-client.mjs
 
       - name: E2E Suites
-        run: node e2e/run.mjs hrm sales purchase acc sup seat stores customer member cart checkout
+        run: node e2e/run.mjs hrm sales purchase acc sup seat stores customer member cart checkout order-invoice
 
       - name: Stack Logs On Failure
         if: failure()
