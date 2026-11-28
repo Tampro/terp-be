@@ -112,6 +112,11 @@ spring:
               uri: ${STORE_SERVICE_URL:http://localhost:8098}
               predicates:
                 - Path=/api/v1/store/**,/api/v1/public/shop/**
+            # Customer API (realm erp-customer only, GatewaySecurityConfig.shopFilterChain).
+            - id: member-service
+              uri: ${MEMBER_SERVICE_URL:http://localhost:8099}
+              predicates:
+                - Path=/api/v1/shop/**
 
 springdoc:
   api-docs:
@@ -138,6 +143,7 @@ springdoc:
       - { name: support-service, url: /docs/support/v3/api-docs }
       - { name: notification-service, url: /docs/notification/v3/api-docs }
       - { name: store-service, url: /docs/store/v3/api-docs }
+      - { name: member-service, url: /docs/member/v3/api-docs }
 
 management:
   endpoints:
@@ -150,6 +156,10 @@ erp:
     # Public API docs through the gateway; set false in production.
     enabled: ${ERP_SWAGGER_ENABLED:true}
   gateway:
+    # Customer realm erp-customer (ADR-001): the only issuer accepted on /api/v1/shop/**.
+    customer:
+      jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/erp-customer/protocol/openid-connect/certs
+      issuer: ${KEYCLOAK_CUSTOMER_ISSUER:http://localhost:8180/realms/erp-customer}
     # The biometric device endpoint is the only one reachable without a token: limit it per client IP.
     device-rate-limit:
       per-minute: ${GATEWAY_DEVICE_RATE_PER_MINUTE:60}

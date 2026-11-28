@@ -37,6 +37,7 @@
         <module>services/support-service</module>
         <module>services/notification-service</module>
         <module>services/store-service</module>
+        <module>services/member-service</module>
         <module>services/gateway-server</module>
     </modules>
 
