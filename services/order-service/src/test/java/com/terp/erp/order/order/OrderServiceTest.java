@@ -167,6 +167,23 @@ class OrderServiceTest {
     }
 
     @Test
+    void payApprovedAnnouncesThePaidOrderWithIdsOnly() {
+        CustomerOrder o = placed();
+        service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED);
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> c = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(outbox).publish(eq(10L), eq("order.paid"), eq("ORDER"), eq(100L), c.capture());
+        assertThat(c.getValue().keySet()).containsExactlyInAnyOrder("orderId", "orderNo", "storeId", "warehouseId");
+        assertThat(c.getValue().get("orderNo")).isEqualTo("HE-20261128-000001");
+    }
+
+    @Test
+    void internalReadGivesThePlainPhoneOnlyToTheOrdersCompany() {
+        CustomerOrder o = placed();
+        assertThat(service.internal(10L, 100L).phone()).isEqualTo("01012345678");
+        assertCode(() -> service.internal(11L, 100L), EOrderError.ORD_018);
+    }
+
+    @Test
     void outOfStockLeavesTheOrderFailedAndDeclinedToo() {
         CustomerOrder o = placed();
         doThrow(ApiException.badRequest(EOrderError.ORD_015)).when(sources).moveStock(anyLong(), anyLong(), any());

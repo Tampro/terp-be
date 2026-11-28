@@ -50,6 +50,8 @@ services:
       MEMBER_DB_PASSWORD: ${MEMBER_DB_PASSWORD:?set in .env}
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME:-erp_order}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?set in .env}
+      DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-erp_delivery}
+      DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?set in .env}
     ports:
       - "13316:3306"
     volumes:
@@ -84,6 +86,7 @@ services:
       STORE_SERVICE_CLIENT_SECRET: ${STORE_SERVICE_CLIENT_SECRET:?set in .env}
       MEMBER_SERVICE_CLIENT_SECRET: ${MEMBER_SERVICE_CLIENT_SECRET:?set in .env}
       ORDER_SERVICE_CLIENT_SECRET: ${ORDER_SERVICE_CLIENT_SECRET:?set in .env}
+      DELIVERY_SERVICE_CLIENT_SECRET: ${DELIVERY_SERVICE_CLIENT_SECRET:?set in .env}
       ERP_SUPERADMIN_INITIAL_PASSWORD: ${ERP_SUPERADMIN_INITIAL_PASSWORD:?set in .env}
     ports:
       - "18180:8080"
@@ -737,6 +740,35 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  delivery-service:
+    build: ./services/delivery-service
+    mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
+    environment:
+      DELIVERY_DB_URL: jdbc:mysql://mysql:3306/erp_delivery?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:-erp_delivery}
+      DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?set in .env}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:18180/realms/erp
+      IAM_SERVICE_URL: http://iam-service:8081
+      ORDER_SERVICE_URL: http://order-service:8100
+      # Secret of Keycloak client erp-delivery-service (order snapshot, IAM rider check).
+      DELIVERY_SERVICE_CLIENT_SECRET: ${DELIVERY_SERVICE_CLIENT_SECRET:?set in .env}
+      # Consumer of order.paid.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "18101:8101"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   gateway-server:
     build: ./services/gateway-server
     mem_limit: 768m  # JVM heap = 75% of it (MaxRAMPercentage in the Dockerfile)
@@ -763,6 +795,7 @@ services:
       STORE_SERVICE_URL: http://store-service:8098
       MEMBER_SERVICE_URL: http://member-service:8099
       ORDER_SERVICE_URL: http://order-service:8100
+      DELIVERY_SERVICE_URL: http://delivery-service:8101
       KEYCLOAK_CUSTOMER_ISSUER: http://localhost:18180/realms/erp-customer
     ports:
       - "18080:8080"

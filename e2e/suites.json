@@ -203,5 +203,10 @@
     "prefix": "OI",
     "standalone": false,
     "description": "paid Express order journalled once in accounting (138/5111/5113/33311, 632/156) through the outbox"
+  },
+  "delivery": {
+    "prefix": "DL",
+    "standalone": false,
+    "description": "delivery-service: paid order → READY delivery → assigned rider → picked up → delivered"
   }
 }
