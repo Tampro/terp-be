@@ -124,7 +124,13 @@ public final class MessageTemplates {
             Map.entry("ORDER_REFUNDED", new Text("Order {orderNo} cancelled and refunded",
                     "Hello {recipientName},\nyour order {orderNo} from {storeName} has been cancelled.\nRefunded: {total}",
                     "Đã huỷ và hoàn tiền đơn {orderNo}",
-                    "Xin chào {recipientName},\nđơn {orderNo} từ {storeName} đã bị huỷ.\nSố tiền hoàn: {total}")));
+                    "Xin chào {recipientName},\nđơn {orderNo} từ {storeName} đã bị huỷ.\nSố tiền hoàn: {total}")),
+            Map.entry("ORDER_RETURNED", new Text("Return of order {orderNo} completed",
+                    "Hello {recipientName},\nwe have received the items you returned from order {orderNo} ({storeName}).\n"
+                            + "Refunded: {refundAmount}",
+                    "Đã hoàn tất trả hàng đơn {orderNo}",
+                    "Xin chào {recipientName},\nchúng tôi đã nhận hàng bạn trả của đơn {orderNo} ({storeName}).\n"
+                            + "Số tiền hoàn: {refundAmount}")));
 
     private MessageTemplates() {
     }

@@ -55,7 +55,12 @@ public class DocumentPostingService {
          */
         SHOP_ORDER("ORDER_POST"),
         /** Back Office cancelled a paid Express order and refunded it: the mirror of SHOP_ORDER, event-only too. */
-        SHOP_ORDER_REFUND("ORDER_POST");
+        SHOP_ORDER_REFUND("ORDER_POST"),
+        /**
+         * A completed customer return of an Express order (event-only): goods = refunded goods net of VAT, service =
+         * pick-up fee net of VAT, tax = goods VAT − fee VAT, PG_CLEARING gets goods + tax − service.
+         */
+        SHOP_ORDER_RETURN("ORDER_POST");
 
         /** The commerce permission that posts / completes this document; required here too. */
         private final String permission;
@@ -182,6 +187,19 @@ public class DocumentPostingService {
                 dr(l, () -> serviceRevenue(c), service, text);
                 dr(l, () -> key(c, ESystemAccount.OUTPUT_VAT), tax, text);
                 cr(l, () -> key(c, ESystemAccount.PG_CLEARING), total, text);
+                if (cost.signum() > 0) {
+                    dr(l, () -> key(c, ESystemAccount.INVENTORY), cost, text);
+                    cr(l, () -> key(c, ESystemAccount.COGS), cost, text);
+                }
+            }
+            case SHOP_ORDER_RETURN -> {
+                // TODO(assumption): partial reversal dated the complete day; the pick-up fee kept as service revenue
+                //  with its own VAT, netted on the output VAT line — chief accountant to confirm.
+                BigDecimal refund = goods.add(tax).subtract(service);
+                dr(l, () -> key(c, ESystemAccount.SALES_REVENUE), goods, text);
+                dr(l, () -> key(c, ESystemAccount.OUTPUT_VAT), tax, text);
+                cr(l, () -> serviceRevenue(c), service, text);
+                cr(l, () -> key(c, ESystemAccount.PG_CLEARING), refund, text);
                 if (cost.signum() > 0) {
                     dr(l, () -> key(c, ESystemAccount.INVENTORY), cost, text);
                     cr(l, () -> key(c, ESystemAccount.COGS), cost, text);

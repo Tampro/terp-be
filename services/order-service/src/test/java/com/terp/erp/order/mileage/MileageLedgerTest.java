@@ -108,6 +108,23 @@ class MileageLedgerTest {
     }
 
     @Test
+    void aReturnGivesSpentPointsBackAndClawsEarnedOnesUpToTheBalance() {
+        ledger.giveBack(order, 500);
+        ArgumentCaptor<MileageLot> l = ArgumentCaptor.forClass(MileageLot.class);
+        verify(lots).save(l.capture());
+        assertThat(l.getValue().getPoints()).isEqualTo(500);
+        when(lots.lockOpen(10L, 5L, NOW)).thenReturn(List.of(MileageRulesTest.lot(1, 300, "2027-01-01T00:00:00Z")));
+        assertThat(ledger.clawBack(order, 850)).isEqualTo(300);
+        ArgumentCaptor<MileageEntry> e = ArgumentCaptor.forClass(MileageEntry.class);
+        verify(entries, org.mockito.Mockito.times(2)).save(e.capture());
+        assertThat(e.getAllValues()).extracting(MileageEntry::getType, MileageEntry::getPoints)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(EMileageEntryType.RETURN, 500),
+                        org.assertj.core.groups.Tuple.tuple(EMileageEntryType.CLAWBACK, -300));
+        when(lots.lockOpen(10L, 5L, NOW)).thenReturn(List.of());
+        assertThat(ledger.clawBack(order, 100)).isZero();
+    }
+
+    @Test
     void anOverdueLotExpiresWhatIsLeft() {
         MileageLot old = MileageRulesTest.lot(3, 400, "2026-11-01T00:00:00Z");
         old.setCompanyId(10L);

@@ -46,7 +46,9 @@ public enum ENotificationEvent {
     ORDER_DELIVERED(ENotificationModule.ORDER, "Order Delivered"),
     ORDER_DELIVERY_CANCELLED(ENotificationModule.ORDER, "Order Delivery Cancelled"),
     // Back Office cancelled a paid order and refunded it (paid-order-cancel spec).
-    ORDER_REFUNDED(ENotificationModule.ORDER, "Order Refunded");
+    ORDER_REFUNDED(ENotificationModule.ORDER, "Order Refunded"),
+    // Back Office completed a customer return (order-return spec).
+    ORDER_RETURNED(ENotificationModule.ORDER, "Order Returned");
 
     /** Groups of the Email Notification Settings page, in display order. */
     public enum ENotificationModule { GENERAL, CRM, SUPPORT, RECRUITMENT, SUBSCRIPTION, ORDER }

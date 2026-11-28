@@ -34,4 +34,6 @@ public interface MileageLotRepository extends JpaRepository<MileageLot, Long> {
     Optional<MileageLot> lockById(@Param("id") Long id);
 
     boolean existsByEarnOrderId(Long earnOrderId);
+
+    Optional<MileageLot> findByEarnOrderId(Long earnOrderId);
 }
