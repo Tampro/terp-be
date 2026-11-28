@@ -2,6 +2,8 @@ package com.terp.erp.order.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.terp.erp.order.event.AccountingEventIntake;
+import com.terp.erp.order.event.DeliveryEventIntake;
+import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
@@ -37,6 +39,25 @@ public class RabbitConfig {
     Declarables orderAccountingBindings(@Qualifier("orderAccountingQueue") Queue queue, TopicExchange erpEventsExchange) {
         return new Declarables(AccountingEventIntake.ROUTING_KEYS.stream()
                 .map(key -> BindingBuilder.bind(queue).to(erpEventsExchange).with(key)).toList());
+    }
+
+    /** delivery.status.changed → erp.order.delivery (+ its own DLQ): the latest delivery status on the order. */
+    @Bean
+    Queue orderDeliveryQueue(OrderProperties props) {
+        return QueueBuilder.durable(props.deliveryQueue())
+                .deadLetterExchange("")
+                .deadLetterRoutingKey(props.deliveryDeadLetterQueue())
+                .build();
+    }
+
+    @Bean
+    Queue orderDeliveryDeadLetterQueue(OrderProperties props) {
+        return QueueBuilder.durable(props.deliveryDeadLetterQueue()).build();
+    }
+
+    @Bean
+    Binding orderDeliveryBinding(@Qualifier("orderDeliveryQueue") Queue queue, TopicExchange erpEventsExchange) {
+        return BindingBuilder.bind(queue).to(erpEventsExchange).with(DeliveryEventIntake.STATUS_CHANGED);
     }
 
     /** The body is erp-common's EventEnvelope as JSON. */

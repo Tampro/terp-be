@@ -25,7 +25,8 @@ import static org.mockito.Mockito.when;
 class OrderEventIntakeTest {
     private final ProcessedEventRepository processed = mock(ProcessedEventRepository.class);
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
-    private final OrderEventIntake intake = new OrderEventIntake(processed, deliveries, Clock.systemUTC());
+    private final com.terp.erp.delivery.delivery.DeliveryEvents events = mock(com.terp.erp.delivery.delivery.DeliveryEvents.class);
+    private final OrderEventIntake intake = new OrderEventIntake(processed, deliveries, events, Clock.systemUTC());
     private final ObjectMapper mapper = new ObjectMapper();
 
     private EventEnvelope paid(String id, Map<String, Object> data) {
@@ -39,12 +40,14 @@ class OrderEventIntakeTest {
     @Test
     void aPaidOrderBecomesOneReadyDelivery() {
         when(deliveries.findByCompanyIdAndOrderId(10L, 100L)).thenReturn(Optional.empty());
+        when(deliveries.saveAndFlush(any())).thenAnswer(a -> a.getArgument(0));
         intake.accept(paid("e1", ids()));
         ArgumentCaptor<Delivery> c = ArgumentCaptor.forClass(Delivery.class);
         verify(deliveries).saveAndFlush(c.capture());
         assertThat(c.getValue().getStatus()).isEqualTo(EDeliveryStatus.READY);
         assertThat(c.getValue().getOrderNo()).isEqualTo("HE-20261128-000001");
         assertThat(c.getValue().getCompanyId()).isEqualTo(10L);
+        verify(events).changed(c.getValue());
     }
 
     @Test
@@ -54,6 +57,7 @@ class OrderEventIntakeTest {
         when(deliveries.findByCompanyIdAndOrderId(10L, 100L)).thenReturn(Optional.of(new Delivery()));
         intake.accept(paid("e2", ids()));
         verify(deliveries, never()).saveAndFlush(any());
+        verify(events, never()).changed(any());
     }
 
     @Test

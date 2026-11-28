@@ -31,6 +31,7 @@ public class DeliveryService {
     private final DeliveryRepository deliveries;
     private final OrderClient orders;
     private final IamClient iam;
+    private final DeliveryEvents events;
     private final Clock clock;
 
     // ------------------------------------------------------------------ Back Office
@@ -123,7 +124,9 @@ public class DeliveryService {
 
     private DeliveryDto change(java.util.function.Supplier<Delivery> work) {
         try {
-            return DeliveryDto.of(deliveries.saveAndFlush(work.get()));
+            Delivery saved = deliveries.saveAndFlush(work.get());
+            events.changed(saved);
+            return DeliveryDto.of(saved);
         } catch (ObjectOptimisticLockingFailureException e) {
             throw new ApiException(HttpStatus.CONFLICT, EDeliveryError.DLV_006);
         }

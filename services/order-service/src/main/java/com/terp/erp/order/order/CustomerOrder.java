@@ -45,4 +45,7 @@ public class CustomerOrder extends BaseAuditableEntity {
     @Enumerated(EnumType.STRING) @Column(name = "journal_status", length = 16) private EJournalStatus journalStatus;
     @Column(name = "journal_entry_no", length = 40) private String journalEntryNo;
     @Column(name = "journal_error", length = 40) private String journalError;
+    // A plain string: order-service does not own the delivery statuses (delivery-service does).
+    @Column(name = "delivery_status", length = 16) private String deliveryStatus;
+    @Column(name = "delivery_status_at") private Instant deliveryStatusAt;
 }

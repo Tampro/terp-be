@@ -74,6 +74,8 @@ erp:
       client-ids: ${ORDER_INTERNAL_CLIENT_IDS:erp-delivery-service}
     accounting-queue: ${ORDER_ACCOUNTING_QUEUE:erp.order.accounting}
     accounting-dead-letter-queue: ${ORDER_ACCOUNTING_DLQ:erp.order.accounting.dlq}
+    delivery-queue: ${ORDER_DELIVERY_QUEUE:erp.order.delivery}
+    delivery-dead-letter-queue: ${ORDER_DELIVERY_DLQ:erp.order.delivery.dlq}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     member-service-url: ${MEMBER_SERVICE_URL:http://localhost:8099}
     store-service-url: ${STORE_SERVICE_URL:http://localhost:8098}

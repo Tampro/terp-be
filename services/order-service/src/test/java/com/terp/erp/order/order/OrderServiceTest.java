@@ -93,7 +93,7 @@ class OrderServiceTest {
     }
 
     private OrderService service(boolean sandbox) {
-        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null);
+        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null, null, null);
         return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }

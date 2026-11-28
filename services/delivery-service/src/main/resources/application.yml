@@ -31,6 +31,8 @@ spring:
     username: ${SPRING_RABBITMQ_USERNAME}
     password: ${SPRING_RABBITMQ_PASSWORD}
     connection-timeout: 5s
+    # The outbox relay waits for each confirm (RabbitOutboxSender.waitForConfirmsOrDie).
+    publisher-confirm-type: simple
     listener:
       simple:
         acknowledge-mode: auto
@@ -51,11 +53,17 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
 
 erp:
-  # Consumer only: no outbox relay (nothing is published).
+  # Transactional outbox (erp-common com.terp.erp.outbox): delivery.status.changed is written with the status change.
   outbox:
-    enabled: false
-  delivery:
+    enabled: ${ERP_OUTBOX_ENABLED:true}
     exchange: ${ERP_OUTBOX_EXCHANGE:erp.events}
+    batch-size: ${ERP_OUTBOX_BATCH_SIZE:20}
+    poll-interval-ms: ${ERP_OUTBOX_POLL_INTERVAL_MS:2000}
+    max-attempts: ${ERP_OUTBOX_MAX_ATTEMPTS:10}
+    initial-backoff: ${ERP_OUTBOX_INITIAL_BACKOFF:5s}
+    max-backoff: ${ERP_OUTBOX_MAX_BACKOFF:10m}
+    confirm-timeout: ${ERP_OUTBOX_CONFIRM_TIMEOUT:5s}
+  delivery:
     orders-queue: ${DELIVERY_ORDERS_QUEUE:erp.delivery.orders}
     orders-dead-letter-queue: ${DELIVERY_ORDERS_DLQ:erp.delivery.orders.dlq}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
