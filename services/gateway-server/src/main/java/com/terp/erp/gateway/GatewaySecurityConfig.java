@@ -63,6 +63,9 @@ public class GatewaySecurityConfig {
                         // slug, that the portal is enabled, and ticket number + email or the tracking token.
                         .pathMatchers(HttpMethod.GET, "/api/v1/public/support/**").permitAll()
                         .pathMatchers(HttpMethod.POST, PublicSupportRateLimitFilter.WRITES).permitAll()
+                        // Public storefront: reads only, limited per IP (PublicShopRateLimitFilter); store-service checks
+                        // the slug, that the shop is enabled and the company active, and scopes every read to it.
+                        .pathMatchers(HttpMethod.GET, "/api/v1/public/shop/**").permitAll()
                         .pathMatchers("/actuator/health/**").permitAll()
                         // API docs only (no data); the endpoints they describe still need a token.
                         .pathMatchers(HttpMethod.GET, swaggerEnabled ? SWAGGER_PATHS : new String[0]).permitAll()
