@@ -193,5 +193,10 @@
     "prefix": "CA",
     "standalone": false,
     "description": "order-service cart: live prices, purchase limit, free delivery, bag, minimum"
+  },
+  "checkout": {
+    "prefix": "CO",
+    "standalone": false,
+    "description": "order-service checkout: order snapshot, sandbox payment, stock out once, cancel, Back Office view"
   }
 }

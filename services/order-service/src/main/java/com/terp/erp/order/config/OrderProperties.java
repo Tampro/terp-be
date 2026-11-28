@@ -11,10 +11,13 @@ import org.springframework.validation.annotation.Validated;
  * @param inventoryServiceUrl inventory-service: live price / limit / sold-out of the cart lines (internal, service account)
  * @param customerJwkSetUri   keys of realm erp-customer
  * @param customerIssuer      issuer of realm erp-customer, the only one accepted on /api/v1/shop/**
+ * @param encKey              ORDER_ENC_KEY, AES-256-GCM key of the delivery phone kept on orders (base64 of 32 bytes)
+ * @param paymentSandbox      true: POST …/pay accepts a chosen outcome (no real PG); false: the endpoint answers 404
  */
 @Validated
 @ConfigurationProperties(prefix = "erp.order")
 public record OrderProperties(@NotBlank String iamServiceUrl, @NotBlank String memberServiceUrl,
                               @NotBlank String storeServiceUrl, @NotBlank String inventoryServiceUrl,
-                              @NotBlank String customerJwkSetUri, @NotBlank String customerIssuer) {
+                              @NotBlank String customerJwkSetUri, @NotBlank String customerIssuer,
+                              @NotBlank String encKey, boolean paymentSandbox) {
 }

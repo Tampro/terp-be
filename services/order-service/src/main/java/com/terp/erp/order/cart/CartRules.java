@@ -10,18 +10,18 @@ import java.util.List;
  * delivery free from the store's threshold, the paid bag when asked, the minimum order — compared with the subtotal of
  * the available lines only.
  */
-final class CartRules {
+public final class CartRules {
     private CartRules() {
     }
 
-    record Priced(BigDecimal lineTotal, boolean available) {
+    public record Priced(BigDecimal lineTotal, boolean available) {
     }
 
-    record Summary(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal bagFee, BigDecimal total, BigDecimal minOrderAmount,
+    public record Summary(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal bagFee, BigDecimal total, BigDecimal minOrderAmount,
                    boolean minimumReached) {
     }
 
-    static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested) {
+    public static Summary summary(StoreView store, List<Priced> lines, boolean bagRequested) {
         BigDecimal subtotal = lines.stream().filter(Priced::available).map(Priced::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal free = nz(store.freeDeliveryThreshold());

@@ -113,7 +113,15 @@ public class StockService {
      */
     @Transactional
     public MovesResult moves(Long requestedCompanyId, MovesForm form) {
-        Long companyId = Texts.company(requestedCompanyId);
+        return movesFor(Texts.company(requestedCompanyId), form);
+    }
+
+    /**
+     * Same as {@link #moves} for a caller that names the company itself: order-service's service account, which has
+     * no user (no TenantGuard company). The internal chain only admits allowed service accounts.
+     */
+    @Transactional
+    public MovesResult movesFor(long companyId, MovesForm form) {
         // Locking read first: two concurrent calls for the same source serialize on the index range; the loser of a
         // rare deadlock gets an error, and its retry answers applied = false.
         if (!movements.findTop1ByCompanyIdAndSourceTypeAndSourceId(companyId, form.sourceType(), form.sourceId())

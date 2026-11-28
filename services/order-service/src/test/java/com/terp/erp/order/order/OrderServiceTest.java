@@ -1,0 +1,208 @@
+package com.terp.erp.order.order;
+
+import com.terp.erp.exception.ApiException;
+import com.terp.erp.exception.ErrorCode;
+import com.terp.erp.order.cart.Cart;
+import com.terp.erp.order.cart.CartLine;
+import com.terp.erp.order.cart.CartLineRepository;
+import com.terp.erp.order.cart.CartRepository;
+import com.terp.erp.order.client.CartSourcesClient;
+import com.terp.erp.order.client.CartSourcesClient.Address;
+import com.terp.erp.order.client.CartSourcesClient.Membership;
+import com.terp.erp.order.client.CartSourcesClient.ShelfItem;
+import com.terp.erp.order.client.CartSourcesClient.StoreView;
+import com.terp.erp.order.common.EOrderError;
+import com.terp.erp.order.common.FieldCipher;
+import com.terp.erp.order.common.FieldCipherTest;
+import com.terp.erp.order.config.OrderProperties;
+import com.terp.erp.order.order.OrderDtos.EPayOutcome;
+import com.terp.erp.order.order.OrderDtos.PlaceForm;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class OrderServiceTest {
+    private static final Instant NOW = Instant.parse("2026-11-28T03:00:00Z");
+    private final CustomerOrderRepository orders = mock(CustomerOrderRepository.class);
+    private final CustomerOrderLineRepository orderLines = mock(CustomerOrderLineRepository.class);
+    private final CartRepository carts = mock(CartRepository.class);
+    private final CartLineRepository cartLines = mock(CartLineRepository.class);
+    private final CartSourcesClient sources = mock(CartSourcesClient.class);
+    private final OrderNumbers numbers = mock(OrderNumbers.class);
+    private final FieldCipher cipher = FieldCipherTest.cipher();
+    private final PlatformTransactionManager tx = mock(PlatformTransactionManager.class);
+    private OrderService service;
+    private final List<CartLine> lines = new ArrayList<>();
+    private final List<CustomerOrder> saved = new ArrayList<>();
+    private StoreView store = store(true);
+
+    @BeforeEach
+    void setUp() {
+        service = service(true);
+        when(tx.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(sources.membership("express", "sub-1")).thenReturn(new Membership(5L, 10L));
+        when(sources.store(eq("express"), eq(7L))).thenAnswer(a -> store);
+        Cart cart = new Cart();
+        cart.setId(1L);
+        when(carts.findByCustomerIdAndStoreId(5L, 7L)).thenReturn(Optional.of(cart));
+        when(cartLines.findByCartIdOrderByIdAsc(1L)).thenAnswer(a -> List.copyOf(lines));
+        when(orders.findFirstByCustomerIdAndStoreIdAndStatus(any(), any(), any())).thenReturn(Optional.empty());
+        when(sources.shelf(eq(10L), eq(245L), anyCollection())).thenAnswer(a -> ((java.util.Collection<Long>) a.getArgument(2))
+                .stream().filter(id -> id != 404L).map(id -> new ShelfItem(String.valueOf(id), "Item " + id, "S" + id,
+                        BigDecimal.valueOf(6000), 10, id == 3L)).toList());
+        when(sources.address("express", "sub-1", 12L)).thenReturn(new Address("Hong", "01012345678", "08502", "1 Test-ro", null,
+                new BigDecimal("37.4"), new BigDecimal("126.8"), null));
+        when(sources.serves(eq("express"), eq(7L), any(), any())).thenReturn(true);
+        when(numbers.next(10L, LocalDate.of(2026, 11, 28))).thenReturn("HE-20261128-000001");
+        when(orders.saveAndFlush(any())).thenAnswer(a -> {
+            CustomerOrder o = a.getArgument(0);
+            if (o.getId() == null) {
+                o.setId(100L);
+                saved.add(o);
+            }
+            return o;
+        });
+        when(orders.findById(100L)).thenAnswer(a -> saved.stream().findFirst());
+    }
+
+    private OrderService service(boolean sandbox) {
+        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox);
+        return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void placeSnapshotsPricesFeesAndAnEncryptedPhone() {
+        line(1L, 2);
+        OrderDtos.OrderDto d = service.place("Express", "sub-1", 7L, new PlaceForm(12L, ESubstitution.ALLOW, " Ring "));
+        assertThat(d.orderNo()).isEqualTo("HE-20261128-000001");
+        assertThat(d.status()).isEqualTo(EOrderStatus.PENDING_PAYMENT);
+        assertThat(d.subtotal()).isEqualByComparingTo("12000");
+        assertThat(d.deliveryFee()).isEqualByComparingTo("3000");
+        assertThat(d.total()).isEqualByComparingTo("15000");
+        assertThat(d.phone()).isEqualTo("01012345678");
+        assertThat(saved.get(0).getPhoneEnc()).doesNotContain("01012345678");
+        assertThat(d.note()).isEqualTo("Ring");
+    }
+
+    @Test
+    void placeRefusals() {
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_008);
+        line(404L, 1);
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_009);
+        lines.clear();
+        line(3L, 2);
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_009); // sold out
+        lines.clear();
+        line(1L, 1);                                                                           // 6,000 < 10,000
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_010);
+        lines.clear();
+        line(1L, 2);
+        store = store(false);
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_011);
+        store = store(true);
+        when(sources.serves(eq("express"), eq(7L), any(), any())).thenReturn(false);
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_013);
+        CustomerOrder pending = new CustomerOrder();
+        pending.setOrderNo("HE-20261128-000009");
+        when(orders.findFirstByCustomerIdAndStoreIdAndStatus(5L, 7L, EOrderStatus.PENDING_PAYMENT)).thenReturn(Optional.of(pending));
+        assertCode(() -> service.place("express", "sub-1", 7L, form()), EOrderError.ORD_014);
+        verify(orders, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void payApprovedMovesStockOnceAndMarksPaid() {
+        CustomerOrder o = placed();
+        OrderDtos.OrderDto d = service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED);
+        assertThat(d.status()).isEqualTo(EOrderStatus.PAID);
+        assertThat(d.paidAt()).isEqualTo(NOW);
+        verify(sources).moveStock(eq(10L), eq(100L), any());
+        assertCode(() -> service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED), EOrderError.ORD_016);
+        assertCode(() -> service.cancel("express", "sub-1", o.getOrderNo()), EOrderError.ORD_017);
+    }
+
+    @Test
+    void outOfStockLeavesTheOrderFailedAndDeclinedToo() {
+        CustomerOrder o = placed();
+        doThrow(ApiException.badRequest(EOrderError.ORD_015)).when(sources).moveStock(anyLong(), anyLong(), any());
+        assertCode(() -> service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED), EOrderError.ORD_015);
+        assertThat(o.getStatus()).isEqualTo(EOrderStatus.PAYMENT_FAILED);
+        assertThat(o.getFailureReason()).isEqualTo("OUT_OF_STOCK");
+        assertThat(service.cancel("express", "sub-1", o.getOrderNo()).status()).isEqualTo(EOrderStatus.CANCELLED);
+        CustomerOrder p = placed();
+        p.setStatus(EOrderStatus.PENDING_PAYMENT);
+        assertThat(service.pay("express", "sub-1", p.getOrderNo(), EPayOutcome.DECLINED).failureReason()).isEqualTo("DECLINED");
+    }
+
+    @Test
+    void sandboxOffHidesThePayEndpoint() {
+        assertCode(() -> service(false).pay("express", "sub-1", "HE-x", EPayOutcome.APPROVED), EOrderError.ORD_018);
+    }
+
+    @Test
+    void phoneIsMaskedForStaffAndNumbersArePadded() {
+        assertThat(OrderService.mask("01012345678")).isEqualTo("010-****-5678");
+        assertThat(OrderService.mask("123")).isEqualTo("****");
+        assertThat(OrderNumbers.format(LocalDate.of(2026, 11, 28), 42)).isEqualTo("HE-20261128-000042");
+    }
+
+    @Test
+    void expiryJobUsesTheFifteenMinuteWindow() {
+        OrderExpiryJob job = new OrderExpiryJob(orders, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(orders.expire(NOW.minus(OrderExpiryJob.PAYMENT_WINDOW))).thenReturn(2);
+        assertThat(job.run()).isEqualTo(2);
+    }
+
+    private CustomerOrder placed() {
+        saved.clear();
+        lines.clear();
+        line(1L, 2);
+        service.place("express", "sub-1", 7L, form());
+        CustomerOrder o = saved.get(0);
+        when(orders.findByCompanyIdAndOrderNoAndCustomerId(10L, o.getOrderNo(), 5L)).thenReturn(Optional.of(o));
+        return o;
+    }
+
+    private void line(long itemId, int qty) {
+        CartLine l = new CartLine();
+        l.setItemId(itemId);
+        l.setQuantity(qty);
+        lines.add(l);
+    }
+
+    private static PlaceForm form() {
+        return new PlaceForm(12L, ESubstitution.DENY, null);
+    }
+
+    private static StoreView store(boolean open) {
+        return new StoreView("7", "Express", 245L, BigDecimal.valueOf(3000), BigDecimal.valueOf(30000), BigDecimal.valueOf(20000),
+                BigDecimal.valueOf(10000), BigDecimal.valueOf(200), open, null);
+    }
+
+    private static void assertCode(ThrowingCallable call, ErrorCode code) {
+        assertThatThrownBy(call).satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
+    }
+}

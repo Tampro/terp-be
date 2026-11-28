@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalShopController {
     private final PublicShopService shops;
     private final com.terp.erp.store.store.StoreService stores;
+    private final com.terp.erp.store.zone.StoreZoneRepository zones;
 
     public record ShopLookupDto(String companyId, String slug) {
     }
@@ -38,6 +39,15 @@ public class InternalShopController {
         return ApiMessageDto.ok(new StoreViewDto(String.valueOf(s.getId()), s.getName(), String.valueOf(s.getWarehouseId()),
                 s.getDeliveryFee(), s.getFreeDeliveryThreshold(), s.getMinOrderAmount(), s.getFirstOrderMinAmount(),
                 s.getBagFee(), o.orderableNow(), o.opensAt()));
+    }
+
+    /** Whether this store of the shop delivers to (lat, lon): an active zone of the store contains the point. */
+    @GetMapping("/{slug}/stores/{storeId}/serves")
+    public ApiMessageDto<java.util.Map<String, Boolean>> serves(@PathVariable String slug, @PathVariable long storeId,
+                                                                @org.springframework.web.bind.annotation.RequestParam java.math.BigDecimal lat,
+                                                                @org.springframework.web.bind.annotation.RequestParam java.math.BigDecimal lon) {
+        com.terp.erp.store.store.Store s = stores.requireActiveIn(shops.company(slug), storeId);
+        return ApiMessageDto.ok(java.util.Map.of("serves", zones.countServing(s.getId(), lat, lon) > 0));
     }
 
     @GetMapping("/{slug}")

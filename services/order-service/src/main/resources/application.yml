@@ -44,6 +44,10 @@ erp:
     inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
     customer-jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/erp-customer/protocol/openid-connect/certs
     customer-issuer: ${KEYCLOAK_CUSTOMER_ISSUER:http://localhost:8180/realms/erp-customer}
+    # AES-256-GCM key of the delivery phone kept on orders (base64 of 32 bytes, FieldCipher). No default.
+    enc-key: ${ORDER_ENC_KEY}
+    # Internal sandbox payment (no real PG yet, P3): POST …/orders/{no}/pay {outcome}. Off in production.
+    payment-sandbox: ${ORDER_PAYMENT_SANDBOX:true}
     # Keycloak service account of order-service (client credentials): member / store / inventory /api/v1/internal/**.
     service-account:
       token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token

@@ -29,6 +29,7 @@ import java.util.List;
 @RequestMapping("/api/v1/internal/inventory")
 public class InternalStorefrontController {
     private final StorefrontReadService service;
+    private final com.terp.erp.inventory.stock.StockService stock;
 
     @GetMapping("/categories")
     public ApiMessageDto<List<CategoryDto>> categories(@RequestParam long companyId) {
@@ -41,6 +42,17 @@ public class InternalStorefrontController {
             @RequestParam(required = false) Long categoryId, @RequestParam(required = false) String keyword,
             @ParameterObject @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC) Pageable pageable) {
         return ApiMessageDto.ok(ResponseListDto.of(service.shelf(companyId, warehouseId, categoryId, keyword, pageable)));
+    }
+
+    /**
+     * A paid order's stock out of the store's warehouse (order-service): all-or-nothing, idempotent on
+     * (company, sourceType, sourceId) — a retry answers applied=false. Not enough stock → 400 INV_017.
+     */
+    @org.springframework.web.bind.annotation.PostMapping("/stock/moves")
+    public ApiMessageDto<com.terp.erp.inventory.stock.StockService.MovesResult> moves(
+            @RequestParam long companyId,
+            @jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody com.terp.erp.inventory.stock.StockService.MovesForm form) {
+        return ApiMessageDto.ok(stock.movesFor(companyId, form));
     }
 
     @GetMapping("/warehouses/{warehouseId}/shelf/items")

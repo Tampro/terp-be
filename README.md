@@ -151,6 +151,7 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #   ORDER_DB_PASSWORD                    (order-service, database erp_order / user erp_order)
 #   ORDER_SERVICE_CLIENT_SECRET           (secret of client erp-order-service; realm import and order-service).
 #                                          A stack created before order-service: run scripts/upgrade-order-service.sh.
+#   ORDER_ENC_KEY                        (order-service: AES-256-GCM key of the delivery phone on orders; base64 of 32 bytes)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
 #                                          commerce, accounting, support, recruitment, crm)
 #   SEAWEEDFS_S3_ACCESS_KEY, SEAWEEDFS_S3_SECRET_KEY (local SeaweedFS, the S3 storage of media-service; random —
