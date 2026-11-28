@@ -1,0 +1,20 @@
+package com.terp.erp.order.common;
+
+import com.terp.erp.exception.ErrorCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+/** order-service errors. Never renumber or reuse a code: the FE keys on it. */
+@Getter
+@RequiredArgsConstructor
+public enum EOrderError implements ErrorCode {
+    ORD_001("You are not a member of this shop."),
+    ORD_002("You can buy at most {0} of this item."),
+    ORD_003("This item is not on sale at this store."),
+    ORD_004("A cart holds at most {0} items."),
+    ORD_005("The store does not exist in this shop."),
+    ORD_006("This item is not in your cart."),
+    ORD_007("The shop is temporarily unavailable. Please try again later.");
+
+    private final String message;
+}

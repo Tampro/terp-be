@@ -193,6 +193,12 @@ public class StoreService {
         return new PublicResolveDto(publicDto(s), o.orderableNow(), o.opensAt());
     }
 
+    /** Whether the store takes an order now (hours + day-offs), for an already loaded store. */
+    @Transactional(readOnly = true)
+    public OrderableDto orderableNow(Store s) {
+        return orderable(s, Instant.now(clock));
+    }
+
     /** A live, active store of this company, else 404 STO_001 (another company's store looks missing). */
     @Transactional(readOnly = true)
     public Store requireActiveIn(long companyId, long storeId) {

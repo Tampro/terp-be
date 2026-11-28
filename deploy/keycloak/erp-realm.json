@@ -115,6 +115,18 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true
+    },
+    {
+      "clientId": "erp-order-service",
+      "name": "order-service account (member / store / inventory internal reads for carts)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${ORDER_SERVICE_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [

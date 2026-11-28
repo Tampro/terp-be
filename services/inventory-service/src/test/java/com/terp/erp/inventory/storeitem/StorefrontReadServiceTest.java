@@ -56,6 +56,21 @@ class StorefrontReadServiceTest {
                 .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(EInventoryError.INV_027));
     }
 
+    @Test
+    void shelfItemsKeepsTheOrderAndLeavesOutWhatIsNotOnSale() {
+        StoreItem egg = row(1L, 100L), tofu = row(3L, 102L);
+        tofu.setStatus(EStoreItemStatus.SUSPENDED);
+        when(items.findAllById(any())).thenReturn(List.of(item(100L, 10L), item(101L, 20L), item(102L, 10L)));
+        when(rows.findLive(eq(10L), anyCollection(), anyCollection())).thenReturn(List.of(egg, tofu));
+        when(rows.stockOf(eq(10L), anyCollection())).thenReturn(List.<Object[]>of(new Object[]{100L, 5L, BigDecimal.ZERO}));
+        List<StorefrontReadService.ShelfItemDto> out = service.shelfItems(10L, 5L, List.of(102L, 101L, 100L));
+        assertThat(out).extracting(StorefrontReadService.ShelfItemDto::itemId).containsExactly("100");
+        assertThat(out.get(0).soldOut()).isTrue();
+        assertThat(service.shelfItems(10L, 5L, List.of())).isEmpty();
+        assertThatThrownBy(() -> service.shelfItems(10L, 5L, java.util.stream.LongStream.rangeClosed(1, 101).boxed().toList()))
+                .satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(EInventoryError.INV_029));
+    }
+
     private static StoreItem row(Long id, Long itemId) {
         StoreItem s = new StoreItem();
         s.setId(id);

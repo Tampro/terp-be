@@ -55,6 +55,9 @@ erp:
   retention:
     queue: ${ERP_RETENTION_QUEUE:erp.member.retention}
   member:
+    # Service accounts allowed on /api/v1/internal/** (order-service: the membership behind a cart).
+    internal:
+      client-ids: ${MEMBER_INTERNAL_CLIENT_IDS:erp-order-service}
     # AES-256-GCM key of the delivery address phone (base64 of 32 bytes, FieldCipher). No default.
     enc-key: ${MEMBER_ENC_KEY}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}

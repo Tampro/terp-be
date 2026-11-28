@@ -40,9 +40,9 @@ erp:
     media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
     # Keycloak service account of store-service (client credentials): the public storefront has no user token, so it
     # reads inventory's and IAM's /api/v1/internal/** with this one.
-    # Service accounts allowed on /api/v1/internal/** (member-service: the shop of a slug).
+    # Service accounts allowed on /api/v1/internal/** (member-service: the shop of a slug; order-service: a store's fees).
     internal:
-      client-ids: ${STORE_INTERNAL_CLIENT_IDS:erp-member-service}
+      client-ids: ${STORE_INTERNAL_CLIENT_IDS:erp-member-service,erp-order-service}
     service-account:
       token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token
       client-id: ${STORE_SERVICE_CLIENT_ID:erp-store-service}

@@ -18,8 +18,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/internal/store/shops")
 public class InternalShopController {
     private final PublicShopService shops;
+    private final com.terp.erp.store.store.StoreService stores;
 
     public record ShopLookupDto(String companyId, String slug) {
+    }
+
+    /** What a cart needs of a store of this shop: its warehouse, fees and minimums, and whether it takes orders now. */
+    public record StoreViewDto(String id, String name, String warehouseId, java.math.BigDecimal deliveryFee,
+                               java.math.BigDecimal freeDeliveryThreshold, java.math.BigDecimal minOrderAmount,
+                               java.math.BigDecimal firstOrderMinAmount, java.math.BigDecimal bagFee, boolean orderableNow,
+                               java.time.Instant opensAt) {
+    }
+
+    /** Store of the shop's company, live and active, else 404 (STO_016 shop, STO_001 store). */
+    @GetMapping("/{slug}/stores/{storeId}")
+    public ApiMessageDto<StoreViewDto> store(@PathVariable String slug, @PathVariable long storeId) {
+        com.terp.erp.store.store.Store s = stores.requireActiveIn(shops.company(slug), storeId);
+        var o = stores.orderableNow(s);
+        return ApiMessageDto.ok(new StoreViewDto(String.valueOf(s.getId()), s.getName(), String.valueOf(s.getWarehouseId()),
+                s.getDeliveryFee(), s.getFreeDeliveryThreshold(), s.getMinOrderAmount(), s.getFirstOrderMinAmount(),
+                s.getBagFee(), o.orderableNow(), o.opensAt()));
     }
 
     @GetMapping("/{slug}")
