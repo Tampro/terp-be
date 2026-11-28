@@ -43,7 +43,7 @@ class InventoryClientTest {
         });
         server.start();
         String url = "http://127.0.0.1:" + server.getAddress().getPort();
-        client = new InventoryClient(new StoreProperties("http://unused", url), new ObjectMapper());
+        client = new InventoryClient(new StoreProperties("http://unused", url, "http://unused"), new ObjectMapper());
         Jwt jwt = new Jwt("caller-token", Instant.now(), Instant.now().plusSeconds(60), Map.of("alg", "none"),
                 Map.of("sub", "kc-1"));
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));

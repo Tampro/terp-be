@@ -244,6 +244,30 @@ public class MediaService {
         return dto(m);
     }
 
+    /** At most this many files per batch: one storefront page asks for its images in one call. */
+    public static final int MAX_BATCH = 100;
+
+    /**
+     * Signed links of several images of one company, in the order asked (store-service storefront). Files of another
+     * company, documents and unknown ids are left out, not refused: the caller shows what can be shown.
+     */
+    @Transactional(readOnly = true)
+    public List<MediaFileDto> internalFiles(List<Long> ids, Long companyId) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        if (ids.size() > MAX_BATCH) {
+            throw ApiException.badRequest(EMediaError.MEDIA_016, MAX_BATCH);
+        }
+        java.util.Map<Long, MediaFile> byId = new java.util.HashMap<>();
+        for (MediaFile m : files.findAllById(new java.util.LinkedHashSet<>(ids))) {
+            if (Objects.equals(m.getCompanyId(), companyId) && m.getKind() == EMediaKind.IMAGE) {
+                byId.put(m.getId(), m);
+            }
+        }
+        return new java.util.LinkedHashSet<>(ids).stream().map(byId::get).filter(Objects::nonNull).map(this::dto).toList();
+    }
+
     // ------------------------------------------------------------------ signed content
 
     /** The caller streams and closes {@code body}. */

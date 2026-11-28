@@ -27,6 +27,18 @@ import com.terp.erp.media.service.MediaService;
 public class InternalMediaController {
     private final MediaService media;
 
+    @Operation(summary = "Signed view/download links of several images (store-service storefront)",
+            description = "ids = comma list, at most 100; companyId required. Files of another company, documents and "
+                    + "unknown ids are left out; the answer keeps the order asked.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "More than 100 ids (MEDIA_016)"),
+            @ApiResponse(responseCode = "403", description = "Token not of an allowed service account (COMMON_004)")})
+    @GetMapping("/files")
+    public ApiMessageDto<java.util.List<MediaFileDto>> files(@RequestParam(required = false) java.util.List<Long> ids,
+                                                             @RequestParam Long companyId) {
+        return ApiMessageDto.ok(media.internalFiles(ids, companyId));
+    }
+
     @Operation(summary = "File with signed view/download links, for another ERP service",
             description = "companyId is required: the file must belong to it.")
     @ApiResponses({

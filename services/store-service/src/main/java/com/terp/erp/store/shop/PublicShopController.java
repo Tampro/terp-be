@@ -59,7 +59,9 @@ public class PublicShopController {
     }
 
     @Operation(summary = "Items on sale at a store", description = "Page of {itemId, name, sku, categoryId, salePrice "
-            + "(this store's), purchaseLimitQty, soldOut, mainImageId}; only ON_SALE store items of live items.")
+            + "(this store's), purchaseLimitQty, soldOut, mainImageUrl}; only ON_SALE store items of live items. "
+            + "mainImageUrl is a signed link (no token) valid until the page's imagesExpireAt (epoch ms); null when no image or "
+            + "media is unavailable.")
     @ApiResponses({@ApiResponse(responseCode = "400", description = "page/size/keyword out of range (COMMON_001)"),
             @ApiResponse(responseCode = "404", description = SHOP_404 + ", store not of the shop or inactive (STO_001)"),
             @ApiResponse(responseCode = "503", description = UNAVAILABLE)})
@@ -72,7 +74,8 @@ public class PublicShopController {
         return ApiMessageDto.ok(service.items(slug, storeId, categoryId, keyword, page, size));
     }
 
-    @Operation(summary = "Item details at a store", description = "{item, shortDescription, description, imageIds}.")
+    @Operation(summary = "Item details at a store", description = "{item (with mainImageUrl), shortDescription, description, "
+            + "imageUrls (main image first, then the others), imagesExpireAt}; signed links, refetch after imagesExpireAt.")
     @ApiResponses({@ApiResponse(responseCode = "404", description = SHOP_404 + ", store not of the shop or inactive "
             + "(STO_001), item not on sale at this store (STO_017)"),
             @ApiResponse(responseCode = "503", description = UNAVAILABLE)})

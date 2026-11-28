@@ -69,8 +69,8 @@ erp:
     public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     # Service accounts allowed on /api/v1/internal/** (employee-service: announcement attachments;
-    # document-service: HR document downloads), comma-separated.
-    internal-client-ids: ${MEDIA_INTERNAL_CLIENT_IDS:erp-employee-service,erp-document-service}
+    # document-service: HR document downloads; store-service: storefront item images), comma-separated.
+    internal-client-ids: ${MEDIA_INTERNAL_CLIENT_IDS:erp-employee-service,erp-document-service,erp-store-service}
     # S3-compatible storage (AWS S3 / Wasabi / MinIO), used when the super admin picks driver S3 or WASABI in IAM
     # Settings -> Storage. Credentials only from this environment; all blank = S3 not configured (uploads with S3
     # chosen are refused with MEDIA_012, never written locally). Endpoint must be https unless its host is listed

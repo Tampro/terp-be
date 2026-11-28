@@ -37,6 +37,7 @@ erp:
   store:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
     # Keycloak service account of store-service (client credentials): the public storefront has no user token, so it
     # reads inventory's and IAM's /api/v1/internal/** with this one.
     service-account:
