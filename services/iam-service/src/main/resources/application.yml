@@ -101,8 +101,9 @@ erp:
   cors:
     allowed-origins: ${ERP_CORS_ORIGINS:http://localhost:5173}
   iam:
-    # Service accounts (token azp) allowed on /api/v1/internal/** (notification-service: channel settings, contacts).
-    internal-client-ids: ${IAM_INTERNAL_CLIENT_IDS:erp-notification-service}
+    # Service accounts (token azp) allowed on /api/v1/internal/** (notification-service: channel settings, contacts;
+    # store-service: company status for the public storefront).
+    internal-client-ids: ${IAM_INTERNAL_CLIENT_IDS:erp-notification-service,erp-store-service}
 
 management:
   endpoints:

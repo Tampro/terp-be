@@ -139,6 +139,8 @@ mvn -DskipTests package            # builds the jars the Dockerfiles copy
 #                                          volume needs the database and user created by hand)
 #   NOTIFICATION_SERVICE_CLIENT_SECRET    (secret of client erp-notification-service; realm import and
 #                                          notification-service — an existing realm needs the client added by hand)
+#   STORE_SERVICE_CLIENT_SECRET           (secret of client erp-store-service; realm import and store-service —
+#                                          an existing realm needs the client added by hand)
 #   RABBITMQ_USER, RABBITMQ_PASSWORD      (broker account; rabbitmq, notification-service and the producers
 #                                          commerce, accounting, support, recruitment, crm)
 #   SEAWEEDFS_S3_ACCESS_KEY, SEAWEEDFS_S3_SECRET_KEY (local SeaweedFS, the S3 storage of media-service; random —
