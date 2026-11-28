@@ -64,6 +64,9 @@ public final class OrderDtos {
                            @Schema(description = "Coupon applied, null without one") String couponCode,
                            @Schema(description = "Coupon discount off the goods; total = subtotal - discount - pointsUsed + fees")
                            BigDecimal discount,
-                           @Schema(description = "Mileage points spent on the order (1 point = 1 won)") int pointsUsed) {
+                           @Schema(description = "Mileage points spent on the order (1 point = 1 won)") int pointsUsed,
+                           @Schema(description = "When Back Office cancelled the paid order and refunded it (UTC)")
+                           Instant refundedAt,
+                           @Schema(description = "Back Office only: why the paid order was cancelled") String cancelReason) {
     }
 }

@@ -723,6 +723,7 @@ services:
       MEMBER_SERVICE_URL: http://member-service:8099
       STORE_SERVICE_URL: http://store-service:8098
       INVENTORY_SERVICE_URL: http://inventory-service:8091
+      DELIVERY_SERVICE_URL: http://delivery-service:8101
       # Secret of Keycloak client erp-order-service (member / store / inventory internal reads).
       ORDER_SERVICE_CLIENT_SECRET: ${ORDER_SERVICE_CLIENT_SECRET:?set in .env}
       # AES-256-GCM key of the delivery phone on orders (base64 of 32 bytes).

@@ -31,6 +31,9 @@ class OrderEmailRoutingTest {
         assertThat(r.customerOrder()).isTrue();
         EEventRoute paid = EEventRoute.of("order.paid").orElseThrow();
         assertThat(paid.emailCode(data(Map.of("orderId", "1")))).isEqualTo("ORDER_PAID");
+        EEventRoute refunded = EEventRoute.of("order.refunded").orElseThrow();
+        assertThat(refunded.emailCode(data(Map.of("orderId", "1")))).isEqualTo("ORDER_REFUNDED");
+        assertThat(refunded.customerOrder()).isTrue();
         assertThat(EEventRoute.of("support.ticket.created").orElseThrow().customerOrder()).isFalse();
     }
 
@@ -50,7 +53,9 @@ class OrderEmailRoutingTest {
         assertThat(en.subject()).isEqualTo("Order HE-20261128-000001 confirmed");
         assertThat(en.body()).contains("Hong").contains("Gangseo Store").contains("13000");
         assertThat(MessageTemplates.email("ORDER_DELIVERED", "vi", merged).subject()).isEqualTo("Đơn HE-20261128-000001 đã giao");
-        for (String code : new String[]{"ORDER_PAID", "ORDER_PICKED_UP", "ORDER_DELIVERED", "ORDER_DELIVERY_CANCELLED"}) {
+        assertThat(MessageTemplates.email("ORDER_REFUNDED", "en", merged).body()).contains("Refunded: 13000");
+        for (String code : new String[]{"ORDER_PAID", "ORDER_PICKED_UP", "ORDER_DELIVERED", "ORDER_DELIVERY_CANCELLED",
+                "ORDER_REFUNDED"}) {
             assertThat(MessageTemplates.hasTemplate(code)).as(code).isTrue();
         }
     }

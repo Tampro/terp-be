@@ -17,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * @param accountingDeadLetterQueue where those messages go after the listener's retries
  * @param deliveryQueue       queue of delivery.status.changed (latest delivery status on the order)
  * @param deliveryDeadLetterQueue where those messages go after the listener's retries
+ * @param deliveryServiceUrl  delivery-service: cancel the delivery of a paid order (internal, service account)
  */
 @Validated
 @ConfigurationProperties(prefix = "erp.order")
@@ -24,7 +25,8 @@ public record OrderProperties(@NotBlank String iamServiceUrl, @NotBlank String m
                               @NotBlank String storeServiceUrl, @NotBlank String inventoryServiceUrl,
                               @NotBlank String customerJwkSetUri, @NotBlank String customerIssuer,
                               @NotBlank String encKey, boolean paymentSandbox, String accountingQueue,
-                              String accountingDeadLetterQueue, String deliveryQueue, String deliveryDeadLetterQueue) {
+                              String accountingDeadLetterQueue, String deliveryQueue, String deliveryDeadLetterQueue,
+                              String deliveryServiceUrl) {
     public OrderProperties {
         accountingQueue = accountingQueue == null || accountingQueue.isBlank() ? "erp.order.accounting" : accountingQueue;
         accountingDeadLetterQueue = accountingDeadLetterQueue == null || accountingDeadLetterQueue.isBlank()
@@ -32,5 +34,7 @@ public record OrderProperties(@NotBlank String iamServiceUrl, @NotBlank String m
         deliveryQueue = deliveryQueue == null || deliveryQueue.isBlank() ? "erp.order.delivery" : deliveryQueue;
         deliveryDeadLetterQueue = deliveryDeadLetterQueue == null || deliveryDeadLetterQueue.isBlank()
                 ? "erp.order.delivery.dlq" : deliveryDeadLetterQueue;
+        deliveryServiceUrl = deliveryServiceUrl == null || deliveryServiceUrl.isBlank()
+                ? "http://localhost:8101" : deliveryServiceUrl;
     }
 }

@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changes/20261129180000_coupon_changelog.mysql.sql
   - include:
       file: db/changelog/changes/20261129190000_mileage_changelog.mysql.sql
+  - include:
+      file: db/changelog/changes/20261129200000_order_refund_changelog.mysql.sql

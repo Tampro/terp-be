@@ -68,6 +68,9 @@ erp:
     orders-dead-letter-queue: ${DELIVERY_ORDERS_DLQ:erp.delivery.orders.dlq}
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     order-service-url: ${ORDER_SERVICE_URL:http://localhost:8100}
+    # Service accounts allowed on /api/v1/internal/** (order-service: cancel the delivery of a paid order).
+    internal:
+      client-ids: ${DELIVERY_INTERNAL_CLIENT_IDS:erp-order-service}
     # Keycloak service account of delivery-service (client credentials): order-service / IAM /api/v1/internal/**.
     service-account:
       token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token

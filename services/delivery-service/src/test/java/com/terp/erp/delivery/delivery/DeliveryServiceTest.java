@@ -112,4 +112,33 @@ class DeliveryServiceTest {
     private static void assertCode(ThrowingCallable call, ErrorCode code) {
         assertThatThrownBy(call).satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
     }
+
+    @Test
+    void orderServiceCancelsAnOpenDeliveryOnceAndIsRefusedAfterPickUp() {
+        when(deliveries.findByCompanyIdAndOrderId(10L, 100L)).thenReturn(Optional.of(d));
+        DeliveryService.OrderRef ref = new DeliveryService.OrderRef("HE-20261128-000001", 7L, 3L);
+        assertThat(service.cancelForOrder(10L, 100L, ref).status()).isEqualTo(EDeliveryStatus.CANCELLED);
+        assertThat(d.getCancelReason()).isEqualTo("order cancelled");
+        org.mockito.Mockito.verify(outbox).publish(any(), any(), any(), any(), any());
+        assertThat(service.cancelForOrder(10L, 100L, ref).status()).isEqualTo(EDeliveryStatus.CANCELLED);
+        org.mockito.Mockito.verify(outbox, org.mockito.Mockito.times(1)).publish(any(), any(), any(), any(), any());
+
+        d.setStatus(EDeliveryStatus.PICKED_UP);
+        assertThatThrownBy(() -> service.cancelForOrder(10L, 100L, ref))
+                .satisfies(x -> {
+                    assertThat(((ApiException) x).getErrorCode()).isEqualTo(EDeliveryError.DLV_007);
+                    assertThat(((ApiException) x).getStatus().value()).isEqualTo(409);
+                });
+    }
+
+    @Test
+    void noDeliveryYetWritesACancelledRowWithoutAnEvent() {
+        when(deliveries.findByCompanyIdAndOrderId(10L, 200L)).thenReturn(Optional.empty());
+        org.mockito.ArgumentCaptor<Delivery> c = org.mockito.ArgumentCaptor.forClass(Delivery.class);
+        service.cancelForOrder(10L, 200L, new DeliveryService.OrderRef("HE-20261128-000002", 7L, 3L));
+        org.mockito.Mockito.verify(deliveries).saveAndFlush(c.capture());
+        assertThat(c.getValue().getStatus()).isEqualTo(EDeliveryStatus.CANCELLED);
+        assertThat(c.getValue().getWarehouseId()).isEqualTo(3L);
+        org.mockito.Mockito.verify(outbox, org.mockito.Mockito.never()).publish(any(), any(), any(), any(), any());
+    }
 }

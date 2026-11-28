@@ -48,6 +48,8 @@ public class CustomerOrder extends BaseAuditableEntity {
     // A plain string: order-service does not own the delivery statuses (delivery-service does).
     @Column(name = "delivery_status", length = 16) private String deliveryStatus;
     @Column(name = "delivery_status_at") private Instant deliveryStatusAt;
+    @Column(name = "refunded_at") private Instant refundedAt;
+    @Column(name = "cancel_reason", length = 200) private String cancelReason;
     @Column(name = "email_enc", length = 512) private String emailEnc;
     @Column(name = "coupon_id") private Long couponId;
     @Column(name = "coupon_code", length = 30) private String couponCode;

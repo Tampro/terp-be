@@ -29,6 +29,11 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
 
     boolean existsByCustomerIdAndCompanyId(Long customerId, Long companyId);
 
+    /** Row lock for the refund's final step: two Back Office cancels of one order never both publish. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from CustomerOrder o where o.id = :id")
+    Optional<CustomerOrder> lockById(Long id);
+
     @Modifying
     @Query("update CustomerOrder o set o.status = com.terp.erp.order.order.EOrderStatus.EXPIRED "
             + "where o.status = com.terp.erp.order.order.EOrderStatus.PENDING_PAYMENT and o.createdDate < :before")

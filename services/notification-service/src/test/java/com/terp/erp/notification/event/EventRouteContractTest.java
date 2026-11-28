@@ -67,7 +67,9 @@ class EventRouteContractTest {
             row("employee.holiday.deleted", "-", "-"),
             // customer-delivery-notification: Express customer emails (delivery: code chosen by data.status)
             row("order.paid", "-", "ORDER_PAID"),
-            row("delivery.status.changed", "-", "ORDER_DELIVERED"));
+            row("delivery.status.changed", "-", "ORDER_DELIVERED"),
+            // paid-order-cancel
+            row("order.refunded", "-", "ORDER_REFUNDED"));
 
     private static String[] row(String type, String webhook, String email) {
         return new String[]{type, webhook, email};

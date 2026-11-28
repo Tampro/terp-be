@@ -12,6 +12,8 @@ import java.util.List;
 public final class OrderJournal {
     public static final String SOURCE_TYPE = "SHOP_ORDER";
     public static final String EVENT_REQUESTED = "commerce.journal.requested";
+    /** Reversal of SHOP_ORDER when Back Office cancels a paid order (same amounts, cancel day). */
+    public static final String SOURCE_TYPE_REFUND = "SHOP_ORDER_REFUND";
     private static final BigDecimal ELEVEN = BigDecimal.valueOf(11);
 
     private OrderJournal() {

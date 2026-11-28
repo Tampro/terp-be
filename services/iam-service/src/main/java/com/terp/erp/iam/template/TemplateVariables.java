@@ -46,7 +46,8 @@ public final class TemplateVariables {
             Map.entry(ENotificationEvent.ORDER_PAID, List.of("orderNo", "storeName", "recipientName", "total")),
             Map.entry(ENotificationEvent.ORDER_PICKED_UP, List.of("orderNo", "storeName", "recipientName")),
             Map.entry(ENotificationEvent.ORDER_DELIVERED, List.of("orderNo", "storeName", "recipientName")),
-            Map.entry(ENotificationEvent.ORDER_DELIVERY_CANCELLED, List.of("orderNo", "storeName", "recipientName")));
+            Map.entry(ENotificationEvent.ORDER_DELIVERY_CANCELLED, List.of("orderNo", "storeName", "recipientName")),
+            Map.entry(ENotificationEvent.ORDER_REFUNDED, List.of("orderNo", "storeName", "recipientName", "total")));
     // ORDER_* are not in EVENT_EMAIL: customer emails never go to the company's chat channels.
 
     /** Routing key to email code (notification-service EEventRoute.emailCode), for the chat variables. */

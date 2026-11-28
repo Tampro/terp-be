@@ -96,7 +96,7 @@ class OrderServiceTest {
     }
 
     private OrderService service(boolean sandbox) {
-        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null, null, null);
+        OrderProperties props = new OrderProperties("u", "u", "u", "u", "u", "u", FieldCipherTest.KEY, sandbox, null, null, null, null, null);
         return new OrderService(orders, orderLines, carts, cartLines, sources, numbers, cipher, props, tx, outbox, coupons, mileage,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -333,5 +333,74 @@ class OrderServiceTest {
 
     private static void assertCode(ThrowingCallable call, ErrorCode code) {
         assertThatThrownBy(call).satisfies(e -> assertThat(((ApiException) e).getErrorCode()).isEqualTo(code));
+    }
+
+    // ------------------------------------------------------------------ Back Office refund
+
+    private CustomerOrder paidOrder() {
+        CustomerOrder o = placed();
+        service.pay("express", "sub-1", o.getOrderNo(), EPayOutcome.APPROVED);
+        when(orders.lockById(100L)).thenAnswer(a -> saved.stream().findFirst());
+        com.terp.erp.order.TestLogin.as(10L, "ORDER_CANCEL");
+        org.mockito.Mockito.clearInvocations(outbox, sources);
+        return o;
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void logout() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void refundCancelsTheDeliveryThenPutsStockBackThenMarksRefunded() {
+        CustomerOrder o = paidOrder();
+        OrderDtos.OrderDto d = service.refund(100L, " Packing damage ");
+        assertThat(d.status()).isEqualTo(EOrderStatus.REFUNDED);
+        assertThat(d.refundedAt()).isEqualTo(NOW);
+        assertThat(d.cancelReason()).isEqualTo("Packing damage");
+        org.mockito.InOrder in = org.mockito.Mockito.inOrder(sources, coupons, mileage, outbox);
+        in.verify(sources).cancelDelivery(10L, 100L, o.getOrderNo(), o.getStoreId(), o.getWarehouseId());
+        org.mockito.ArgumentCaptor<List<CartSourcesClient.StockLine>> st = org.mockito.ArgumentCaptor.forClass(List.class);
+        in.verify(sources).moveStock(eq(10L), eq(100L), st.capture(), eq("ORDER_CANCEL"));
+        in.verify(coupons).release(100L);
+        in.verify(mileage).release(o);
+        assertThat(st.getValue().get(0).quantity()).isEqualByComparingTo("2");
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> j = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(outbox).publish(eq(10L), eq("commerce.journal.requested"), eq("SHOP_ORDER_REFUND"), eq(100L), j.capture());
+        assertThat((BigDecimal) j.getValue().get("goodsAmount")).isEqualByComparingTo("10909");
+        assertThat((BigDecimal) j.getValue().get("costAmount")).isEqualByComparingTo("8000");
+        assertThat(j.getValue().get("date")).isEqualTo(LocalDate.of(2026, 11, 28));
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> r = org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(outbox).publish(eq(10L), eq("order.refunded"), eq("ORDER"), eq(100L), r.capture());
+        assertThat(r.getValue().keySet()).containsExactlyInAnyOrder("orderId", "orderNo");
+        assertCode(() -> service.refund(100L, "again"), EOrderError.ORD_019);
+    }
+
+    @Test
+    void refundRefusals() {
+        CustomerOrder pending = placed();
+        when(orders.lockById(100L)).thenAnswer(a -> saved.stream().findFirst());
+        com.terp.erp.order.TestLogin.as(10L, "ORDER_CANCEL");
+        assertCode(() -> service.refund(100L, "x"), EOrderError.ORD_019);
+        com.terp.erp.order.TestLogin.as(11L, "ORDER_CANCEL");
+        assertCode(() -> service.refund(100L, "x"), EOrderError.ORD_018);
+        verify(sources, never()).cancelDelivery(anyLong(), anyLong(), any(), anyLong(), anyLong());
+        assertThat(pending.getStatus()).isEqualTo(EOrderStatus.PENDING_PAYMENT);
+    }
+
+    @Test
+    void aFailureAfterTheDeliveryCancelLeavesThePaidOrderUntouched() {
+        CustomerOrder o = paidOrder();
+        when(sources.moveStock(anyLong(), anyLong(), any(), eq("ORDER_CANCEL")))
+                .thenThrow(new ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007));
+        assertCode(() -> service.refund(100L, "x"), EOrderError.ORD_007);
+        assertThat(o.getStatus()).isEqualTo(EOrderStatus.PAID);
+        verify(outbox, never()).publish(any(), any(), any(), any(), any());
+        verify(coupons, never()).release(anyLong());
+
+        doThrow(ApiException.badRequest(EOrderError.ORD_020)).when(sources)
+                .cancelDelivery(anyLong(), anyLong(), any(), anyLong(), anyLong());
+        assertCode(() -> service.refund(100L, "x"), EOrderError.ORD_020);
+        assertThat(o.getStatus()).isEqualTo(EOrderStatus.PAID);
     }
 }

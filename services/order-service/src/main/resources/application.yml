@@ -81,6 +81,7 @@ erp:
     member-service-url: ${MEMBER_SERVICE_URL:http://localhost:8099}
     store-service-url: ${STORE_SERVICE_URL:http://localhost:8098}
     inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    delivery-service-url: ${DELIVERY_SERVICE_URL:http://localhost:8101}
     customer-jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/erp-customer/protocol/openid-connect/certs
     customer-issuer: ${KEYCLOAK_CUSTOMER_ISSUER:http://localhost:8180/realms/erp-customer}
     # AES-256-GCM key of the delivery phone kept on orders (base64 of 32 bytes, FieldCipher). No default.

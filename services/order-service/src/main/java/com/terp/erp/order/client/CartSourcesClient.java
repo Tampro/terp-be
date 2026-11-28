@@ -137,9 +137,14 @@ public class CartSourcesClient {
 
     /** @return unit cost by item id */
     public java.util.Map<Long, BigDecimal> moveStock(long companyId, long orderId, List<StockLine> lines) {
+        return moveStock(companyId, orderId, lines, "ORDER");
+    }
+
+    /** Same, under another source (ORDER_CANCEL puts a refunded order's goods back, once per order). */
+    public java.util.Map<Long, BigDecimal> moveStock(long companyId, long orderId, List<StockLine> lines, String sourceType) {
         String url = UriComponentsBuilder.fromUriString(props.inventoryServiceUrl() + "/api/v1/internal/inventory/stock/moves")
                 .queryParam("companyId", companyId).toUriString();
-        java.util.Map<String, Object> body = java.util.Map.of("sourceType", "ORDER", "sourceId", orderId, "lines", lines);
+        java.util.Map<String, Object> body = java.util.Map.of("sourceType", sourceType, "sourceId", orderId, "lines", lines);
         for (int attempt = 0; ; attempt++) {
             try {
                 MovesEnvelope r = client.post().uri(Nulls.nonNull(java.net.URI.create(url)))
@@ -160,6 +165,40 @@ public class CartSourcesClient {
             } catch (RestClientException | com.fasterxml.jackson.core.JsonProcessingException e) {
                 if (attempt >= 1) {
                     log.error("stock move failed: {}", e.getClass().getSimpleName());
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007);
+                }
+            }
+        }
+    }
+
+    /**
+     * Cancels the delivery of a paid order before pick-up (delivery-service is idempotent: already CANCELLED answers
+     * 200, no delivery yet writes a CANCELLED row). Already PICKED_UP / DELIVERED (409 DLV_007) -> 400 ORD_020;
+     * anything else -> 503 ORD_007 with the order unchanged.
+     */
+    public void cancelDelivery(long companyId, long orderId, String orderNo, long storeId, long warehouseId) {
+        String url = UriComponentsBuilder.fromUriString(props.deliveryServiceUrl() + "/api/v1/internal/delivery/orders/{id}/cancel")
+                .queryParam("companyId", companyId).buildAndExpand(orderId).toUriString();
+        java.util.Map<String, Object> body = java.util.Map.of("orderNo", orderNo, "storeId", storeId, "warehouseId", warehouseId);
+        for (int attempt = 0; ; attempt++) {
+            try {
+                client.post().uri(Nulls.nonNull(java.net.URI.create(url)))
+                        .header("Authorization", "Bearer " + tokens.token())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .body(mapper.writeValueAsString(body)).retrieve().toBodilessEntity();
+                return;
+            } catch (HttpClientErrorException e) {
+                if (e.getStatusCode().value() == 409 && e.getResponseBodyAsString().contains("DLV_007")) {
+                    throw ApiException.badRequest(EOrderError.ORD_020);
+                }
+                if (e.getStatusCode().value() == 409 && attempt < 1) {
+                    continue;                                   // DLV_006: changed meanwhile, the retry re-reads
+                }
+                log.error("delivery cancel refused: {}", e.getStatusCode().value());
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007);
+            } catch (RestClientException | com.fasterxml.jackson.core.JsonProcessingException e) {
+                if (attempt >= 1) {
+                    log.error("delivery cancel failed: {}", e.getClass().getSimpleName());
                     throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, EOrderError.ORD_007);
                 }
             }

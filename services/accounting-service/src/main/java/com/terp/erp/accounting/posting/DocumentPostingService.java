@@ -53,7 +53,9 @@ public class DocumentPostingService {
          * A paid Express order, requested only through order-service's outbox event (the intake skips this check).
          * ORDER_POST is held by no role, so the REST endpoint refuses it to staff (COMMON_004).
          */
-        SHOP_ORDER("ORDER_POST");
+        SHOP_ORDER("ORDER_POST"),
+        /** Back Office cancelled a paid Express order and refunded it: the mirror of SHOP_ORDER, event-only too. */
+        SHOP_ORDER_REFUND("ORDER_POST");
 
         /** The commerce permission that posts / completes this document; required here too. */
         private final String permission;
@@ -172,6 +174,17 @@ public class DocumentPostingService {
                 if (cost.signum() > 0) {
                     dr(l, () -> key(c, ESystemAccount.COGS), cost, text);
                     cr(l, () -> key(c, ESystemAccount.INVENTORY), cost, text);
+                }
+            }
+            case SHOP_ORDER_REFUND -> {
+                // TODO(assumption): reverses SHOP_ORDER line by line on the cancel day (chief accountant to confirm).
+                dr(l, () -> key(c, ESystemAccount.SALES_REVENUE), goods, text);
+                dr(l, () -> serviceRevenue(c), service, text);
+                dr(l, () -> key(c, ESystemAccount.OUTPUT_VAT), tax, text);
+                cr(l, () -> key(c, ESystemAccount.PG_CLEARING), total, text);
+                if (cost.signum() > 0) {
+                    dr(l, () -> key(c, ESystemAccount.INVENTORY), cost, text);
+                    cr(l, () -> key(c, ESystemAccount.COGS), cost, text);
                 }
             }
             case PURCHASE_RETURN -> {

@@ -120,7 +120,11 @@ public final class MessageTemplates {
                     "Hello {recipientName},\nthe delivery of your order {orderNo} from {storeName} has been cancelled. "
                             + "The store will contact you.",
                     "Đã huỷ giao đơn {orderNo}",
-                    "Xin chào {recipientName},\nviệc giao đơn {orderNo} từ {storeName} đã bị huỷ. Cửa hàng sẽ liên hệ với bạn.")));
+                    "Xin chào {recipientName},\nviệc giao đơn {orderNo} từ {storeName} đã bị huỷ. Cửa hàng sẽ liên hệ với bạn.")),
+            Map.entry("ORDER_REFUNDED", new Text("Order {orderNo} cancelled and refunded",
+                    "Hello {recipientName},\nyour order {orderNo} from {storeName} has been cancelled.\nRefunded: {total}",
+                    "Đã huỷ và hoàn tiền đơn {orderNo}",
+                    "Xin chào {recipientName},\nđơn {orderNo} từ {storeName} đã bị huỷ.\nSố tiền hoàn: {total}")));
 
     private MessageTemplates() {
     }

@@ -1,6 +1,7 @@
 package com.terp.erp.order.order;
 
 import com.terp.erp.exception.ApiException;
+import com.terp.erp.security.TenantGuard;
 import com.terp.erp.order.cart.Cart;
 import com.terp.erp.order.cart.CartLine;
 import com.terp.erp.order.cart.CartLineRepository;
@@ -51,6 +52,8 @@ public class OrderService {
     // TODO(assumption): the chain's stores are in Korea; the order number uses the Korean date.
     private static final ZoneId ORDER_ZONE = ZoneId.of("Asia/Seoul");
     public static final String EVENT_PAID = "order.paid";
+    public static final String EVENT_REFUNDED = "order.refunded";
+    static final String STOCK_SOURCE_CANCEL = "ORDER_CANCEL";
 
     private final CustomerOrderRepository orders;
     private final CustomerOrderLineRepository orderLines;
@@ -289,6 +292,57 @@ public class OrderService {
         return dto(o, orderLines.findByOrderIdOrderByIdAsc(o.getId()), false);
     }
 
+    /**
+     * Back Office cancels a PAID order before pick-up and refunds it in full (sandbox, no PG call). Not one
+     * transaction on purpose: delivery cancel, then stock back, then one local transaction (REFUNDED, coupon and
+     * points back, reversal journal + order.refunded in the outbox). Both remote steps are idempotent, so a failure
+     * leaves the order PAID and a retry completes; the order is never REFUNDED with its stock still out.
+     */
+    public OrderDto refund(Long id, String reason) {
+        TransactionTemplate tx = new TransactionTemplate(txManager);
+        CustomerOrder o = tx.execute(st -> {
+            CustomerOrder found = orders.findById(id).orElseThrow(() -> ApiException.notFound(EOrderError.ORD_018));
+            TenantGuard.assertSameCompany(found.getCompanyId(), EOrderError.ORD_018);
+            requirePaid(found);
+            return found;
+        });
+        sources.cancelDelivery(o.getCompanyId(), o.getId(), o.getOrderNo(), o.getStoreId(), o.getWarehouseId());
+        List<CustomerOrderLine> lines = orderLines.findByOrderIdOrderByIdAsc(o.getId());
+        sources.moveStock(o.getCompanyId(), o.getId(), lines.stream()
+                .map(l -> new StockLine(l.getItemId(), o.getWarehouseId(), BigDecimal.valueOf(l.getQuantity()))).toList(),
+                STOCK_SOURCE_CANCEL);
+        return tx.execute(st -> {
+            CustomerOrder r = orders.lockById(o.getId()).orElseThrow(() -> ApiException.notFound(EOrderError.ORD_018));
+            requirePaid(r);
+            r.setStatus(EOrderStatus.REFUNDED);
+            r.setRefundedAt(clock.instant());
+            r.setCancelReason(reason.trim());
+            coupons.release(r.getId());
+            mileage.release(r);
+            requestRefundJournal(r, lines);
+            outbox.publish(r.getCompanyId(), EVENT_REFUNDED, "ORDER", r.getId(), Payload.of("orderId", r.getId(),
+                    "orderNo", r.getOrderNo()));
+            orders.saveAndFlush(r);
+            return dto(r, lines, true);
+        });
+    }
+
+    private static void requirePaid(CustomerOrder o) {
+        if (o.getStatus() != EOrderStatus.PAID) {
+            throw ApiException.badRequest(EOrderError.ORD_019, o.getStatus().name());
+        }
+    }
+
+    /** Mirror of requestJournal; dated the cancel day. TODO(assumption): chief accountant to confirm the date. */
+    private void requestRefundJournal(CustomerOrder o, List<CustomerOrderLine> lines) {
+        OrderJournal.Amounts a = OrderJournal.amounts(o, lines);
+        outbox.publish(o.getCompanyId(), OrderJournal.EVENT_REQUESTED, OrderJournal.SOURCE_TYPE_REFUND, o.getId(), Payload.of(
+                "sourceType", OrderJournal.SOURCE_TYPE_REFUND, "sourceId", o.getId(),
+                "date", LocalDate.ofInstant(o.getRefundedAt(), ORDER_ZONE), "reference", o.getOrderNo(),
+                "description", "Refund of Express order " + o.getOrderNo(), "goodsAmount", a.goods(),
+                "serviceAmount", a.service(), "taxAmount", a.tax(), "costAmount", a.cost(), "actorSub", null));
+    }
+
     @Transactional(readOnly = true)
     public OrderDto get(String slug, String sub, String orderNo) {
         CustomerOrder o = mine(slug, sub, orderNo);
@@ -324,7 +378,8 @@ public class OrderService {
                 o.getDeliveryNote(), o.getNote(), o.getCreatedDate(), o.getPaidAt(), o.getCancelledAt(),
                 masked ? o.getJournalStatus() : null, masked ? o.getJournalEntryNo() : null,
                 masked ? o.getJournalError() : null, o.getDeliveryStatus(), o.getDeliveryStatusAt(),
-                email(o, masked), o.getCouponCode(), o.getDiscount(), o.getPointsUsed());
+                email(o, masked), o.getCouponCode(), o.getDiscount(), o.getPointsUsed(),
+                o.getRefundedAt(), masked ? o.getCancelReason() : null);
     }
 
     private String email(CustomerOrder o, boolean masked) {

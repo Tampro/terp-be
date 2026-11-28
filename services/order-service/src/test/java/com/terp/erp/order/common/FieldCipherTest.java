@@ -35,6 +35,6 @@ public class FieldCipherTest {
     }
 
     private static OrderProperties props(String key) {
-        return new OrderProperties("http://unused", "http://unused", "http://unused", "http://unused", "http://unused", "http://unused", key, true, null, null, null, null);
+        return new OrderProperties("http://unused", "http://unused", "http://unused", "http://unused", "http://unused", "http://unused", key, true, null, null, null, null, null);
     }
 }

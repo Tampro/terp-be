@@ -189,6 +189,23 @@ class DocumentPostingServiceTest {
     }
 
     @Test
+    void shopOrderRefundReversesTheOrderAndIsRefusedToStaffOverRest() {
+        service.postFor(10L, form(ESource.SHOP_ORDER_REFUND, "9091", "2909", "1200", "5000", false));
+        List<JournalService.Line> l = posted("SHOP_ORDER_REFUND");
+        assertThat(l).hasSize(6);
+        line(l.get(0), ESystemAccount.SALES_REVENUE, "9091", null);
+        line(l.get(1), ESystemAccount.SERVICE_REVENUE, "2909", null);
+        line(l.get(2), ESystemAccount.OUTPUT_VAT, "1200", null);
+        line(l.get(3), ESystemAccount.PG_CLEARING, null, "13200");
+        line(l.get(4), ESystemAccount.INVENTORY, "5000", null);
+        line(l.get(5), ESystemAccount.COGS, null, "5000");
+
+        TestLogin.as(10L, "SALES_POST", "PURCHASE_POST");
+        assertThatThrownBy(() -> service.post(null, form(ESource.SHOP_ORDER_REFUND, "1", null, null, null, false)))
+                .extracting(e -> ((ApiException) e).getErrorCode()).isEqualTo(ECommonError.COMMON_004);
+    }
+
+    @Test
     void eachSourceNeedsItsOwnPermissionAndSomeAmount() {
         TestLogin.as(10L, "SALES_POST");
         assertThatThrownBy(() -> service.post(null, form(ESource.PURCHASE_INVOICE, "1", null, null, null, false)))
