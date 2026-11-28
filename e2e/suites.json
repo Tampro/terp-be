@@ -188,5 +188,10 @@
     "prefix": "ME",
     "standalone": false,
     "description": "member-service: a customer joins / leaves a shop; customer tokens only on /shop/**"
+  },
+  "cart": {
+    "prefix": "CA",
+    "standalone": false,
+    "description": "order-service cart: live prices, purchase limit, free delivery, bag, minimum"
   }
 }

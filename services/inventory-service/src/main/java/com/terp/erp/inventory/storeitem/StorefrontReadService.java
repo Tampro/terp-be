@@ -64,6 +64,33 @@ public class StorefrontReadService {
         return page.map(s -> shelfItem(s, byId.get(s.getItemId()), stock));
     }
 
+    /** At most this many items per batch (a cart holds at most 100 lines). */
+    public static final int MAX_BATCH = 100;
+
+    /**
+     * Live shelf data of several items at a store, in the order asked; items not ON_SALE there (or not of the company,
+     * or deleted) are left out, so the caller marks them unavailable. More than 100 ids → 400 INV_029.
+     */
+    @Transactional(readOnly = true)
+    public List<ShelfItemDto> shelfItems(long companyId, long warehouseId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        if (ids.size() > MAX_BATCH) {
+            throw ApiException.badRequest(EInventoryError.INV_029, MAX_BATCH);
+        }
+        Set<Long> wanted = new java.util.LinkedHashSet<>(ids);
+        Map<Long, Item> byId = items.findAllById(wanted).stream()
+                .filter(i -> !i.isDeleted() && Objects.equals(i.getCompanyId(), companyId))
+                .collect(Collectors.toMap(Item::getId, i -> i));
+        Map<Long, StoreItem> onSale = rows.findLive(companyId, List.of(warehouseId), byId.keySet()).stream()
+                .filter(r -> r.getStatus() == EStoreItemStatus.ON_SALE)
+                .collect(Collectors.toMap(StoreItem::getItemId, r -> r, (a, b) -> a));
+        Map<Long, BigDecimal> stock = stock(companyId, warehouseId, onSale.keySet());
+        return wanted.stream().filter(onSale::containsKey)
+                .map(id -> shelfItem(onSale.get(id), byId.get(id), stock)).toList();
+    }
+
     /** 404 INV_027 when the item is not on sale at this store (missing, suspended, deleted, other company). */
     @Transactional(readOnly = true)
     public ShelfItemDetailDto detail(long companyId, long warehouseId, long itemId) {

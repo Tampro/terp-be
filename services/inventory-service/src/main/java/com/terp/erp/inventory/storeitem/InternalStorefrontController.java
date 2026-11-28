@@ -43,6 +43,12 @@ public class InternalStorefrontController {
         return ApiMessageDto.ok(ResponseListDto.of(service.shelf(companyId, warehouseId, categoryId, keyword, pageable)));
     }
 
+    @GetMapping("/warehouses/{warehouseId}/shelf/items")
+    public ApiMessageDto<List<ShelfItemDto>> shelfItems(@PathVariable long warehouseId, @RequestParam long companyId,
+                                                        @RequestParam(required = false) List<Long> ids) {
+        return ApiMessageDto.ok(service.shelfItems(companyId, warehouseId, ids));
+    }
+
     @GetMapping("/warehouses/{warehouseId}/shelf/{itemId}")
     public ApiMessageDto<ShelfItemDetailDto> detail(@PathVariable long warehouseId, @PathVariable long itemId,
                                                     @RequestParam long companyId) {

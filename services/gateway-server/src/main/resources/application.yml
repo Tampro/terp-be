@@ -112,7 +112,12 @@ spring:
               uri: ${STORE_SERVICE_URL:http://localhost:8098}
               predicates:
                 - Path=/api/v1/store/**,/api/v1/public/shop/**
-            # Customer API (realm erp-customer only, GatewaySecurityConfig.shopFilterChain).
+            # Customer API (realm erp-customer only, GatewaySecurityConfig.shopFilterChain). Carts first: the first
+            # matching route wins and /api/v1/shop/** below goes to member-service.
+            - id: order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:8100}
+              predicates:
+                - Path=/api/v1/shop/*/stores/*/cart,/api/v1/shop/*/stores/*/cart/**
             - id: member-service
               uri: ${MEMBER_SERVICE_URL:http://localhost:8099}
               predicates:
@@ -144,6 +149,7 @@ springdoc:
       - { name: notification-service, url: /docs/notification/v3/api-docs }
       - { name: store-service, url: /docs/store/v3/api-docs }
       - { name: member-service, url: /docs/member/v3/api-docs }
+      - { name: order-service, url: /docs/order/v3/api-docs }
 
 management:
   endpoints:

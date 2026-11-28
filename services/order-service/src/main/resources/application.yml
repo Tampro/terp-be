@@ -1,0 +1,65 @@
+# Every secret comes from the environment with no default; non-secret values have local defaults.
+server:
+  port: ${ORDER_PORT:8100}
+  # Finish in-flight requests on SIGTERM (docker stop / rolling restart) instead of cutting them off.
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: ${ERP_SHUTDOWN_TIMEOUT:8s}
+  application:
+    name: order-service
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:mysql://localhost:3306/erp_order?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${ORDER_DB_USERNAME}
+    password: ${ORDER_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      "[hibernate.jdbc.time_zone]": UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  messages:
+    basename: language/common,language/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/erp}
+
+erp:
+  # Scheduled jobs (CartCleanupJob) lock through ShedLock: one instance runs them.
+  jobs:
+    lock:
+      enabled: ${ERP_JOBS_LOCK_ENABLED:true}
+  order:
+    iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
+    member-service-url: ${MEMBER_SERVICE_URL:http://localhost:8099}
+    store-service-url: ${STORE_SERVICE_URL:http://localhost:8098}
+    inventory-service-url: ${INVENTORY_SERVICE_URL:http://localhost:8091}
+    customer-jwk-set-uri: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/erp-customer/protocol/openid-connect/certs
+    customer-issuer: ${KEYCLOAK_CUSTOMER_ISSUER:http://localhost:8180/realms/erp-customer}
+    # Keycloak service account of order-service (client credentials): member / store / inventory /api/v1/internal/**.
+    service-account:
+      token-url: ${KEYCLOAK_INTERNAL_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:erp}/protocol/openid-connect/token
+      client-id: ${ORDER_SERVICE_CLIENT_ID:erp-order-service}
+      client-secret: ${ORDER_SERVICE_CLIENT_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

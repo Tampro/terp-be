@@ -55,8 +55,8 @@ erp:
   inventory:
     iam-service-url: ${IAM_SERVICE_URL:http://localhost:8081}
     media-service-url: ${MEDIA_SERVICE_URL:http://localhost:8082}
-    # Service accounts allowed on /api/v1/internal/** (store-service: the public storefront reads catalogue, prices, stock).
-    internal-client-ids: ${INVENTORY_INTERNAL_CLIENT_IDS:erp-store-service}
+    # Service accounts allowed on /api/v1/internal/** (store-service: the public storefront; order-service: cart prices).
+    internal-client-ids: ${INVENTORY_INTERNAL_CLIENT_IDS:erp-store-service,erp-order-service}
 
 management:
   endpoints:
